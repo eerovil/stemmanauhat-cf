@@ -35,6 +35,18 @@ test("player on a desktop, looping two bars", async ({ browser }) => {
   await context.close();
 });
 
+test("one-line scrolling view on a phone, playing", async ({ page }) => {
+  await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  await page.evaluate(() => { localStorage.setItem("stemmanauhat:single-line", "1"); localStorage.setItem("stemmanauhat:zoom", "1.5"); });
+  await page.getByRole("link", { name: "Kokeilulaulu" }).click();
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await page.getByRole("button", { name: "Basso" }).click();
+  await page.getByRole("button", { name: "Soita" }).click();
+  await expect(page.getByTestId("cursor")).toHaveAttribute("data-measure", "2", { timeout: 10_000 });
+  await page.getByRole("button", { name: "Tauko" }).click();
+  await page.screenshot({ path: `${dir}/player-one-line-phone.png` });
+});
+
 test("refused and admin pages", async ({ page, browser }) => {
   await signInAs(page, "/c/jm", "ulkopuolinen@example.com");
   await expect(page.getByText("ei ole pääsyä")).toBeVisible();

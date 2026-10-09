@@ -96,10 +96,18 @@ export class Mixer {
     return this.masterElement.currentTime;
   }
 
+  /**
+   * Must be called straight from the singer's tap. iPhones let an audio element
+   * (and the audio context) start only from a tap; once an element has been
+   * started that way it may be paused and started again later. So every part is
+   * started here, before anything is awaited, and the lining up comes after.
+   */
   async play(): Promise<void> {
     this.ensureContext();
-    await this.context?.resume();
+    const resumed = this.context?.resume();
+    for (const el of this.elements) el.play().catch(() => undefined);
     this.wanted = true;
+    await resumed;
     await this.align(this.time());
   }
 
