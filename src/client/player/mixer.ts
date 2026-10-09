@@ -11,13 +11,12 @@ const DRIFT = 0.05;
 /**
  * Today's videos play the other parts at MuseScore volume 36 against 127. MIDI
  * volume is a squared curve, so the slider's position is that ratio and the
- * gain is its square: (36/127)^2 = 0.08, about -22 dB. That level (an estimate,
- * not a measurement) is the loudness cap below.
+ * gain is its square: (36/127)^2 = 0.08, about -22 dB (an estimate, not a
+ * measurement).
  *
  * The default slider position is a bit higher: Eero, testing real songs on
  * 2026-10-09, wanted the other parts louder. 0.4 is a gain of 0.16, about 6 dB up.
  */
-export const VIDEO_OTHERS = 36 / 127;
 export const DEFAULT_OTHERS = 0.4;
 
 export function gainOf(level: number): number {
@@ -25,17 +24,17 @@ export function gainOf(level: number): number {
 }
 
 /**
- * Each part's gain. The part MP3s are each rendered near full scale, so adding
- * them up at full volume clips (Eero heard it as distortion with every part
- * turned up). The mix is therefore never let louder than the videos' mix (your
- * part full, the others at 36/127): above that, everything is scaled down to
- * that sum, so raising the others makes your own part a little quieter instead.
+ * Each part's gain. Every part MP3 is rendered close to full scale (Finlandia's
+ * peak at -0.3 dB), so any mix whose gains add up to more than 1 can go over
+ * full scale where the parts peak together, and the browser clips it. Eero heard
+ * that as crackling: at the default levels Finlandia's mix hit full scale 104
+ * times. So the gains never add up to more than 1. The mix is then never louder
+ * than the loudest single part, and the balance between parts is kept.
  */
 export function mixLevels(count: number, master: number, others: number): number[] {
   const raw = Array.from({ length: count }, (_, i) => (i === master ? 1 : gainOf(others)));
   const sum = raw.reduce((a, b) => a + b, 0);
-  const budget = 1 + (count - 1) * gainOf(VIDEO_OTHERS);
-  const scale = sum > budget ? budget / sum : 1;
+  const scale = sum > 1 ? 1 / sum : 1;
   return raw.map((g) => g * scale);
 }
 
