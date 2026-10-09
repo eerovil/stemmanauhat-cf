@@ -63,9 +63,8 @@ footer { margin-top: 1.5rem; }
 .loop-hint { margin: 0.2rem 0 0; }
 .score-wrap { position: relative; background: #fff; margin: 0 auto; max-width: 70rem; }
 /* One line, scrolled sideways under the playhead like the videos. */
-.score-scroll.single-line { overflow-x: auto; background: #fff; scrollbar-width: none; }
-.score-scroll.single-line::-webkit-scrollbar { display: none; }
-.score-scroll.single-line .score-wrap { max-width: none; width: max-content; margin: 0; }
+.score-scroll.single-line { overflow: hidden; background: #fff; }
+.score-scroll.single-line .score-wrap { max-width: none; width: max-content; margin: 0; will-change: transform; }
 .score { min-height: 40vh; }
 /* The videos' look (song-app scrollvideo/video.py): highlight (42, 95, 171), the
    beat marker at 0.18 of it, your part's notes full blue and the others at 0.45. */

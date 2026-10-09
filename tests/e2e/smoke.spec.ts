@@ -57,9 +57,12 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   // The one-line view puts the whole score on one line that scrolls with the music.
   await page.getByRole("button", { name: "Vieritys" }).click();
   const scroller = page.getByTestId("score-scroll");
-  await expect.poll(() => scroller.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  const lineWidth = () => page.getByTestId("score").evaluate((el) => el.getBoundingClientRect().width);
+  await expect.poll(async () => (await lineWidth()) > (await scroller.evaluate((el) => el.clientWidth))).toBe(true);
   await page.getByRole("button", { name: "Soita" }).click();
-  await expect.poll(() => scroller.evaluate((el) => el.scrollLeft), { timeout: 10_000 }).toBeGreaterThan(0);
+  const shift = () => scroller.evaluate((el) => (el.firstElementChild as HTMLElement).getBoundingClientRect().left
+    - el.getBoundingClientRect().left);
+  await expect.poll(shift, { timeout: 10_000 }).toBeLessThan(0);
   await page.getByRole("button", { name: "Tauko" }).click();
   expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:single-line"))).toBe("1");
 

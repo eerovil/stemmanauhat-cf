@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { getJson, Refused, remembered, type Me, type Song } from "../api";
 import { DEFAULT_OTHERS, Mixer } from "../player/mixer";
 import type { Score } from "../player/score";
+import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, type ScrollCurve } from "../player/scroll";
 import { loopRange, loopTarget, nearest, parseTiming, positionAt, startsOf, type Timing } from "../player/timing";
 import RefusedView from "./Refused.vue";
 
@@ -29,6 +30,9 @@ const singleLine = ref(remembered.singleLine());
 const scrollBox = ref<HTMLElement | null>(null);
 /** Where the sung note sits across the screen in the one-line view: the videos' playhead. */
 const PLAYHEAD = 0.35;
+const smoothClock = new SmoothClock();
+let curve: ScrollCurve | null = null;
+let curveVersion = -1;
 const ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2];
 
 // Loop: "pick-start" -> "pick-end" -> on.
@@ -117,7 +121,7 @@ function onResize() {
 function tick() {
   frame = requestAnimationFrame(tick);
   if (!mixer || !timing || !score) return;
-  const t = mixer.time();
+  const t = smoothClock.read(mixer.time(), mixer.playing, rate.value, performance.now());
   const target = mixer.playing ? loopTarget(loopWindow, t) : null;
   if (target !== null) mixer.seek(target);
   now.value = t;
@@ -133,12 +137,7 @@ function tick() {
   el.style.height = `${spot.bottom - spot.top}px`;
   el.dataset.measure = String(position.measure);
   el.dataset.lit = String(lit);
-  if (singleLine.value) {
-    // Follow the music sideways while playing; when paused, the singer may swipe.
-    const x = score.xAt(position.measure, position.beat);
-    const box = scrollBox.value;
-    if (box && x !== null && mixer.playing) box.scrollLeft = Math.max(0, x - box.clientWidth * PLAYHEAD);
-  }
+  if (singleLine.value) scrollTo(t);
   if (spot.top !== lastTop) {
     lastTop = spot.top;
     keepInView(spot.top, spot.bottom);
@@ -189,11 +188,30 @@ function visibleParts(): boolean[] {
   return song.value!.parts.map((p, i) => i === myPart.value || !hidden.value.includes(p.name));
 }
 
+/** Slides the one line so the music sits at the playhead, along the smoothed curve. */
+function scrollTo(t: number) {
+  const box = scrollBox.value;
+  const wrap = box?.firstElementChild as HTMLElement | null;
+  if (!box || !wrap || !score || !timing) return;
+  if (!curve || curveVersion !== score.version) {
+    const s = score;
+    const tm = timing;
+    curve = buildCurve(duration.value, (sec) => {
+      const p = positionAt(tm, sec);
+      return s.xAt(p.measure, p.beat) ?? 0;
+    }, box.clientWidth * JUMP_FRACTION);
+    curveVersion = score.version;
+  }
+  const offset = Math.max(0, curveAt(curve, t) - box.clientWidth * PLAYHEAD);
+  wrap.style.transform = `translate3d(${-offset}px, 0, 0)`;
+}
+
 function toggleSingleLine() {
   singleLine.value = !singleLine.value;
   remembered.setSingleLine(singleLine.value);
   score?.setSingleLine(singleLine.value);
-  if (scrollBox.value) scrollBox.value.scrollLeft = 0;
+  const wrap = scrollBox.value?.firstElementChild as HTMLElement | null;
+  if (wrap) wrap.style.transform = "";
   lastTop = -1;
 }
 

@@ -81,7 +81,11 @@ export class Score {
     this.render();
   }
 
+  /** Goes up on every layout, so anything measured from the last one knows to measure again. */
+  version = 0;
+
   render(): void {
+    this.version++;
     this.osmd.setOptions({ renderSingleHorizontalStaffline: this.singleLine });
     this.osmd.Zoom = (window.innerWidth < 600 ? 0.6 : 0.8) * this.zoom;
     this.osmd.render();
