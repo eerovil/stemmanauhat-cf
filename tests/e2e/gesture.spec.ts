@@ -2,41 +2,41 @@ import { expect, test } from "@playwright/test";
 
 /**
  * iPhone/Safari's rule for audio, reproduced in Chromium (the suite's browser
- * lets audio play without a tap): an element may start only while a tap is
- * being handled, and once started that way it may be started again later.
- * Any other play() is refused with NotAllowedError, as WebKit does.
+ * lets audio start without a tap): an audio context may be resumed only while a
+ * tap is being handled. Any other resume() is refused, as WebKit does.
  */
-test("every part is started from the tap itself, as iPhones require", async ({ page }) => {
+test("the sound is started from the tap itself, as iPhones require", async ({ page }) => {
   await page.addInitScript(() => {
     let inTap = false;
     for (const type of ["click", "pointerup", "touchend", "keydown"]) {
       document.addEventListener(type, () => { inTap = true; setTimeout(() => { inTap = false; }, 0); }, true);
     }
-    const unlocked = new WeakSet<HTMLMediaElement>();
     const refused: string[] = [];
     (window as unknown as { refused: string[] }).refused = refused;
-    const play = HTMLMediaElement.prototype.play;
-    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
-      if (inTap) unlocked.add(this);
-      if (!unlocked.has(this)) {
-        refused.push(this.dataset.part ?? "?");
+    const resume = AudioContext.prototype.resume;
+    AudioContext.prototype.resume = function (this: AudioContext) {
+      if (!inTap && this.state !== "running") {
+        refused.push("resume");
         return Promise.reject(new DOMException("needs a tap", "NotAllowedError"));
       }
-      return play.call(this);
+      return resume.call(this);
     };
   });
   await page.goto("/c/public");
   await page.getByRole("link", { name: "Esittelylaulu" }).click();
   await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
   await page.getByRole("button", { name: "Soita" }).click();
-  await expect.poll(() => page.evaluate(() =>
-    Math.min(...[...document.querySelectorAll("audio")].map((a) => a.currentTime))), { timeout: 10_000 })
-    .toBeGreaterThan(0.5);
+  await expect(page.getByRole("button", { name: "Tauko" })).toHaveAttribute("data-sounding", "1", { timeout: 10_000 });
   expect(await page.evaluate(() => (window as unknown as { refused: string[] }).refused)).toEqual([]);
+});
 
-  // A seek while playing lines the parts up and starts them again, which is
-  // allowed now that the tap has started them.
-  await page.getByRole("button", { name: "5 sekuntia taaksepäin" }).click();
-  await page.waitForTimeout(1000);
-  expect(await page.evaluate(() => [...document.querySelectorAll("audio")].every((a) => !a.paused))).toBe(true);
+test("a song whose MIDI fails to load says so and offers a retry", async ({ page }) => {
+  await page.route("**/esittely/**/score.mid", (route) => route.fulfill({ status: 404, body: "" }));
+  await page.goto("/c/public");
+  await page.getByRole("link", { name: "Esittelylaulu" }).click();
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Kappaleen lataus epäonnistui");
+  await page.unroute("**/esittely/**/score.mid");
+  await alert.getByRole("button", { name: "Yritä uudelleen" }).click();
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
 });

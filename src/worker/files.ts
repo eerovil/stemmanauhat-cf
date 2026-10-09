@@ -24,13 +24,16 @@ export function safeSongPath(path: string): boolean {
 }
 
 const TYPES: Record<string, string> = {
+  mid: "audio/midi",
+  sf3: "application/octet-stream",
   mp3: "audio/mpeg",
   json: "application/json",
   musicxml: "application/vnd.recordare.musicxml+xml",
   xml: "application/xml",
 };
 
-export async function serveObject(bucket: R2Bucket, key: string, request: Request): Promise<Response> {
+export async function serveObject(bucket: R2Bucket, key: string, request: Request,
+  cacheControl = "private, max-age=31536000, immutable"): Promise<Response> {
   const range = parseRange(request.headers.get("Range"));
   if (range === "invalid") return new Response("Bad range", { status: 416 });
 
@@ -43,8 +46,9 @@ export async function serveObject(bucket: R2Bucket, key: string, request: Reques
   if (!headers.has("Content-Type")) headers.set("Content-Type", TYPES[extension] ?? "application/octet-stream");
   headers.set("ETag", object.httpEtag);
   headers.set("Accept-Ranges", "bytes");
-  // Every published version has its own folder, so a file never changes.
-  headers.set("Cache-Control", "private, max-age=31536000, immutable");
+  // Every published version has its own folder (and the piano its own versioned
+  // name), so a file never changes.
+  headers.set("Cache-Control", cacheControl);
 
   if (!range || !("body" in object)) {
     headers.set("Content-Length", String(object.size));

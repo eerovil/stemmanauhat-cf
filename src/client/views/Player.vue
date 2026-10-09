@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { getJson, Refused, remembered, type Me, type Song } from "../api";
-import { DEFAULT_OTHERS, Mixer } from "../player/mixer";
+import { MidiPlayer } from "../player/midi";
+import { DEFAULT_OTHERS } from "../player/mix";
 import type { Score } from "../player/score";
 import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, timeAtX, type ScrollCurve } from "../player/scroll";
 import { loopRange, loopTarget, nearest, parseTiming, positionAt, startsOf, type Timing } from "../player/timing";
@@ -22,8 +23,10 @@ const rate = ref(1);
 const playing = ref(false);
 const now = ref(0);
 const levels = ref<number[]>([]);
-/** Parts whose sound failed to load, by name. */
-const brokenParts = ref<string[]>([]);
+/** What the loading message says while the piano loads. */
+const loadingNote = ref("");
+/** Whether sound is coming out (checked while playing). */
+const sounding = ref(false);
 // Other parts' staves the singer has hidden, by part name (remembered per choir).
 const hidden = ref<string[]>([]);
 const stavesOpen = ref(false);
@@ -49,7 +52,7 @@ const controlsObserver = new ResizeObserver(([entry]) => {
 });
 const cursor = ref<HTMLElement | null>(null);
 
-let mixer: Mixer | null = null;
+let mixer: MidiPlayer | null = null;
 let score: Score | null = null;
 let timing: Timing | null = null;
 let frame = 0;
@@ -82,13 +85,11 @@ onMounted(async () => {
       fetch(s.base + "timing.json").then((r) => r.json()),
     ]);
     timing = parseTiming(timingJson);
-    mixer = new Mixer(s.parts.map((p) => s.base + p.file));
-    // On the page (hidden) rather than detached, so the browser and tests can see them.
-    mixer.elements.forEach((el, i) => { el.dataset.part = s.parts[i]!.name; document.body.appendChild(el); });
+    mixer = await MidiPlayer.create(s.base + "score.mid", s.parts.map((p) => p.name),
+      (note) => { loadingNote.value = note; });
     mixer.setMaster(myPart.value);
-    mixer.onBroken = (parts) => { brokenParts.value = parts.map((i) => s.parts[i]!.name); };
     mixer.setOthers(others.value);
-    mixer.elements[myPart.value]!.addEventListener("ended", () => { playing.value = false; });
+    mixer.onEnded = () => { playing.value = false; };
     levels.value = mixer.effectiveLevels();
     loading.value = false;
     // The score box exists only once loading is false.
@@ -112,9 +113,12 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(frame);
   controlsObserver.disconnect();
   window.removeEventListener("resize", onResize);
-  mixer?.elements.forEach((el) => el.remove());
   mixer?.destroy();
 });
+
+function reload() {
+  location.reload();
+}
 
 function onResize() {
   window.clearTimeout(resizeTimer);
@@ -129,6 +133,7 @@ function tick() {
   if (target !== null) mixer.seek(target);
   now.value = t;
   playing.value = mixer.playing;
+  if (mixer.running && frame % 15 === 0) sounding.value = mixer.sounding();
   const position = positionAt(timing, t);
   const started = t > 0 || mixer.playing;
   const lit = score.light(started ? position.measure : null, position.beat, myPart.value);
@@ -385,8 +390,11 @@ const loopHint = computed(() => ({
       <h1>{{ song?.title }}</h1>
     </header>
 
-    <p v-if="loading" class="hint page">Ladataan…</p>
-    <p v-else-if="failure" class="error page">Kappaleen lataus epäonnistui: {{ failure }}</p>
+    <p v-if="loading" class="hint page">{{ loadingNote || "Ladataan…" }}</p>
+    <p v-else-if="failure" class="error page" role="alert">
+      Kappaleen lataus epäonnistui: {{ failure }}
+      <button type="button" class="link" @click="reload">Yritä uudelleen</button>
+    </p>
 
     <template v-else-if="song">
       <div ref="scrollBox" class="score-scroll" :class="{ 'single-line': singleLine }" data-testid="score-scroll"
@@ -400,10 +408,6 @@ const loopHint = computed(() => ({
 
       <!-- At the bottom of the screen, so the score has the space above it. -->
       <section ref="controlsBox" class="controls">
-        <p v-if="brokenParts.length" class="error broken" role="alert">
-          Stemman {{ brokenParts.join(", ") }} ääntä ei saatu ladattua.
-          <button type="button" class="link" @click="mixer?.retry()">Yritä uudelleen</button>
-        </p>
         <p v-if="loopHint" class="hint loop-hint">{{ loopHint }}</p>
         <input class="seek" type="range" min="0" :max="duration" step="0.1" :value="now"
           aria-label="Kohta kappaleessa" @input="seekTo" />
@@ -413,7 +417,8 @@ const loopHint = computed(() => ({
             :data-gain="(levels[i] ?? 0).toFixed(3)" @click="choosePart(i)">{{ p.name }}</button>
         </div>
         <div class="row transport">
-          <button type="button" class="play primary" :aria-label="playing ? 'Tauko' : 'Soita'" @click="togglePlay">
+          <button type="button" class="play primary" :aria-label="playing ? 'Tauko' : 'Soita'"
+            :data-sounding="sounding ? '1' : '0'" @click="togglePlay">
             {{ playing ? "❚❚" : "▶" }}
           </button>
           <button type="button" aria-label="5 sekuntia taaksepäin" @click="back">−5 s</button>

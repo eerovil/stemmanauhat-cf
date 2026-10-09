@@ -12,8 +12,12 @@ D1 for the per-choir email allow-lists, Google sign-in). Read README.md first.
   Cloudflare secrets (`wrangler secret put`) or local `.dev.vars` (git-ignored).
 - **A merge to `main` deploys the live site.** Keep `main` deployable, and never deploy by hand
   from a branch.
-- Playback must sound exactly like the MuseScore per-part MP3s: play those files; don't
-  synthesise audio.
+- Playback is the song's MIDI (the one MuseScore exports, `score.mid`) played with MuseScore's
+  own grand piano (MuseScore_General preset 0, made by `scripts/make-piano-soundfont.mjs`, served
+  from R2 at `/sound/piano-1.sf3`). Eero chose this on 2026-10-09 over the per-part MP3s, which
+  drifted apart and crackled on Android: keep one synth clock for all parts, and don't swap the
+  piano for another sound without asking him. The soundfont is never committed (15 MB); tests use
+  spessasynth's tiny built-in sound bank.
 
 ## Tests
 

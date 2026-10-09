@@ -36,10 +36,8 @@ export async function playAndSeeCursorMove(page: Page) {
     return { focus: fill(".lit-focus"), other: fill(".lit-other") };
   });
   expect(colours).toEqual({ focus: "rgb(42, 95, 171)", other: "rgb(159, 183, 218)" });
-  // The audio itself is moving, not just the page's clock.
-  const played = await page.evaluate(() =>
-    Math.max(...[...document.querySelectorAll("audio")].map((a) => a.currentTime)));
-  expect(played).toBeGreaterThan(0.5);
+  // Sound is really reaching the speakers: the player's level meter, after the limiter.
+  await expect(page.getByRole("button", { name: "Tauko" })).toHaveAttribute("data-sounding", "1", { timeout: 10_000 });
 }
 
 /** A fetch from inside the page, so it carries the page's own cookies. */

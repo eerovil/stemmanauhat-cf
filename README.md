@@ -4,11 +4,11 @@ The choirs' practice-track player, hosted on Cloudflare. It replaces
 [eerovil/stemmanauhat](https://github.com/eerovil/stemmanauhat), where each song was a YouTube video per voice part behind a passphrase.
 
 - **Score:** drawn in the browser from the song's MusicXML, with a cursor that follows the music.
-- **Sound:** the same per-part MP3s MuseScore exports today, so playback sounds exactly as before. Your own part is loud and the others are quieter.
+- **Sound:** the song's MIDI from MuseScore, played in the browser with MuseScore's own grand piano. Every part runs on one clock, so they stay exactly together; your own part is loud and the others are quieter.
 - **Login:** Google sign-in with a per-choir email allow-list.
 - **Songs:** published by song-app ([eerovil/musescore-choir-plugins](https://github.com/eerovil/musescore-choir-plugins)).
 
-**No data in this repository.** Songs (MusicXML, MP3s, timing files) live in Cloudflare R2. The email allow-lists live in Cloudflare D1. Secrets are Cloudflare secrets. This repo is public and holds code only.
+**No data in this repository.** Songs (MusicXML, MIDI, timing files) live in Cloudflare R2. The email allow-lists live in Cloudflare D1. Secrets are Cloudflare secrets. This repo is public and holds code only.
 
 Live address (once set up): https://stemmanauhat.eerovil.workers.dev
 
@@ -20,10 +20,11 @@ Live address (once set up): https://stemmanauhat.eerovil.workers.dev
   passphrases at `/admin`.
 - **Songs:** song-app writes each version to R2 under `songs/<choir>/<slug>/<version>/` and points
   a D1 `songs` row at it. The format is in song-app's `docs/stemmanauhat-site.md`.
-- **Player:** the score is drawn by OpenSheetMusicDisplay. Each part's MP3 streams in its own
-  `<audio>` element, mixed through Web Audio: your part at full volume, the others at the videos'
-  level (MuseScore 36/127, a gain of 0.08) or wherever the slider puts them. `timing.json` moves the
-  cursor. Tempo uses the browser's pitch-keeping playback rate.
+- **Player:** the score is drawn by OpenSheetMusicDisplay, with the videos' blue for the notes being
+  sung and their translucent cursor band, as page lines or one scrolling line. `score.mid` is played
+  by spessasynth (an AudioWorklet synth) with MuseScore's grand piano: each part's MIDI channel has
+  its own gain (yours 1, the others 0.16 by default), then +15 dB and a limiter. Tempo changes the
+  MIDI's speed, not its pitch. `timing.json` (from the same MIDI clock) moves the cursor.
 
 ## Running it
 
@@ -51,6 +52,12 @@ Still to do:
    `./scripts/set-worker-secrets.sh`, which also creates `SESSION_SECRET`.
 4. `./scripts/add-admin.sh <your Google email>`, sign in, and set each choir's passphrase at
    `/admin` (or with `./scripts/set-passphrase.sh jm`) to today's, so the old links keep working.
+
+## The piano
+
+`scripts/make-piano-soundfont.mjs` cuts MuseScore's `MuseScore_General.sf3` (MIT licensed, inside
+MuseScore 3) down to the grand piano, and `scripts/upload-piano.sh` puts it in R2 as
+`sound/piano-1.sf3` (done for the live bucket on 2026-10-09). A new piano needs a new name.
 
 ## Moving off YouTube
 

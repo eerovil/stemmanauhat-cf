@@ -10,11 +10,11 @@ test("song files: signed out, wrong choir, and byte ranges", async ({ page }) =>
   expect((await fetchIn(page, "/files/naiskuoro/kokeilu/20261009T120000Z/timing.json")).status).toBe(403);
   expect((await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/..%2F..%2Fx")).status).toBe(400);
 
-  const part = await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/parts/1-Tenori.mp3", { Range: "bytes=0-99" });
-  expect(part.status).toBe(206);
-  expect(part.range).toMatch(/^bytes 0-99\/\d+$/);
-  expect(part.length).toBe(100);
-  expect(part.type).toBe("audio/mpeg");
+  const midi = await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/score.mid", { Range: "bytes=0-9" });
+  expect(midi.status).toBe(206);
+  expect(midi.range).toMatch(/^bytes 0-9\/\d+$/);
+  expect(midi.length).toBe(10);
+  expect(midi.type).toBe("audio/midi");
 
   // A republished song is a new address; the old one is gone, not served stale.
   expect((await fetchIn(page, "/files/jm/kokeilu/20250101T000000Z/timing.json")).status).toBe(404);
@@ -23,6 +23,15 @@ test("song files: signed out, wrong choir, and byte ranges", async ({ page }) =>
 
   // Link sessions are not admins.
   expect((await fetchIn(page, "/api/admin")).status).toBe(403);
+});
+
+test("the piano is served to anyone, cached for good", async ({ page }) => {
+  await page.goto("/signin");
+  const piano = await page.request.get("/sound/piano-1.sf3");
+  expect(piano.status()).toBe(200);
+  expect(piano.headers()["cache-control"]).toContain("immutable");
+  expect((await page.request.get("/sound/piano-1.mp3")).status()).toBe(404);
+  expect((await page.request.get("/sound/missing-9.sf3")).status()).toBe(404);
 });
 
 test("an admin adds a member and changing the passphrase signs link users out", async ({ page, browser }) => {

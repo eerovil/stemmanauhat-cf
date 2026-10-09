@@ -12,24 +12,22 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   // Your part loud, the others a bit above the videos' level; switching part swaps them.
   const tenori = page.getByRole("button", { name: "Tenori" });
   const basso = page.getByRole("button", { name: "Basso" });
-  await expect(tenori).toHaveAttribute("data-gain", "0.862");
-  await expect(basso).toHaveAttribute("data-gain", "0.138");
+  await expect(tenori).toHaveAttribute("data-gain", "1.000");
+  await expect(basso).toHaveAttribute("data-gain", "0.160");
   await basso.click();
-  await expect(basso).toHaveAttribute("data-gain", "0.862");
-  await expect(tenori).toHaveAttribute("data-gain", "0.138");
+  await expect(basso).toHaveAttribute("data-gain", "1.000");
+  await expect(tenori).toHaveAttribute("data-gain", "0.160");
   await page.getByRole("button", { name: "Vain oma" }).click();
   await expect(tenori).toHaveAttribute("data-gain", "0.000");
 
   await playAndSeeCursorMove(page);
 
-  // Once playing, the gains are the real ones (gain node × element volume), and
-  // switching part still gives your part full volume and the others the video level.
+  // Once playing, the gains are the ones the synth's channels carry, and
+  // switching part still gives your part full volume and the others the default.
   await page.getByRole("button", { name: "Vain oma" }).click();
   await tenori.click();
-  await expect(tenori).toHaveAttribute("data-gain", "0.862");
-  await expect(basso).toHaveAttribute("data-gain", "0.138");
-  const volumes = await page.evaluate(() => [...document.querySelectorAll("audio")].map((a) => a.volume));
-  expect(volumes).toEqual([1, 1]);
+  await expect(tenori).toHaveAttribute("data-gain", "1.000");
+  await expect(basso).toHaveAttribute("data-gain", "0.160");
 
   // Hiding the other part's staff leaves only yours; yours cannot be hidden.
   const staffNotes = () => page.getByTestId("score").locator("g.vf-stavenote").count();
@@ -73,7 +71,7 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:single-line"))).toBe("1");
 
   // Dragging the line sideways moves through the song: left is forward, right is back.
-  const audioTime = () => page.evaluate(() => document.querySelector("audio")!.currentTime);
+  const audioTime = async () => Number(await page.locator("input.seek").inputValue());
   await page.getByRole("button", { name: "5 sekuntia taaksepäin" }).click();
   const line = (await scroller.boundingBox())!;
   const drag = async (from: number, by: number) => {

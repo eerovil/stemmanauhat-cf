@@ -60,6 +60,11 @@ async function route(ctx: Ctx): Promise<Response> {
     return file(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!), decodeURIComponent(m[3]!),
       decodeURIComponent(m[4]!));
   }
+  if ((m = /^\/sound\/([a-z0-9-]+\.sf3)$/.exec(path)) && method === "GET") {
+    // The piano the player plays every song with: MuseScore's own, MIT licensed,
+    // not a song file, so it needs no sign-in. See scripts/make-piano-soundfont.mjs.
+    return serveObject(ctx.env.SONGS, `sound/${m[1]!}`, ctx.request, "public, max-age=31536000, immutable");
+  }
   if ((m = /^\/c\/([^/]+)(?:\/[^/]+)?\/?$/.exec(path)) && method === "GET") {
     return choirPage(ctx, decodeURIComponent(m[1]!));
   }
@@ -67,7 +72,7 @@ async function route(ctx: Ctx): Promise<Response> {
   if (path === "/api/admin" && method === "GET") return adminState(ctx);
   if (path === "/api/admin/members" && method === "POST") return adminMembers(ctx);
   if (path === "/api/admin/link" && method === "POST") return adminLink(ctx);
-  if (path.startsWith("/api/") || path.startsWith("/auth/") || path.startsWith("/files/")) {
+  if (path.startsWith("/api/") || path.startsWith("/auth/") || path.startsWith("/files/") || path.startsWith("/sound/")) {
     return json({ error: "not found" }, 404);
   }
   return ctx.env.ASSETS.fetch(request);

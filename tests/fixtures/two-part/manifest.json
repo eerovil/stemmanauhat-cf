@@ -15,5 +15,6 @@
    "file": "parts/2-Basso.mp3"
   }
  ],
- "duration": 8.0
+ "duration": 8.0,
+ "midi": "score.mid"
 }

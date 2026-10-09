@@ -1,14 +1,17 @@
 // Fresh local D1 and R2 for the browser tests: the migrations, made-up
-// members, a passphrase link for jm, and the synthetic two-part song uploaded
-// for jm and for the public demo. Run from the repo root.
+// members, a passphrase link for jm, the synthetic two-part song uploaded for jm
+// and for the public demo, and a stand-in for the piano (spessasynth's own tiny
+// saw-wave sound bank; the real piano is MuseScore's and lives only in R2).
+// Run from the repo root.
 import { execFileSync } from "node:child_process";
 import { rmSync, writeFileSync } from "node:fs";
 import { webcrypto } from "node:crypto";
+import { BasicSoundBank } from "spessasynth_core";
 
 export const PASSPHRASE = "testilinkki-jm";
 const VERSION = "20261009T120000Z";
 const FIXTURE = "tests/fixtures/two-part";
-const FILES = ["score.musicxml", "timing.json", "manifest.json", "parts/1-Tenori.mp3", "parts/2-Basso.mp3"];
+const FILES = ["score.musicxml", "timing.json", "manifest.json", "score.mid"];
 const PARTS = JSON.stringify([
   { name: "Tenori", file: "parts/1-Tenori.mp3" },
   { name: "Basso", file: "parts/2-Basso.mp3" },
@@ -47,4 +50,6 @@ for (const [choir, slug] of songs) {
       "--local", "--file", `${FIXTURE}/${file}`);
   }
 }
+writeFileSync(".wrangler/test-piano.sf2", Buffer.from(BasicSoundBank.getSampleSoundBankFile()));
+wrangler("r2", "object", "put", "stemmanauhat/sound/piano-1.sf3", "--local", "--file", ".wrangler/test-piano.sf2");
 console.log("seeded local D1 and R2");
