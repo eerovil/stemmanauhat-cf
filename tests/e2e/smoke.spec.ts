@@ -90,6 +90,12 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await drag(100, 60);
   expect(await audioTime()).toBeLessThan(forward - 0.2);
 
+  // A tap on the score plays, and another pauses.
+  await page.getByTestId("score-scroll").click();
+  await expect(page.getByRole("button", { name: "Tauko" })).toBeVisible();
+  await page.getByTestId("score-scroll").click();
+  await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
+
   // The part and the song are remembered for next time.
   await page.goto("/c/jm");
   await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();

@@ -256,7 +256,10 @@ function onPointerUp(event: PointerEvent) {
   if (drag.moved && mixer) {
     mixer.seek(drag.t);
     setLoopWindow();
+    // Swallow the click that may end a drag, but only that one: browsers do not
+    // always send it, and a stale flag would eat the next real tap.
     dragJustEnded = true;
+    window.setTimeout(() => { dragJustEnded = false; }, 0);
   }
   drag = null;
 }
@@ -326,9 +329,14 @@ function toggleLoop() {
   setLoopWindow();
 }
 
+/** A tap on the score plays or pauses (Eero); while picking loop bars it picks a bar. */
 function onScoreClick(event: MouseEvent) {
   if (dragJustEnded) { dragJustEnded = false; return; }
   if (!score || !timing || !mixer || !scoreBox.value) return;
+  if (loopMode.value !== "pick-start" && loopMode.value !== "pick-end") {
+    void togglePlay();
+    return;
+  }
   const box = scoreBox.value.getBoundingClientRect();
   const bar = score.barAt(event.clientX - box.left, event.clientY - box.top);
   if (bar === null) return;
@@ -341,8 +349,6 @@ function onScoreClick(event: MouseEvent) {
     loopBars.value = bar >= start ? [start, bar] : [bar, start];
     loopMode.value = "on";
     jumpTo(loopBars.value[0]);
-  } else {
-    jumpTo(bar);
   }
 }
 
