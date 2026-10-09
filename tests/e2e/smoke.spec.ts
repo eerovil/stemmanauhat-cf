@@ -63,6 +63,12 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   const shift = () => scroller.evaluate((el) => (el.firstElementChild as HTMLElement).getBoundingClientRect().left
     - el.getBoundingClientRect().left);
   await expect.poll(shift, { timeout: 10_000 }).toBeLessThan(0);
+  // It never scrolls the page up and down, and your part's playing note is in view.
+  expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= innerHeight)).toBe(true);
+  const view = (await scroller.boundingBox())!;
+  const mine = (await page.getByTestId("score").locator(".lit-focus").first().boundingBox())!;
+  expect(mine.y).toBeGreaterThanOrEqual(view.y);
+  expect(mine.y + mine.height).toBeLessThanOrEqual(view.y + view.height);
   await page.getByRole("button", { name: "Tauko" }).click();
   expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:single-line"))).toBe("1");
 

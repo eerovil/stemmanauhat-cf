@@ -31,6 +31,8 @@ export class Score {
   private readonly osmd: OpenSheetMusicDisplay;
   private bars: (Bar | undefined)[] = [];
   private lit: Sounding[] = [];
+  /** Each part's staff, top to bottom with room for notes above and lyrics below. */
+  private spans = new Map<number, { top: number; bottom: number }>();
   private noteWidth = 0;
 
   constructor(private readonly container: HTMLElement) {
@@ -111,6 +113,16 @@ export class Score {
     return { x0: centre - this.noteWidth, x1: centre + this.noteWidth, top: bar.top, bottom: bar.bottom };
   }
 
+  /** Where a part's staff is, in container pixels (meaningful in the one-line view). */
+  partSpan(part: number): { top: number; bottom: number } | null {
+    return this.spans.get(part) ?? null;
+  }
+
+  /** The drawn score's height in pixels. */
+  get height(): number {
+    return this.container.querySelector("svg")?.getBoundingClientRect().height ?? 0;
+  }
+
   /**
    * Where the music is, sliding smoothly between notes: what the one-line view
    * scrolls by, so the page moves evenly while the marker steps from note to note.
@@ -162,6 +174,7 @@ export class Score {
     const px = (u: number, offset: number) => u * scale + offset;
     this.noteWidth = NOTEHEAD * scale;
     this.lit = [];
+    this.spans = new Map();
     const instruments = this.osmd.Sheet.Instruments;
 
     this.bars = this.osmd.GraphicSheet.MeasureList.map((staves) => {
@@ -178,6 +191,11 @@ export class Score {
       const notes: Sounding[] = [];
       for (const m of drawn) {
         const part = instruments.indexOf(m.ParentStaff.ParentInstrument);
+        const staffY = m.PositionAndShape.AbsolutePosition.y;
+        const span = this.spans.get(part);
+        const top = px(staffY - 3, dy);
+        const bottom = px(staffY + 9, dy);
+        this.spans.set(part, { top: Math.min(span?.top ?? top, top), bottom: Math.max(span?.bottom ?? bottom, bottom) });
         for (const entry of m.staffEntries) {
           const beat = entry.relInMeasureTimestamp.RealValue * 4;
           const x = px(entry.PositionAndShape.AbsolutePosition.x, dx);

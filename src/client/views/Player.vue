@@ -140,7 +140,7 @@ function tick() {
   if (singleLine.value) scrollTo(t);
   if (spot.top !== lastTop) {
     lastTop = spot.top;
-    keepInView(spot.top, spot.bottom);
+    if (!singleLine.value) keepInView(spot.top, spot.bottom);
   }
 }
 
@@ -203,7 +203,21 @@ function scrollTo(t: number) {
     curveVersion = score.version;
   }
   const offset = Math.max(0, curveAt(curve, t) - box.clientWidth * PLAYHEAD);
-  wrap.style.transform = `translate3d(${-offset}px, 0, 0)`;
+  wrap.style.transform = `translate3d(${-offset}px, ${-verticalOffset(box.clientHeight)}px, 0)`;
+}
+
+/**
+ * The one-line view does not scroll up and down. When every staff fits, it shows
+ * them all; when not, it centres your part's staff, keeping the view on the score.
+ */
+function verticalOffset(boxHeight: number): number {
+  if (!score) return 0;
+  const room = score.height - boxHeight;
+  if (room <= 0) return 0;
+  const span = score.partSpan(myPart.value);
+  if (!span) return 0;
+  const centre = (span.top + span.bottom) / 2;
+  return Math.min(room, Math.max(0, centre - boxHeight / 2));
 }
 
 function toggleSingleLine() {
@@ -313,7 +327,8 @@ const loopHint = computed(() => ({
 
 <template>
   <RefusedView v-if="refused" :status="refused" :email="me?.email" />
-  <main v-else class="player" :style="{ paddingBottom: `${controlsHeight + 16}px` }">
+  <main v-else class="player" :class="{ 'one-line': singleLine }"
+    :style="{ paddingBottom: `${controlsHeight + (singleLine ? 0 : 16)}px`, '--controls-height': `${controlsHeight}px` }">
     <header class="bar">
       <a :href="`/c/${encodeURIComponent(props.choir)}`" class="back-link">‹ Kappaleet</a>
       <h1>{{ song?.title }}</h1>
