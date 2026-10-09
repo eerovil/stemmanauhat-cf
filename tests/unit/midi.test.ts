@@ -13,4 +13,12 @@ describe("partChannels", () => {
   it("falls back to track order when the names differ", () => {
     expect(partChannels(midi(), ["T", "B"])).toEqual([[0], [1]]);
   });
+  it("gives an unmatched part only a track no other part claimed by name", () => {
+    // Tracks are Tenori, Basso: "X" must not take Basso, which "Basso" already has.
+    expect(partChannels(midi(), ["X", "Basso"])).toEqual([[0], [1]]);
+    expect(partChannels(midi(), ["Basso", "X"])).toEqual([[1], [0]]);
+  });
+  it("leaves a part silent when there are more parts than tracks", () => {
+    expect(partChannels(midi(), ["Tenori", "Basso", "Extra"])).toEqual([[0], [1], []]);
+  });
 });

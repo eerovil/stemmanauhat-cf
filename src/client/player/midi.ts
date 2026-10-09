@@ -21,12 +21,23 @@ const OUTPUT_GAIN = 10 ** (15 / 20);
 
 let soundfont: Promise<ArrayBuffer> | null = null;
 
-/** Which MIDI channels each part plays on: by track name, else in track order. */
+/**
+ * Which MIDI channels each part plays on: by track name first; a part whose name
+ * matches no track takes the next track no other part has claimed, in order, so
+ * two parts never share one track's channels.
+ */
 export function partChannels(midi: BasicMIDI, partNames: string[]): number[][] {
   const tracks = midi.tracks.filter((t) => t.channels.size > 0);
   const norm = (s: string) => s.trim().toLowerCase();
-  return partNames.map((name, i) => {
-    const track = tracks.find((t) => norm(t.name) === norm(name)) ?? tracks[i];
+  const claimed = new Set<number>();
+  const byName = partNames.map((name) => {
+    const i = tracks.findIndex((t, j) => !claimed.has(j) && norm(t.name) === norm(name));
+    if (i >= 0) claimed.add(i);
+    return i;
+  });
+  const unclaimed = tracks.map((_, j) => j).filter((j) => !claimed.has(j));
+  return byName.map((i) => {
+    const track = tracks[i >= 0 ? i : unclaimed.shift() ?? -1];
     return track ? [...track.channels] : [];
   });
 }
