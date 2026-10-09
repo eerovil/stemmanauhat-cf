@@ -78,19 +78,44 @@ export class Score {
     this.render();
   }
 
+  /** How much the drawing is stretched past its last layout (zoom without laying out again). */
+  private stretch = 1;
+  private renderedZoom = 1;
+  private relayout: number | undefined;
+
+  /**
+   * Zooms at once by resizing the drawn score; laying it out again takes about
+   * half a second on a real song. The one-line view never needs that. Page lines
+   * do, to re-wrap, so they are laid out again once the clicking stops.
+   */
   setZoom(zoom: number): void {
     this.zoom = zoom;
-    this.render();
+    this.stretch = zoom / this.renderedZoom;
+    const svg = this.container.querySelector("svg");
+    if (svg) {
+      svg.style.width = `${Number(svg.getAttribute("width")) * this.stretch}px`;
+      svg.style.height = `${Number(svg.getAttribute("height")) * this.stretch}px`;
+    }
+    this.version++;
+    this.measure();
+    window.clearTimeout(this.relayout);
+    if (!this.singleLine) this.relayout = window.setTimeout(() => this.render(), 400);
   }
 
   /** Goes up on every layout, so anything measured from the last one knows to measure again. */
   version = 0;
 
   render(): void {
+    window.clearTimeout(this.relayout);
     this.version++;
+    this.stretch = 1;
+    this.renderedZoom = this.zoom;
     this.osmd.setOptions({ renderSingleHorizontalStaffline: this.singleLine });
     this.osmd.Zoom = (window.innerWidth < 600 ? 0.6 : 0.8) * this.zoom;
     this.osmd.render();
+    // OSMD may reuse the SVG element: drop any stretch a zoom left on it.
+    const svg = this.container.querySelector("svg");
+    if (svg) { svg.style.width = ""; svg.style.height = ""; }
     this.measure();
   }
 
@@ -170,7 +195,7 @@ export class Score {
     const svgBox = svg?.getBoundingClientRect() ?? box;
     const dx = svgBox.left - box.left;
     const dy = svgBox.top - box.top;
-    const scale = UNIT * this.osmd.Zoom;
+    const scale = UNIT * this.osmd.Zoom * this.stretch;
     const px = (u: number, offset: number) => u * scale + offset;
     this.noteWidth = NOTEHEAD * scale;
     this.lit = [];
