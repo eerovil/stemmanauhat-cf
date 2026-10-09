@@ -22,6 +22,8 @@ const rate = ref(1);
 const playing = ref(false);
 const now = ref(0);
 const levels = ref<number[]>([]);
+/** Parts whose sound failed to load, by name. */
+const brokenParts = ref<string[]>([]);
 // Other parts' staves the singer has hidden, by part name (remembered per choir).
 const hidden = ref<string[]>([]);
 const stavesOpen = ref(false);
@@ -84,6 +86,7 @@ onMounted(async () => {
     // On the page (hidden) rather than detached, so the browser and tests can see them.
     mixer.elements.forEach((el, i) => { el.dataset.part = s.parts[i]!.name; document.body.appendChild(el); });
     mixer.setMaster(myPart.value);
+    mixer.onBroken = (parts) => { brokenParts.value = parts.map((i) => s.parts[i]!.name); };
     mixer.setOthers(others.value);
     mixer.elements[myPart.value]!.addEventListener("ended", () => { playing.value = false; });
     levels.value = mixer.effectiveLevels();
@@ -397,6 +400,10 @@ const loopHint = computed(() => ({
 
       <!-- At the bottom of the screen, so the score has the space above it. -->
       <section ref="controlsBox" class="controls">
+        <p v-if="brokenParts.length" class="error broken" role="alert">
+          Stemman {{ brokenParts.join(", ") }} ääntä ei saatu ladattua.
+          <button type="button" class="link" @click="mixer?.retry()">Yritä uudelleen</button>
+        </p>
         <p v-if="loopHint" class="hint loop-hint">{{ loopHint }}</p>
         <input class="seek" type="range" min="0" :max="duration" step="0.1" :value="now"
           aria-label="Kohta kappaleessa" @input="seekTo" />

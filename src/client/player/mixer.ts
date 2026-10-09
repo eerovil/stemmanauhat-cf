@@ -50,6 +50,10 @@ export class Mixer {
   /** Bumped by every alignment, so an older one that finishes late does nothing. */
   private generation = 0;
   private aligning = false;
+  /** Parts whose file failed to load or play; the rest play on without them. */
+  private broken = new Set<number>();
+  /** Told when the set of broken parts changes. */
+  onBroken: (parts: number[]) => void = () => {};
 
   constructor(urls: string[]) {
     this.elements = urls.map((url) => {
@@ -58,6 +62,7 @@ export class Mixer {
       audio.preservesPitch = true;
       audio.src = url;
       audio.addEventListener("ended", () => { this.wanted = false; this.stopWatching(); });
+      audio.addEventListener("error", () => this.markBroken(audio));
       return audio;
     });
   }
@@ -91,6 +96,7 @@ export class Mixer {
   get running(): boolean {
     return this.wanted && !this.aligning && !this.masterElement.paused;
   }
+
 
   time(): number {
     return this.masterElement.currentTime;
@@ -142,8 +148,41 @@ export class Mixer {
     void this.context?.close();
   }
 
+  /** The part the clock is read from: yours, or the first working one if yours failed. */
   private get masterElement(): HTMLAudioElement {
-    return this.elements[this.master]!;
+    const mine = this.elements[this.master]!;
+    if (!this.broken.has(this.master)) return mine;
+    return this.elements.find((_, i) => !this.broken.has(i)) ?? mine;
+  }
+
+  private get working(): HTMLAudioElement[] {
+    return this.elements.filter((_, i) => !this.broken.has(i));
+  }
+
+  /** Parts that failed, in part order. */
+  brokenParts(): number[] {
+    return [...this.broken].sort((a, b) => a - b);
+  }
+
+  /** Tries the failed parts again, from the current position. */
+  retry(): void {
+    const t = this.time();
+    for (const i of this.broken) {
+      const el = this.elements[i]!;
+      el.load();
+      el.currentTime = t;
+    }
+    this.broken.clear();
+    this.onBroken([]);
+    if (this.wanted) void this.align(t);
+  }
+
+  private markBroken(el: HTMLAudioElement): void {
+    const i = this.elements.indexOf(el);
+    if (i < 0 || this.broken.has(i)) return;
+    this.broken.add(i);
+    el.pause();
+    this.onBroken(this.brokenParts());
   }
 
   /**
@@ -156,13 +195,17 @@ export class Mixer {
     const generation = ++this.generation;
     this.aligning = true;
     this.stopWatching();
-    for (const el of this.elements) el.pause();
-    for (const el of this.elements) el.currentTime = t;
-    await Promise.all(this.elements.map(ready));
+    const parts = this.working;
+    for (const el of parts) el.pause();
+    for (const el of parts) el.currentTime = t;
+    await Promise.all(parts.map(ready));
     if (generation !== this.generation) return;
     this.aligning = false;
     if (!this.wanted) return;
-    await Promise.all(this.elements.map((el) => el.play()));
+    // A part that has not loaded (or will not play) must not stop the others:
+    // it is set aside and reported, and the rest play on.
+    for (const el of parts) if (el.error || el.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) this.markBroken(el);
+    await Promise.all(this.working.map((el) => el.play().catch(() => this.markBroken(el))));
     if (generation !== this.generation) return;
     this.driftTimer = window.setInterval(() => this.keepTogether(), 250);
   }
@@ -176,8 +219,8 @@ export class Mixer {
   private keepTogether(): void {
     if (!this.wanted || this.aligning) return;
     const t = this.time();
-    const stalled = this.elements.some((el) => el.paused || el.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
-    const drifted = this.elements.some((el) => Math.abs(el.currentTime - t) > DRIFT);
+    const stalled = this.working.some((el) => el.paused || el.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
+    const drifted = this.working.some((el) => Math.abs(el.currentTime - t) > DRIFT);
     if (stalled || drifted) void this.align(t);
   }
 

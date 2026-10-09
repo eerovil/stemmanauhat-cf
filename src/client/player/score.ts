@@ -198,6 +198,11 @@ export class Score {
     const scale = UNIT * this.osmd.Zoom * this.stretch;
     const px = (u: number, offset: number) => u * scale + offset;
     this.noteWidth = NOTEHEAD * scale;
+    // OSMD may reuse note elements across a new layout: clear every highlight,
+    // not just the ones this layout's list knows about.
+    for (const el of this.container.querySelectorAll(".lit-focus, .lit-other")) {
+      el.classList.remove("lit-focus", "lit-other");
+    }
     this.lit = [];
     this.spans = new Map();
     const instruments = this.osmd.Sheet.Instruments;
