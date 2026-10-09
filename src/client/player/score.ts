@@ -2,14 +2,25 @@ import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 
 /** OSMD lays out in units of 10 px at zoom 1. */
 const UNIT = 10;
+/** About one notehead, in OSMD units. The cursor band is two of them, as in the videos. */
+const NOTEHEAD = 1.3;
+
+interface Sounding {
+  /** Index of the part (MusicXML instrument) the note belongs to. */
+  part: number;
+  start: number;
+  end: number;
+  el: SVGGElement;
+}
 
 interface Bar {
   x0: number;
   x1: number;
   top: number;
   bottom: number;
-  /** [beat in quarters, x], sorted by beat. */
+  /** [beat in quarters, x], sorted by beat; the last one is the bar's end. */
   anchors: [number, number][];
+  notes: Sounding[];
 }
 
 /**
@@ -19,6 +30,8 @@ interface Bar {
 export class Score {
   private readonly osmd: OpenSheetMusicDisplay;
   private bars: (Bar | undefined)[] = [];
+  private lit: Sounding[] = [];
+  private noteWidth = 0;
 
   constructor(private readonly container: HTMLElement) {
     this.osmd = new OpenSheetMusicDisplay(container, {
@@ -50,21 +63,35 @@ export class Score {
     return this.bars.length;
   }
 
-  /** Where the cursor goes for a bar and beat, or null for a bar not drawn. */
-  locate(measure: number, beat: number): { x: number; top: number; bottom: number } | null {
+  /**
+   * The video's beat marker: a translucent band two noteheads wide that steps to
+   * each new note as it starts, rather than sliding between them.
+   */
+  marker(measure: number, beat: number): { x0: number; x1: number; top: number; bottom: number } | null {
     const bar = this.bars[measure];
     if (!bar) return null;
-    const a = bar.anchors;
-    let x = a[a.length - 1]![1];
-    for (let i = 0; i < a.length - 1; i++) {
-      const [b0, x0] = a[i]!;
-      const [b1, x1] = a[i + 1]!;
-      if (beat <= b1) {
-        x = b1 > b0 ? x0 + ((Math.max(beat, b0) - b0) / (b1 - b0)) * (x1 - x0) : x0;
-        break;
-      }
+    const onsets = bar.anchors.slice(0, -1);
+    let x = onsets[0]![1];
+    for (const [b, ax] of onsets) if (b <= beat + 1e-6) x = ax;
+    // OSMD places a staff entry at its notehead's centre.
+    const centre = x;
+    return { x0: centre - this.noteWidth, x1: centre + this.noteWidth, top: bar.top, bottom: bar.bottom };
+  }
+
+  /**
+   * Colours the notes sounding at this bar and beat, as the videos do: your part's
+   * notes full blue, everyone else's a lighter blue. Returns how many are lit.
+   */
+  light(measure: number | null, beat: number, focusPart: number): number {
+    const bar = measure === null ? undefined : this.bars[measure];
+    const now = bar ? bar.notes.filter((n) => n.start <= beat + 1e-6 && beat < n.end - 1e-6) : [];
+    for (const n of this.lit) if (!now.includes(n)) n.el.classList.remove("lit-focus", "lit-other");
+    for (const n of now) {
+      n.el.classList.toggle("lit-focus", n.part === focusPart);
+      n.el.classList.toggle("lit-other", n.part !== focusPart);
     }
-    return { x, top: bar.top, bottom: bar.bottom };
+    this.lit = now;
+    return now.length;
   }
 
   /** The bar under a point in container pixels. */
@@ -84,6 +111,9 @@ export class Score {
     const dy = svgBox.top - box.top;
     const scale = UNIT * this.osmd.Zoom;
     const px = (u: number, offset: number) => u * scale + offset;
+    this.noteWidth = NOTEHEAD * scale;
+    this.lit = [];
+    const instruments = this.osmd.Sheet.Instruments;
 
     this.bars = this.osmd.GraphicSheet.MeasureList.map((staves) => {
       const drawn = staves.filter((m) => m && m.PositionAndShape);
@@ -95,11 +125,22 @@ export class Score {
       const length = (drawn[0]!.parentSourceMeasure?.Duration?.RealValue ?? 1) * 4;
 
       const byBeat = new Map<number, number>();
+      const notes: Sounding[] = [];
       for (const m of drawn) {
+        const part = instruments.indexOf(m.ParentStaff.ParentInstrument);
         for (const entry of m.staffEntries) {
           const beat = entry.relInMeasureTimestamp.RealValue * 4;
           const x = px(entry.PositionAndShape.AbsolutePosition.x, dx);
           byBeat.set(beat, Math.min(byBeat.get(beat) ?? x, x));
+          for (const voice of entry.graphicalVoiceEntries) {
+            for (const note of voice.notes) {
+              // Every VexFlow note can give its SVG group; the type only promises a GraphicalNote.
+              const el = (note as unknown as { getSVGGElement?: () => SVGGElement | undefined })
+                .getSVGGElement?.();
+              if (!el) continue;
+              notes.push({ part, start: beat, end: beat + note.sourceNote.Length.RealValue * 4, el });
+            }
+          }
         }
       }
       const anchors = [...byBeat.entries()].sort((a, b) => a[0] - b[0]);
@@ -112,6 +153,7 @@ export class Score {
         top: px(first.AbsolutePosition.y - 1.5, dy),
         bottom: px(last.AbsolutePosition.y + 5.5, dy),
         anchors,
+        notes,
       };
     });
   }

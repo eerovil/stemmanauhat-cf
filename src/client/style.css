@@ -53,10 +53,14 @@ footer { margin-top: 1.5rem; }
 .loop-hint { margin: 0.2rem 0 0; }
 .score-wrap { position: relative; background: #fff; margin: 0 auto; max-width: 70rem; }
 .score { min-height: 40vh; }
+/* The videos' look (song-app scrollvideo/video.py): highlight (42, 95, 171), the
+   beat marker at 0.18 of it, your part's notes full blue and the others at 0.45. */
 .cursor {
-  position: absolute; left: 0; top: 0; width: 3px; margin-left: -1px; height: 0;
-  background: rgba(31, 111, 235, 0.75); border-radius: 2px; pointer-events: none; will-change: transform;
+  position: absolute; left: 0; top: 0; width: 0; height: 0;
+  background: rgba(42, 95, 171, 0.18); pointer-events: none; will-change: transform;
 }
+.score .lit-focus, .score .lit-focus * { fill: #2a5fab !important; stroke: #2a5fab !important; }
+.score .lit-other, .score .lit-other * { fill: #9fb7da !important; stroke: #9fb7da !important; }
 .card { background: #fff; border: 1px solid var(--line); border-radius: 0.6rem; padding: 0.4rem 1rem 1rem; margin: 1rem 0; }
 .card textarea, .card input[type="text"] { width: 100%; font: inherit; padding: 0.5rem; border: 1px solid var(--line); border-radius: 0.4rem; margin-bottom: 0.4rem; }
 .card .row input[type="text"] { width: auto; flex: 1; margin: 0; }

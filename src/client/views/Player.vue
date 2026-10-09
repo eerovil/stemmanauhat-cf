@@ -104,12 +104,16 @@ function tick() {
   now.value = t;
   playing.value = mixer.playing;
   const position = positionAt(timing, t);
-  const spot = score.locate(position.measure, position.beat);
+  const started = t > 0 || mixer.playing;
+  const lit = score.light(started ? position.measure : null, position.beat, myPart.value);
+  const spot = score.marker(position.measure, position.beat);
   const el = cursor.value;
   if (!spot || !el) return;
-  el.style.transform = `translate(${spot.x}px, ${spot.top}px)`;
+  el.style.transform = `translate(${spot.x0}px, ${spot.top}px)`;
+  el.style.width = `${spot.x1 - spot.x0}px`;
   el.style.height = `${spot.bottom - spot.top}px`;
   el.dataset.measure = String(position.measure);
+  el.dataset.lit = String(lit);
   if (spot.top !== lastTop) {
     lastTop = spot.top;
     keepInView(spot.top, spot.bottom);

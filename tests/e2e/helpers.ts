@@ -25,6 +25,17 @@ export async function playAndSeeCursorMove(page: Page) {
   await expect(cursor).not.toHaveAttribute("data-measure", "0", { timeout: 10_000 });
   const after = await cursor.evaluate((el) => (el as HTMLElement).style.transform);
   expect(after).not.toBe(before);
+  // The sounding notes light up as in the videos: your part full blue, the other lighter.
+  await expect(score.locator(".lit-focus").first()).toBeAttached();
+  await expect(score.locator(".lit-other").first()).toBeAttached();
+  const colours = await score.evaluate((el) => {
+    const fill = (selector: string) => {
+      const path = el.querySelector(`${selector} path`);
+      return path ? getComputedStyle(path).fill : null;
+    };
+    return { focus: fill(".lit-focus"), other: fill(".lit-other") };
+  });
+  expect(colours).toEqual({ focus: "rgb(42, 95, 171)", other: "rgb(159, 183, 218)" });
   // The audio itself is moving, not just the page's clock.
   const played = await page.evaluate(() =>
     Math.max(...[...document.querySelectorAll("audio")].map((a) => a.currentTime)));
