@@ -91,3 +91,13 @@ export function loopRange(timing: Timing, startBar: number, endBar: number, now:
   const end = i < points.length ? points[i]![0] : timing.duration;
   return end > start ? [start, end] : null;
 }
+
+/**
+ * Where to jump back to, or null to keep playing. The range is worked out once
+ * when the loop is set (or after a seek), not every frame: with a repeated
+ * start bar the nearest play-through flips to the later one mid-loop, and a
+ * range recomputed then would never wrap.
+ */
+export function loopTarget(range: [number, number] | null, seconds: number): number | null {
+  return range && seconds >= range[1] - 0.02 ? range[0] : null;
+}

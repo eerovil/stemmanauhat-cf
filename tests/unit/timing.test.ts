@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loopRange, parseTiming, positionAt, startsOf, type Timing } from "../../src/client/player/timing";
+import { loopRange, loopTarget, parseTiming, positionAt, startsOf, type Timing } from "../../src/client/player/timing";
 
 // Bar 0 at 1 s a beat, then bar 1 played twice (a repeat), then bar 2.
 const timing: Timing = parseTiming({
@@ -43,5 +43,27 @@ describe("repeats and loops", () => {
   it("refuses a file that is not version 1", () => {
     expect(() => parseTiming({ version: 2, points: [] })).toThrow();
     expect(() => parseTiming({ version: 1, points: [[0, 0]] })).toThrow();
+  });
+});
+
+describe("a loop whose start bar repeats", () => {
+  // Bars 0-5 at 2 s each (0-12 s), then a D.C. plays them all again (12-24 s).
+  const points: [number, number, number][] = [];
+  for (let pass = 0; pass < 2; pass++) {
+    for (let bar = 0; bar < 6; bar++) {
+      const t = pass * 12 + bar * 2;
+      points.push([t, bar, 0], [t + 1, bar, 1], [t + 2, bar, 2]);
+    }
+  }
+  const dc = parseTiming({ version: 1, measures: 6, duration: 24, points });
+
+  it("keeps the range it was set with, and wraps at its end", () => {
+    const range = loopRange(dc, 0, 5, 0);
+    expect(range).toEqual([0, 12]);
+    // Recomputing near the end would pick the second pass, which never wraps.
+    expect(loopRange(dc, 0, 5, 11.9)).toEqual([12, 24]);
+    expect(loopTarget(range, 11)).toBeNull();
+    expect(loopTarget(range, 11.99)).toBe(0);
+    expect(loopTarget(null, 11.99)).toBeNull();
   });
 });

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { getJson, Refused, remembered, type Me, type Song } from "../api";
 import { DEFAULT_OTHERS, Mixer } from "../player/mixer";
 import type { Score } from "../player/score";
-import { loopRange, nearest, parseTiming, positionAt, startsOf, type Timing } from "../player/timing";
+import { loopRange, loopTarget, nearest, parseTiming, positionAt, startsOf, type Timing } from "../player/timing";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string; slug: string }>();
@@ -33,6 +33,8 @@ let mixer: Mixer | null = null;
 let score: Score | null = null;
 let timing: Timing | null = null;
 let frame = 0;
+/** The loop's [start, end] in seconds, fixed until the loop bars change or a seek. */
+let loopWindow: [number, number] | null = null;
 let lastTop = -1;
 let resizeTimer: number | undefined;
 
@@ -97,10 +99,8 @@ function tick() {
   frame = requestAnimationFrame(tick);
   if (!mixer || !timing || !score) return;
   const t = mixer.time();
-  if (loopMode.value === "on" && loopBars.value && mixer.playing) {
-    const range = loopRange(timing, loopBars.value[0], loopBars.value[1], t);
-    if (range && t >= range[1] - 0.02) mixer.seek(range[0]);
-  }
+  const target = mixer.playing ? loopTarget(loopWindow, t) : null;
+  if (target !== null) mixer.seek(target);
   now.value = t;
   playing.value = mixer.playing;
   const position = positionAt(timing, t);
@@ -143,6 +143,14 @@ async function togglePlay() {
 
 function back() {
   mixer?.seek(mixer.time() - 5);
+  setLoopWindow();
+}
+
+/** Fix the loop's times from where playback is now: the play-through of the start bar nearest it. */
+function setLoopWindow() {
+  loopWindow = loopMode.value === "on" && loopBars.value && timing && mixer
+    ? loopRange(timing, loopBars.value[0], loopBars.value[1], mixer.time())
+    : null;
 }
 
 function choosePart(index: number) {
@@ -173,6 +181,7 @@ function setRate(value: number) {
 function toggleLoop() {
   if (loopMode.value === "off") loopMode.value = "pick-start";
   else { loopMode.value = "off"; loopBars.value = null; }
+  setLoopWindow();
 }
 
 function onScoreClick(event: MouseEvent) {
@@ -199,10 +208,12 @@ function jumpTo(bar: number) {
   if (!timing || !mixer) return;
   const t = nearest(startsOf(timing, bar), mixer.time());
   if (t !== null) mixer.seek(t);
+  setLoopWindow();
 }
 
 function seekTo(event: Event) {
   mixer?.seek(Number((event.target as HTMLInputElement).value));
+  setLoopWindow();
 }
 
 const loopHint = computed(() => ({
