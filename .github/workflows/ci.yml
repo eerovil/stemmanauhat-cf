@@ -71,4 +71,9 @@ jobs:
           set -e
           curl -fsS https://stemmanauhat.eerovil.workers.dev/health
           code=$(curl -s -o /dev/null -w '%{http_code}' https://stemmanauhat.eerovil.workers.dev/c/jm)
-          [ "$code" = "302" ] || { echo "choir pages are not gated: $code"; exit 1; }
+          case "$code" in
+            302) ;;
+            # The first deploy runs before scripts/set-worker-secrets.sh: closed, not open.
+            503) echo "::warning::The Worker has no secrets yet: run scripts/set-worker-secrets.sh." ;;
+            *) echo "choir pages are not gated: $code"; exit 1 ;;
+          esac

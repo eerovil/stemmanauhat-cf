@@ -7,9 +7,9 @@
 # Credentials come from ~/.local/share/stemmanauhat/cloudflare.env
 # (CLOUDFLARE_API_TOKEN with Workers, D1 and R2 edit, and CLOUDFLARE_ACCOUNT_ID).
 # It creates the D1 database and the R2 bucket if they are missing, writes the
-# database id into wrangler.jsonc (commit that change: CI deploys with it),
-# applies the migrations, deploys, and sets SESSION_SECRET on the first run.
-# Google's keys come after, with scripts/push-google-secrets.sh.
+# database id into wrangler.jsonc (commit that change: CI deploys with it) and
+# applies the migrations. It does not deploy: a merge to main does that. After
+# the first deploy, scripts/set-worker-secrets.sh sets the Worker's secrets.
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib-cloudflare.sh
@@ -47,14 +47,4 @@ fi
 echo "==> migrations"
 wrangler d1 migrations apply "$DATABASE" --remote
 
-echo "==> deploy"
-./scripts/run.sh corepack pnpm run build
-wrangler deploy
-
-echo "==> SESSION_SECRET"
-if wrangler secret list 2>/dev/null | grep -q SESSION_SECRET; then
-  echo "    already set"
-else
-  head -c 32 /dev/urandom | base64 | wrangler secret put SESSION_SECRET
-fi
-echo "Done. Next: scripts/push-google-secrets.sh, scripts/add-admin.sh, scripts/set-passphrase.sh."
+echo "Done. Merge to main to deploy, then run scripts/set-worker-secrets.sh."

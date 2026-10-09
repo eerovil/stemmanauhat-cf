@@ -37,15 +37,20 @@ There is no node on the host, so everything runs in the Playwright container:
 
 ## Setting up Cloudflare (once)
 
-1. Save `CLOUDFLARE_API_TOKEN` (Workers, D1 and R2 edit) and `CLOUDFLARE_ACCOUNT_ID` in
-   `~/.local/share/stemmanauhat/cloudflare.env`.
-2. `./scripts/cloudflare-setup.sh`, then commit the database id it writes into `wrangler.jsonc`.
+Done already: the D1 database `stemmanauhat` and the R2 bucket `stemmanauhat` exist in the
+ruokalista Cloudflare account, with the migrations applied (`scripts/cloudflare-setup.sh`, which is
+safe to run again). The credentials are in `~/.local/share/stemmanauhat/cloudflare.env`.
+
+Still to do:
+
+1. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets (the same
+   values as in that file). Until then the deploy job skips itself.
+2. Merge to `main`: CI tests, migrates and deploys.
 3. Create a Google OAuth client (web app) with the redirect URI
-   `https://stemmanauhat.eerovil.workers.dev/auth/callback`, then `./scripts/push-google-secrets.sh`.
-4. `./scripts/add-admin.sh <your email>` and `./scripts/set-passphrase.sh jm` (and `naiskuoro`),
-   with today's passphrases so the old links keep working.
-5. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets. From then on,
-   every merge to `main` tests, migrates and deploys. Until then the deploy job skips itself.
+   `https://stemmanauhat.eerovil.workers.dev/auth/callback`, then run
+   `./scripts/set-worker-secrets.sh`, which also creates `SESSION_SECRET`.
+4. `./scripts/add-admin.sh <your Google email>`, sign in, and set each choir's passphrase at
+   `/admin` (or with `./scripts/set-passphrase.sh jm`) to today's, so the old links keep working.
 
 ## Moving off YouTube
 

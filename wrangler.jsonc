@@ -20,7 +20,7 @@
       "binding": "DB",
       "database_name": "stemmanauhat",
       // Written by scripts/cloudflare-setup.sh. Not a secret.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "b3d80c7d-0fb7-45a2-b6f6-f7311556b953",
       "migrations_dir": "migrations"
     }
   ],
