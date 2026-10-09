@@ -10,7 +10,9 @@ const DRIFT = 0.03;
 /**
  * Today's videos play the other parts at MuseScore volume 36 against 127. MIDI
  * volume is a squared curve, so the slider's position is that ratio and the
- * gain is its square: (36/127)^2 = 0.08, about -22 dB.
+ * gain is its square: (36/127)^2 = 0.08, about -22 dB. This is an estimate,
+ * not a measurement: Eero accepted it on 2026-10-09 (stemmanauhat-cf#1) until
+ * song-app (musescore-choir-plugins#382) can render the test song to measure.
  */
 export const DEFAULT_OTHERS = 36 / 127;
 
