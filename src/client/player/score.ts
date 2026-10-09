@@ -48,9 +48,22 @@ export class Score {
     });
   }
 
-  async load(musicXml: string): Promise<void> {
+  async load(musicXml: string, visible?: boolean[]): Promise<void> {
     await this.osmd.load(musicXml);
+    if (visible) this.applyVisible(visible);
     this.render();
+  }
+
+  /** Draws only the parts marked true (in MusicXML part order) and lays the score out again. */
+  setVisible(visible: boolean[]): void {
+    this.applyVisible(visible);
+    // The graphical sheet is built from the visible parts, so build it again.
+    this.osmd.updateGraphic();
+    this.render();
+  }
+
+  private applyVisible(visible: boolean[]): void {
+    this.osmd.Sheet.Instruments.forEach((instrument, i) => { instrument.Visible = visible[i] ?? true; });
   }
 
   render(): void {
@@ -116,7 +129,8 @@ export class Score {
     const instruments = this.osmd.Sheet.Instruments;
 
     this.bars = this.osmd.GraphicSheet.MeasureList.map((staves) => {
-      const drawn = staves.filter((m) => m && m.PositionAndShape);
+      // A hidden part's bars stay in the list, undrawn at position 0: skip them.
+      const drawn = staves.filter((m) => m && m.PositionAndShape && m.ParentStaff.ParentInstrument.Visible);
       if (!drawn.length) return undefined;
       const first = drawn[0]!.PositionAndShape;
       const last = drawn[drawn.length - 1]!.PositionAndShape;

@@ -31,6 +31,22 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   const volumes = await page.evaluate(() => [...document.querySelectorAll("audio")].map((a) => a.volume));
   expect(volumes).toEqual([1, 1]);
 
+  // Hiding the other part's staff leaves only yours; yours cannot be hidden.
+  const staffNotes = () => page.getByTestId("score").locator("g.vf-stavenote").count();
+  const before = await staffNotes();
+  await page.getByRole("button", { name: "Viivastot" }).click();
+  const staves = page.getByRole("group", { name: "Näytettävät viivastot" });
+  await expect(staves.getByLabel("Tenori")).toBeDisabled();
+  await staves.getByLabel("Basso").uncheck();
+  await expect.poll(staffNotes).toBe(before / 2);
+  // The cursor band still sits over a note of the staff left showing.
+  const band = await page.getByTestId("cursor").boundingBox();
+  const note = await page.getByTestId("score").locator("g.vf-stavenote").first().boundingBox();
+  expect(band!.y).toBeLessThanOrEqual(note!.y + note!.height);
+  expect(band!.y + band!.height).toBeGreaterThanOrEqual(note!.y);
+  await staves.getByLabel("Basso").check();
+  await expect.poll(staffNotes).toBe(before);
+
   // The part and the song are remembered for next time.
   await page.goto("/c/jm");
   await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();

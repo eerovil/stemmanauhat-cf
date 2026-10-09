@@ -63,4 +63,14 @@ export const remembered = {
   setPart: (choir: string, part: string) => localStorage.setItem(`stemmanauhat:${choir}:part`, part),
   last: (choir: string) => localStorage.getItem(`stemmanauhat:${choir}:last`),
   setLast: (choir: string, slug: string) => localStorage.setItem(`stemmanauhat:${choir}:last`, slug),
+  hidden: (choir: string): string[] => {
+    try {
+      const value = JSON.parse(localStorage.getItem(`stemmanauhat:${choir}:hidden`) ?? "[]");
+      return Array.isArray(value) ? value.filter((n) => typeof n === "string") : [];
+    } catch {
+      return [];
+    }
+  },
+  setHidden: (choir: string, names: string[]) =>
+    localStorage.setItem(`stemmanauhat:${choir}:hidden`, JSON.stringify(names)),
 };

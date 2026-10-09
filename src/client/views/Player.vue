@@ -21,12 +21,20 @@ const rate = ref(1);
 const playing = ref(false);
 const now = ref(0);
 const levels = ref<number[]>([]);
+// Other parts' staves the singer has hidden, by part name (remembered per choir).
+const hidden = ref<string[]>([]);
+const stavesOpen = ref(false);
 
 // Loop: "pick-start" -> "pick-end" -> on.
 const loopMode = ref<"off" | "pick-start" | "pick-end" | "on">("off");
 const loopBars = ref<[number, number] | null>(null);
 
 const scoreBox = ref<HTMLElement | null>(null);
+const controlsBox = ref<HTMLElement | null>(null);
+const controlsHeight = ref(0);
+const controlsObserver = new ResizeObserver(([entry]) => {
+  controlsHeight.value = entry ? (entry.target as HTMLElement).offsetHeight : 0;
+});
 const cursor = ref<HTMLElement | null>(null);
 
 let mixer: Mixer | null = null;
@@ -54,6 +62,7 @@ onMounted(async () => {
   remembered.setLast(props.choir, props.slug);
   const savedPart = remembered.part(props.choir);
   myPart.value = Math.max(0, s.parts.findIndex((p) => p.name === savedPart));
+  hidden.value = remembered.hidden(props.choir);
 
   try {
     const [xml, timingJson] = await Promise.all([
@@ -74,7 +83,8 @@ onMounted(async () => {
     // OpenSheetMusicDisplay is most of the app's size: load it only on a song page.
     const { Score } = await import("../player/score");
     score = new Score(scoreBox.value!);
-    await score.load(xml);
+    if (controlsBox.value) controlsObserver.observe(controlsBox.value);
+    await score.load(xml, visibleParts());
     window.addEventListener("resize", onResize);
     frame = requestAnimationFrame(tick);
   } catch (error) {
@@ -85,6 +95,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame);
+  controlsObserver.disconnect();
   window.removeEventListener("resize", onResize);
   mixer?.elements.forEach((el) => el.remove());
   mixer?.destroy();
@@ -127,10 +138,12 @@ function keepInView(top: number, bottom: number) {
   const pageTop = box.getBoundingClientRect().top + window.scrollY;
   const lineTop = pageTop + top;
   const lineBottom = pageTop + bottom;
-  const viewTop = window.scrollY + 120;
-  const viewBottom = window.scrollY + window.innerHeight - 40;
+  // The controls cover the bottom of the screen; the score shows above them.
+  const visible = window.innerHeight - controlsHeight.value;
+  const viewTop = window.scrollY + 16;
+  const viewBottom = window.scrollY + visible - 16;
   if (lineTop < viewTop || lineBottom > viewBottom) {
-    window.scrollTo({ top: Math.max(0, lineTop - window.innerHeight * 0.25), behavior: "smooth" });
+    window.scrollTo({ top: Math.max(0, lineTop - visible * 0.2), behavior: "smooth" });
   }
 }
 
@@ -157,8 +170,28 @@ function setLoopWindow() {
     : null;
 }
 
+/** Which parts' staves to draw: yours always, the others unless hidden. */
+function visibleParts(): boolean[] {
+  return song.value!.parts.map((p, i) => i === myPart.value || !hidden.value.includes(p.name));
+}
+
+function redrawStaves() {
+  if (!score) return;
+  score.setVisible(visibleParts());
+  lastTop = -1;
+}
+
+function toggleStaff(name: string) {
+  hidden.value = hidden.value.includes(name) ? hidden.value.filter((n) => n !== name) : [...hidden.value, name];
+  remembered.setHidden(props.choir, hidden.value);
+  redrawStaves();
+}
+
 function choosePart(index: number) {
+  const wasHidden = hidden.value.includes(song.value!.parts[index]!.name);
+  const previousHidden = hidden.value.includes(song.value!.parts[myPart.value]!.name);
   myPart.value = index;
+  if (wasHidden || previousHidden) redrawStaves();
   remembered.setPart(props.choir, song.value!.parts[index]!.name);
   mixer?.setMaster(index);
   if (mixer) levels.value = mixer.effectiveLevels();
@@ -230,8 +263,8 @@ const loopHint = computed(() => ({
 
 <template>
   <RefusedView v-if="refused" :status="refused" :email="me?.email" />
-  <main v-else class="player">
-    <header class="bar sticky">
+  <main v-else class="player" :style="{ paddingBottom: `${controlsHeight + 16}px` }">
+    <header class="bar">
       <a :href="`/c/${encodeURIComponent(props.choir)}`" class="back-link">‹ Kappaleet</a>
       <h1>{{ song?.title }}</h1>
     </header>
@@ -240,7 +273,16 @@ const loopHint = computed(() => ({
     <p v-else-if="failure" class="error page">Kappaleen lataus epäonnistui: {{ failure }}</p>
 
     <template v-else-if="song">
-      <section class="controls sticky-controls">
+      <div class="score-wrap">
+        <div ref="scoreBox" class="score" data-testid="score" @click="onScoreClick"></div>
+        <div ref="cursor" class="cursor" data-testid="cursor" aria-hidden="true"></div>
+      </div>
+
+      <!-- At the bottom of the screen, so the score has the space above it. -->
+      <section ref="controlsBox" class="controls">
+        <p v-if="loopHint" class="hint loop-hint">{{ loopHint }}</p>
+        <input class="seek" type="range" min="0" :max="duration" step="0.1" :value="now"
+          aria-label="Kohta kappaleessa" @input="seekTo" />
         <div class="parts" role="group" aria-label="Oma stemma">
           <button v-for="(p, i) in song.parts" :key="p.file" type="button" class="part"
             :class="{ mine: i === myPart }" :aria-pressed="i === myPart"
@@ -252,29 +294,33 @@ const loopHint = computed(() => ({
           </button>
           <button type="button" aria-label="5 sekuntia taaksepäin" @click="back">−5 s</button>
           <span class="time" data-testid="time">{{ clock(now) }} / {{ clock(duration) }}</span>
+          <span class="spacer"></span>
+          <button type="button" :class="{ on: stavesOpen }" :aria-expanded="stavesOpen"
+            @click="stavesOpen = !stavesOpen">Viivastot</button>
         </div>
-        <input class="seek" type="range" min="0" :max="duration" step="0.1" :value="now"
-          aria-label="Kohta kappaleessa" @input="seekTo" />
-        <label class="slider">
-          <span>Muut stemmat</span>
-          <input type="range" min="0" max="1" step="0.01" :value="others" aria-label="Muiden stemmojen voimakkuus"
-            @input="setOthers(Number(($event.target as HTMLInputElement).value))" />
-          <button type="button" :class="{ on: solo }" :aria-pressed="solo" @click="toggleSolo">Vain oma</button>
-        </label>
-        <label class="slider">
-          <span>Tempo {{ Math.round(rate * 100) }} %</span>
-          <input type="range" min="0.5" max="1.2" step="0.05" :value="rate" aria-label="Tempo"
-            @input="setRate(Number(($event.target as HTMLInputElement).value))" />
-          <button type="button" :class="{ on: loopMode !== 'off' }" :aria-pressed="loopMode !== 'off'"
-            @click="toggleLoop">Silmukka</button>
-        </label>
-        <p v-if="loopHint" class="hint loop-hint">{{ loopHint }}</p>
+        <div v-if="stavesOpen" class="staves" role="group" aria-label="Näytettävät viivastot">
+          <label v-for="(p, i) in song.parts" :key="p.file" class="staff-choice">
+            <input type="checkbox" :checked="i === myPart || !hidden.includes(p.name)" :disabled="i === myPart"
+              @change="toggleStaff(p.name)" />
+            {{ p.name }}
+          </label>
+        </div>
+        <div class="sliders">
+          <div class="slider">
+            <span>Muut stemmat</span>
+            <input type="range" min="0" max="1" step="0.01" :value="others" aria-label="Muiden stemmojen voimakkuus"
+              @input="setOthers(Number(($event.target as HTMLInputElement).value))" />
+            <button type="button" :class="{ on: solo }" :aria-pressed="solo" @click="toggleSolo">Vain oma</button>
+          </div>
+          <div class="slider">
+            <span>Tempo {{ Math.round(rate * 100) }} %</span>
+            <input type="range" min="0.5" max="1.2" step="0.05" :value="rate" aria-label="Tempo"
+              @input="setRate(Number(($event.target as HTMLInputElement).value))" />
+            <button type="button" :class="{ on: loopMode !== 'off' }" :aria-pressed="loopMode !== 'off'"
+              @click="toggleLoop">Silmukka</button>
+          </div>
+        </div>
       </section>
-
-      <div class="score-wrap">
-        <div ref="scoreBox" class="score" data-testid="score" @click="onScoreClick"></div>
-        <div ref="cursor" class="cursor" data-testid="cursor" aria-hidden="true"></div>
-      </div>
     </template>
   </main>
 </template>

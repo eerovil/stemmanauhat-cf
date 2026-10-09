@@ -20,6 +20,21 @@ export function gainOf(level: number): number {
   return Math.max(0, Math.min(1, level)) ** 2;
 }
 
+/**
+ * Each part's gain. The part MP3s are each rendered near full scale, so adding
+ * them up at full volume clips (Eero heard it as distortion with every part
+ * turned up). The mix is therefore never let louder than the default mix: when
+ * the slider raises the others, everything is scaled down to the default's sum,
+ * and the default mix itself plays exactly as before.
+ */
+export function mixLevels(count: number, master: number, others: number): number[] {
+  const raw = Array.from({ length: count }, (_, i) => (i === master ? 1 : gainOf(others)));
+  const sum = raw.reduce((a, b) => a + b, 0);
+  const budget = 1 + (count - 1) * gainOf(DEFAULT_OTHERS);
+  const scale = sum > budget ? budget / sum : 1;
+  return raw.map((g) => g * scale);
+}
+
 export class Mixer {
   readonly elements: HTMLAudioElement[];
   private context: AudioContext | null = null;
@@ -40,7 +55,7 @@ export class Mixer {
 
   /** The gain each part plays at, in part order. */
   levels(): number[] {
-    return this.elements.map((_, i) => (i === this.master ? 1 : gainOf(this.others)));
+    return mixLevels(this.elements.length, this.master, this.others);
   }
 
   /** What each part actually plays at: its gain node times its element's volume. */
