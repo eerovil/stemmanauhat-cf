@@ -314,7 +314,7 @@ const loopHint = computed(() => ({
           </div>
           <div class="slider">
             <span>Tempo {{ Math.round(rate * 100) }} %</span>
-            <input type="range" min="0.5" max="1.2" step="0.05" :value="rate" aria-label="Tempo"
+            <input type="range" min="0.5" max="1.5" step="0.05" :value="rate" aria-label="Tempo"
               @input="setRate(Number(($event.target as HTMLInputElement).value))" />
             <button type="button" :class="{ on: loopMode !== 'off' }" :aria-pressed="loopMode !== 'off'"
               @click="toggleLoop">Silmukka</button>
