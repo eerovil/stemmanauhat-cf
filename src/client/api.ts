@@ -63,6 +63,15 @@ export const remembered = {
   setPart: (choir: string, part: string) => localStorage.setItem(`stemmanauhat:${choir}:part`, part),
   last: (choir: string) => localStorage.getItem(`stemmanauhat:${choir}:last`),
   setLast: (choir: string, slug: string) => localStorage.setItem(`stemmanauhat:${choir}:last`, slug),
+  /** The score's zoom on this device, for every song. */
+  zoom: () => {
+    const value = Number(localStorage.getItem("stemmanauhat:zoom"));
+    return value >= 0.5 && value <= 2 ? value : 1;
+  },
+  setZoom: (zoom: number) => localStorage.setItem("stemmanauhat:zoom", String(zoom)),
+  /** One scrolling line (true) or page lines (false), on this device. */
+  singleLine: () => localStorage.getItem("stemmanauhat:single-line") === "1",
+  setSingleLine: (on: boolean) => localStorage.setItem("stemmanauhat:single-line", on ? "1" : "0"),
   hidden: (choir: string): string[] => {
     try {
       const value = JSON.parse(localStorage.getItem(`stemmanauhat:${choir}:hidden`) ?? "[]");

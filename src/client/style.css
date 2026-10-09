@@ -62,6 +62,10 @@ footer { margin-top: 1.5rem; }
 .staff-choice { display: inline-flex; align-items: center; gap: 0.3rem; }
 .loop-hint { margin: 0.2rem 0 0; }
 .score-wrap { position: relative; background: #fff; margin: 0 auto; max-width: 70rem; }
+/* One line, scrolled sideways under the playhead like the videos. */
+.score-scroll.single-line { overflow-x: auto; background: #fff; scrollbar-width: none; }
+.score-scroll.single-line::-webkit-scrollbar { display: none; }
+.score-scroll.single-line .score-wrap { max-width: none; width: max-content; margin: 0; }
 .score { min-height: 40vh; }
 /* The videos' look (song-app scrollvideo/video.py): highlight (42, 95, 171), the
    beat marker at 0.18 of it, your part's notes full blue and the others at 0.45. */
@@ -76,3 +80,7 @@ footer { margin-top: 1.5rem; }
 .card .row input[type="text"] { width: auto; flex: 1; margin: 0; }
 .members { list-style: none; padding: 0; }
 .members li { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 0.3rem 0; }
+.zoom { display: inline-flex; }
+.zoom button { min-width: 2.4rem; padding-left: 0.5rem; padding-right: 0.5rem; }
+.zoom button:first-child { border-radius: 0.5rem 0 0 0.5rem; }
+.zoom button:last-child { border-radius: 0 0.5rem 0.5rem 0; border-left: none; }

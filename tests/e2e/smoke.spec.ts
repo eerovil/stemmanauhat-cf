@@ -47,6 +47,22 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await staves.getByLabel("Basso").check();
   await expect.poll(staffNotes).toBe(before);
 
+  // Zoom makes the score bigger, and the size is remembered.
+  const height = async () => (await page.getByTestId("score").locator("svg").first().boundingBox())!.height;
+  const small = await height();
+  await page.getByRole("button", { name: "Suurenna nuottia" }).click();
+  await expect.poll(height).toBeGreaterThan(small);
+  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:zoom"))).toBe("1.15");
+
+  // The one-line view puts the whole score on one line that scrolls with the music.
+  await page.getByRole("button", { name: "Vieritys" }).click();
+  const scroller = page.getByTestId("score-scroll");
+  await expect.poll(() => scroller.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  await page.getByRole("button", { name: "Soita" }).click();
+  await expect.poll(() => scroller.evaluate((el) => el.scrollLeft), { timeout: 10_000 }).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Tauko" }).click();
+  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:single-line"))).toBe("1");
+
   // The part and the song are remembered for next time.
   await page.goto("/c/jm");
   await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();

@@ -66,8 +66,24 @@ export class Score {
     this.osmd.Sheet.Instruments.forEach((instrument, i) => { instrument.Visible = visible[i] ?? true; });
   }
 
+  /** The singer's own zoom, times the size that suits the screen. */
+  zoom = 1;
+  /** The whole score on one line that scrolls sideways, as in the videos. */
+  singleLine = false;
+
+  setSingleLine(on: boolean): void {
+    this.singleLine = on;
+    this.render();
+  }
+
+  setZoom(zoom: number): void {
+    this.zoom = zoom;
+    this.render();
+  }
+
   render(): void {
-    this.osmd.Zoom = this.container.clientWidth < 600 ? 0.6 : 0.8;
+    this.osmd.setOptions({ renderSingleHorizontalStaffline: this.singleLine });
+    this.osmd.Zoom = (window.innerWidth < 600 ? 0.6 : 0.8) * this.zoom;
     this.osmd.render();
     this.measure();
   }
@@ -89,6 +105,22 @@ export class Score {
     // OSMD places a staff entry at its notehead's centre.
     const centre = x;
     return { x0: centre - this.noteWidth, x1: centre + this.noteWidth, top: bar.top, bottom: bar.bottom };
+  }
+
+  /**
+   * Where the music is, sliding smoothly between notes: what the one-line view
+   * scrolls by, so the page moves evenly while the marker steps from note to note.
+   */
+  xAt(measure: number, beat: number): number | null {
+    const bar = this.bars[measure];
+    if (!bar) return null;
+    const a = bar.anchors;
+    for (let i = 0; i < a.length - 1; i++) {
+      const [b0, x0] = a[i]!;
+      const [b1, x1] = a[i + 1]!;
+      if (beat <= b1) return b1 > b0 ? x0 + ((Math.max(beat, b0) - b0) / (b1 - b0)) * (x1 - x0) : x0;
+    }
+    return a[a.length - 1]![1];
   }
 
   /**

@@ -24,6 +24,12 @@ const levels = ref<number[]>([]);
 // Other parts' staves the singer has hidden, by part name (remembered per choir).
 const hidden = ref<string[]>([]);
 const stavesOpen = ref(false);
+const zoom = ref(remembered.zoom());
+const singleLine = ref(remembered.singleLine());
+const scrollBox = ref<HTMLElement | null>(null);
+/** Where the sung note sits across the screen in the one-line view: the videos' playhead. */
+const PLAYHEAD = 0.35;
+const ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2];
 
 // Loop: "pick-start" -> "pick-end" -> on.
 const loopMode = ref<"off" | "pick-start" | "pick-end" | "on">("off");
@@ -83,6 +89,8 @@ onMounted(async () => {
     // OpenSheetMusicDisplay is most of the app's size: load it only on a song page.
     const { Score } = await import("../player/score");
     score = new Score(scoreBox.value!);
+    score.zoom = zoom.value;
+    score.singleLine = singleLine.value;
     if (controlsBox.value) controlsObserver.observe(controlsBox.value);
     await score.load(xml, visibleParts());
     window.addEventListener("resize", onResize);
@@ -125,6 +133,12 @@ function tick() {
   el.style.height = `${spot.bottom - spot.top}px`;
   el.dataset.measure = String(position.measure);
   el.dataset.lit = String(lit);
+  if (singleLine.value) {
+    // Follow the music sideways while playing; when paused, the singer may swipe.
+    const x = score.xAt(position.measure, position.beat);
+    const box = scrollBox.value;
+    if (box && x !== null && mixer.playing) box.scrollLeft = Math.max(0, x - box.clientWidth * PLAYHEAD);
+  }
   if (spot.top !== lastTop) {
     lastTop = spot.top;
     keepInView(spot.top, spot.bottom);
@@ -173,6 +187,24 @@ function setLoopWindow() {
 /** Which parts' staves to draw: yours always, the others unless hidden. */
 function visibleParts(): boolean[] {
   return song.value!.parts.map((p, i) => i === myPart.value || !hidden.value.includes(p.name));
+}
+
+function toggleSingleLine() {
+  singleLine.value = !singleLine.value;
+  remembered.setSingleLine(singleLine.value);
+  score?.setSingleLine(singleLine.value);
+  if (scrollBox.value) scrollBox.value.scrollLeft = 0;
+  lastTop = -1;
+}
+
+function changeZoom(step: number) {
+  const i = ZOOMS.findIndex((z) => z >= zoom.value - 1e-6);
+  const next = ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, (i < 0 ? ZOOMS.length - 1 : i) + step))]!;
+  if (next === zoom.value) return;
+  zoom.value = next;
+  remembered.setZoom(next);
+  score?.setZoom(next);
+  lastTop = -1;
 }
 
 function redrawStaves() {
@@ -273,9 +305,11 @@ const loopHint = computed(() => ({
     <p v-else-if="failure" class="error page">Kappaleen lataus epäonnistui: {{ failure }}</p>
 
     <template v-else-if="song">
-      <div class="score-wrap">
-        <div ref="scoreBox" class="score" data-testid="score" @click="onScoreClick"></div>
-        <div ref="cursor" class="cursor" data-testid="cursor" aria-hidden="true"></div>
+      <div ref="scrollBox" class="score-scroll" :class="{ 'single-line': singleLine }" data-testid="score-scroll">
+        <div class="score-wrap">
+          <div ref="scoreBox" class="score" data-testid="score" @click="onScoreClick"></div>
+          <div ref="cursor" class="cursor" data-testid="cursor" aria-hidden="true"></div>
+        </div>
       </div>
 
       <!-- At the bottom of the screen, so the score has the space above it. -->
@@ -295,6 +329,14 @@ const loopHint = computed(() => ({
           <button type="button" aria-label="5 sekuntia taaksepäin" @click="back">−5 s</button>
           <span class="time" data-testid="time">{{ clock(now) }} / {{ clock(duration) }}</span>
           <span class="spacer"></span>
+          <span class="zoom" role="group" aria-label="Nuotin koko">
+            <button type="button" aria-label="Pienennä nuottia" :disabled="zoom <= ZOOMS[0]!"
+              @click="changeZoom(-1)">−</button>
+            <button type="button" aria-label="Suurenna nuottia" :disabled="zoom >= ZOOMS[ZOOMS.length - 1]!"
+              @click="changeZoom(1)">+</button>
+          </span>
+          <button type="button" :class="{ on: singleLine }" :aria-pressed="singleLine"
+            @click="toggleSingleLine">Vieritys</button>
           <button type="button" :class="{ on: stavesOpen }" :aria-expanded="stavesOpen"
             @click="stavesOpen = !stavesOpen">Viivastot</button>
         </div>
