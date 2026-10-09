@@ -7,7 +7,7 @@
     "build": "vite build",
     "dev": "vite build && wrangler dev --ip 127.0.0.1 --port 8787",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
-    "test": "pnpm run typecheck && vitest run && playwright test",
+    "test": "vue-tsc --noEmit -p tsconfig.json && vitest run && playwright test",
     "test:unit": "vitest run",
     "test:e2e": "playwright test"
   },

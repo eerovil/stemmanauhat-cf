@@ -29,7 +29,13 @@ export default {
       env, request, url, now, secret: env.SESSION_SECRET,
       session: await readSession(request, env.SESSION_SECRET, now),
     };
-    return route(ctx);
+    try {
+      return await route(ctx);
+    } catch (error) {
+      // decodeURIComponent on a bad escape such as /c/% is the caller's mistake.
+      if (error instanceof URIError) return new Response("Bad address", { status: 400 });
+      throw error;
+    }
   },
 };
 
@@ -50,8 +56,9 @@ async function route(ctx: Ctx): Promise<Response> {
   if ((m = /^\/api\/songs\/([^/]+)\/([^/]+)$/.exec(path)) && method === "GET") {
     return song(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!));
   }
-  if ((m = /^\/files\/([^/]+)\/([^/]+)\/(.+)$/.exec(path)) && method === "GET") {
-    return file(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!), decodeURIComponent(m[3]!));
+  if ((m = /^\/files\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/.exec(path)) && method === "GET") {
+    return file(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!), decodeURIComponent(m[3]!),
+      decodeURIComponent(m[4]!));
   }
   if ((m = /^\/c\/([^/]+)(?:\/[^/]+)?\/?$/.exec(path)) && method === "GET") {
     return choirPage(ctx, decodeURIComponent(m[1]!));
@@ -169,10 +176,22 @@ function signinUrl(next: string, error?: string): string {
   return `/signin?${query}`;
 }
 
-/** Only same-site paths: `//evil.example` would be another site. */
-function safeNext(next: string | null): string {
+/**
+ * Only a path on this site. `//evil.example` is another site, and browsers
+ * drop tabs and newlines from a Location, so `/\t/evil.example` is one too:
+ * refuse control characters outright, then check the resolved origin.
+ */
+export function safeNext(next: string | null): string {
   if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return "/";
-  return next;
+  if (/[\u0000-\u001f\u007f]/.test(next)) return "/";
+  const base = "https://stemmanauhat.invalid";
+  try {
+    const url = new URL(next, base);
+    if (url.origin !== base) return "/";
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return "/";
+  }
 }
 
 // ---------------------------------------------------------------- API
@@ -215,20 +234,31 @@ async function song(ctx: Ctx, choir: string, slug: string): Promise<Response> {
   const access = await accessTo(ctx, choir);
   if (access !== "ok") return json({ error: access }, statusOf(access));
   const row = await ctx.env.DB.prepare(
-    "SELECT slug, title, parts, duration, published_at FROM songs WHERE choir = ? AND slug = ?",
-  ).bind(choir, slug).first<{ slug: string; title: string; parts: string; duration: number; published_at: string }>();
+    "SELECT slug, title, parts, duration, published_at, prefix FROM songs WHERE choir = ? AND slug = ?",
+  ).bind(choir, slug).first<{ slug: string; title: string; parts: string; duration: number; published_at: string;
+    prefix: string }>();
   if (row === null) return json({ error: "unknown" }, 404);
-  const base = `/files/${encodeURIComponent(choir)}/${encodeURIComponent(slug)}/`;
-  return json({ ...row, parts: JSON.parse(row.parts), choir, base });
+  const { prefix, ...song } = row;
+  // The version is in the address, so a republished song is a new URL and the
+  // year-long cache on /files never serves the old one.
+  const base = `/files/${encodeURIComponent(choir)}/${encodeURIComponent(slug)}/${encodeURIComponent(versionOf(prefix))}/`;
+  return json({ ...song, parts: JSON.parse(row.parts), choir, base });
 }
 
-async function file(ctx: Ctx, choir: string, slug: string, path: string): Promise<Response> {
+/** The last folder of a song's R2 prefix: `songs/jm/x/20261009T120000Z/` → `20261009T120000Z`. */
+export function versionOf(prefix: string): string {
+  return prefix.split("/").filter(Boolean).pop() ?? "";
+}
+
+async function file(ctx: Ctx, choir: string, slug: string, version: string, path: string): Promise<Response> {
   const access = await accessTo(ctx, choir);
   if (access !== "ok") return new Response(access, { status: statusOf(access) });
   if (!safeSongPath(path)) return new Response("Bad path", { status: 400 });
   const row = await ctx.env.DB.prepare("SELECT prefix FROM songs WHERE choir = ? AND slug = ?")
     .bind(choir, slug).first<{ prefix: string }>();
-  if (row === null) return new Response("Not found", { status: 404 });
+  // An old version's address: its files are gone from R2, and serving the new
+  // ones under it would put them in a cache entry meant for the old version.
+  if (row === null || versionOf(row.prefix) !== version) return new Response("Not found", { status: 404 });
   try {
     return await serveObject(ctx.env.SONGS, row.prefix + path, ctx.request);
   } catch {

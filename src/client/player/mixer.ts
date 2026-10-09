@@ -41,6 +41,11 @@ export class Mixer {
     return this.elements.map((_, i) => (i === this.master ? 1 : gainOf(this.others)));
   }
 
+  /** What each part actually plays at: its gain node times its element's volume. */
+  effectiveLevels(): number[] {
+    return this.elements.map((el, i) => (this.gains[i]?.gain.value ?? 1) * el.volume);
+  }
+
   setMaster(index: number): void {
     this.master = index;
     this.applyGains();
@@ -111,6 +116,9 @@ export class Mixer {
     this.context = new AudioContext();
     const context = this.context;
     this.gains = this.elements.map((el) => {
+      // The element's own volume was the stand-in until now; from here the gain
+      // node is the only volume, or the two would multiply.
+      el.volume = 1;
       const gain = context.createGain();
       context.createMediaElementSource(el).connect(gain).connect(context.destination);
       return gain;

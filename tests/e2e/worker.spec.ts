@@ -3,18 +3,23 @@ import { fetchIn, PASSPHRASE, signInAs } from "./helpers";
 
 test("song files: signed out, wrong choir, and byte ranges", async ({ page }) => {
   await page.goto("/signin");
-  expect((await fetchIn(page, "/files/jm/kokeilu/timing.json")).status).toBe(401);
+  expect((await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/timing.json")).status).toBe(401);
 
   await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
-  expect((await fetchIn(page, "/files/jm/kokeilu/timing.json")).status).toBe(200);
-  expect((await fetchIn(page, "/files/naiskuoro/kokeilu/timing.json")).status).toBe(403);
-  expect((await fetchIn(page, "/files/jm/kokeilu/..%2F..%2Fx")).status).toBe(400);
+  expect((await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/timing.json")).status).toBe(200);
+  expect((await fetchIn(page, "/files/naiskuoro/kokeilu/20261009T120000Z/timing.json")).status).toBe(403);
+  expect((await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/..%2F..%2Fx")).status).toBe(400);
 
-  const part = await fetchIn(page, "/files/jm/kokeilu/parts/1-Tenori.mp3", { Range: "bytes=0-99" });
+  const part = await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/parts/1-Tenori.mp3", { Range: "bytes=0-99" });
   expect(part.status).toBe(206);
   expect(part.range).toMatch(/^bytes 0-99\/\d+$/);
   expect(part.length).toBe(100);
   expect(part.type).toBe("audio/mpeg");
+
+  // A republished song is a new address; the old one is gone, not served stale.
+  expect((await fetchIn(page, "/files/jm/kokeilu/20250101T000000Z/timing.json")).status).toBe(404);
+  // A bad escape in the address is a 400, not a crash.
+  expect((await fetchIn(page, "/c/%")).status).toBe(400);
 
   // Link sessions are not admins.
   expect((await fetchIn(page, "/api/admin")).status).toBe(403);

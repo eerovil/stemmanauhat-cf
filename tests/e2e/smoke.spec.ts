@@ -22,6 +22,15 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
 
   await playAndSeeCursorMove(page);
 
+  // Once playing, the gains are the real ones (gain node × element volume), and
+  // switching part still gives your part full volume and the others the video level.
+  await page.getByRole("button", { name: "Vain oma" }).click();
+  await tenori.click();
+  await expect(tenori).toHaveAttribute("data-gain", "1.000");
+  await expect(basso).toHaveAttribute("data-gain", "0.080");
+  const volumes = await page.evaluate(() => [...document.querySelectorAll("audio")].map((a) => a.volume));
+  expect(volumes).toEqual([1, 1]);
+
   // The part and the song are remembered for next time.
   await page.goto("/c/jm");
   await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();
@@ -47,7 +56,7 @@ test("a Google account not on the list is refused", async ({ page }) => {
   await expect(page.getByText("ulkopuolinen@example.com")).toBeVisible();
   await expect(page.getByText("ei ole pääsyä tähän kuoroon")).toBeVisible();
   expect(statuses).toContain(403);
-  expect((await fetchIn(page, "/files/jm/kokeilu/score.musicxml")).status).toBe(403);
+  expect((await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/score.musicxml")).status).toBe(403);
 });
 
 test("the public demo opens without signing in", async ({ page }) => {

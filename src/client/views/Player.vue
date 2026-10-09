@@ -61,11 +61,11 @@ onMounted(async () => {
     timing = parseTiming(timingJson);
     mixer = new Mixer(s.parts.map((p) => s.base + p.file));
     // On the page (hidden) rather than detached, so the browser and tests can see them.
-    mixer.elements.forEach((el, i) => { el.dataset.part = s.parts[i]!.name; document.body.append(el); });
+    mixer.elements.forEach((el, i) => { el.dataset.part = s.parts[i]!.name; document.body.appendChild(el); });
     mixer.setMaster(myPart.value);
     mixer.setOthers(others.value);
     mixer.elements[myPart.value]!.addEventListener("ended", () => { playing.value = false; });
-    levels.value = mixer.levels();
+    levels.value = mixer.effectiveLevels();
     loading.value = false;
     // The score box exists only once loading is false.
     await new Promise(requestAnimationFrame);
@@ -138,6 +138,7 @@ async function togglePlay() {
     await mixer.play();
   }
   playing.value = mixer.playing;
+  levels.value = mixer.effectiveLevels();
 }
 
 function back() {
@@ -148,14 +149,14 @@ function choosePart(index: number) {
   myPart.value = index;
   remembered.setPart(props.choir, song.value!.parts[index]!.name);
   mixer?.setMaster(index);
-  if (mixer) levels.value = mixer.levels();
+  if (mixer) levels.value = mixer.effectiveLevels();
 }
 
 function setOthers(value: number) {
   others.value = value;
   solo.value = value === 0;
   mixer?.setOthers(value);
-  if (mixer) levels.value = mixer.levels();
+  if (mixer) levels.value = mixer.effectiveLevels();
 }
 
 let beforeSolo = DEFAULT_OTHERS;

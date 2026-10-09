@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decideAccess, type AccessFacts } from "../../src/worker/access";
 import { parseRange, safeSongPath } from "../../src/worker/files";
 import { readEmail } from "../../src/worker/google";
-import { parseEmails } from "../../src/worker/index";
+import { parseEmails, safeNext, versionOf } from "../../src/worker/index";
 import { newPassphraseRecord, passphraseMatches } from "../../src/worker/passphrase";
 import { readSession, sessionCookie } from "../../src/worker/session";
 import { base64UrlEncode } from "../../src/worker/signing";
@@ -98,5 +98,24 @@ describe("files", () => {
 describe("parseEmails", () => {
   it("splits pasted text, lower-cases and drops junk", () => {
     expect(parseEmails("A@Example.com, b@example.com\nnot-an-email\nA@example.com")).toEqual(["a@example.com", "b@example.com"]);
+  });
+});
+
+describe("safeNext", () => {
+  it("keeps a path on this site", () => {
+    expect(safeNext("/c/jm/kokeilu?x=1")).toBe("/c/jm/kokeilu?x=1");
+    expect(safeNext(null)).toBe("/");
+  });
+  it("refuses anything a browser could read as another site", () => {
+    for (const bad of ["//evil.example", "/\t/evil.example", "/\n/evil.example", "/\\evil.example",
+      "https://evil.example", "evil.example", "/\u0000x"]) {
+      expect(safeNext(bad)).toBe("/");
+    }
+  });
+});
+
+describe("versionOf", () => {
+  it("takes the last folder of the prefix", () => {
+    expect(versionOf("songs/jm/kokeilu/20261009T120000Z/")).toBe("20261009T120000Z");
   });
 });
