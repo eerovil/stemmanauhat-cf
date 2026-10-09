@@ -1,0 +1,19 @@
+{
+ "slug": "kokeilu",
+ "title": "Kokeilulaulu",
+ "choir": "jm",
+ "version": "20261009T120000Z",
+ "score": "score.musicxml",
+ "timing": "timing.json",
+ "parts": [
+  {
+   "name": "Tenori",
+   "file": "parts/1-Tenori.mp3"
+  },
+  {
+   "name": "Basso",
+   "file": "parts/2-Basso.mp3"
+  }
+ ],
+ "duration": 8.0
+}

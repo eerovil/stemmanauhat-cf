@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stemmanauhat",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+
+  // The Vue front end, built by `vite build`. The Worker runs first on every
+  // request so that pages, files and the old ?user= links all pass its access
+  // check; it hands everything else to the assets.
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stemmanauhat",
+      // Written by scripts/cloudflare-setup.sh. Not a secret.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Song files, written by song-app. Never public: the Worker serves them after
+  // the same access check as the pages.
+  "r2_buckets": [{ "binding": "SONGS", "bucket_name": "stemmanauhat" }]
+
+  // Secrets (wrangler secret put): SESSION_SECRET, GOOGLE_CLIENT_ID,
+  // GOOGLE_CLIENT_SECRET. Tests alone also set GOOGLE_AUTH_URL and
+  // GOOGLE_TOKEN_URL, pointing at tests/support/fake-google.mjs.
+}

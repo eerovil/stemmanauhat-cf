@@ -17,6 +17,10 @@ D1 for the per-choir email allow-lists, Google sign-in). Read README.md first.
 
 ## Tests
 
+Run everything through `./scripts/run.sh` (there is no node on the host); the suite is
+`./scripts/run.sh corepack pnpm test`. Screenshots for a pull request:
+`./scripts/run.sh env SCREENSHOTS_DIR=test-results/shots corepack pnpm exec playwright test screenshots`.
+
 Every change runs the test suite (`pnpm test`), which must include at least one end-to-end smoke
 test: sign-in stubbed, a song's score renders, audio plays, the cursor moves. A build or a linter
 alone is not a test. Use the AgentDeck job queue for test runs as the poller brief says.
