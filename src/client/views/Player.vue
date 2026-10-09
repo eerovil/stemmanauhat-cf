@@ -121,8 +121,8 @@ function onResize() {
 function tick() {
   frame = requestAnimationFrame(tick);
   if (!mixer || !timing || !score) return;
-  const t = drag?.moved ? drag.t : smoothClock.read(mixer.time(), mixer.playing, rate.value, performance.now());
-  const target = mixer.playing ? loopTarget(loopWindow, t) : null;
+  const t = drag?.moved ? drag.t : smoothClock.read(mixer.time(), mixer.running, rate.value, performance.now());
+  const target = mixer.running ? loopTarget(loopWindow, t) : null;
   if (target !== null) mixer.seek(target);
   now.value = t;
   playing.value = mixer.playing;
@@ -224,7 +224,7 @@ function verticalOffset(boxHeight: number): number {
  * In the one-line view, dragging the score sideways moves through the song like
  * the position slider: left is forward. A tap without moving is still a tap on a bar.
  */
-interface Drag { pointer: number; startX: number; startT: number; t: number; moved: boolean; lastSeek: number }
+interface Drag { pointer: number; startX: number; startT: number; t: number; moved: boolean; resume: boolean }
 let drag: Drag | null = null;
 let dragJustEnded = false;
 const DRAG_THRESHOLD = 8;
@@ -232,7 +232,7 @@ const DRAG_THRESHOLD = 8;
 function onPointerDown(event: PointerEvent) {
   if (!singleLine.value || !mixer || !curve) return;
   const t = mixer.time();
-  drag = { pointer: event.pointerId, startX: event.clientX, startT: t, t, moved: false, lastSeek: 0 };
+  drag = { pointer: event.pointerId, startX: event.clientX, startT: t, t, moved: false, resume: false };
 }
 
 function onPointerMove(event: PointerEvent) {
@@ -242,19 +242,19 @@ function onPointerMove(event: PointerEvent) {
   if (!drag.moved) {
     drag.moved = true;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    // The sound waits while the score is dragged and starts again, all parts
+    // together, where it is let go: seeking it along the way pulls parts apart.
+    drag.resume = mixer.playing;
+    if (drag.resume) mixer.pause();
   }
   drag.t = Math.min(duration.value, timeAtX(curve, curveAt(curve, drag.startT) - dx, drag.startT));
-  // Seek the sound along, but not on every pointer event.
-  if (event.timeStamp - drag.lastSeek > 80) {
-    drag.lastSeek = event.timeStamp;
-    mixer.seek(drag.t);
-  }
 }
 
 function onPointerUp(event: PointerEvent) {
   if (!drag || event.pointerId !== drag.pointer) return;
   if (drag.moved && mixer) {
     mixer.seek(drag.t);
+    if (drag.resume) void mixer.play();
     setLoopWindow();
     // Swallow the click that may end a drag, but only that one: browsers do not
     // always send it, and a stale flag would eat the next real tap.

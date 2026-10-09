@@ -3,9 +3,10 @@
  * stream instead of being decoded whole into memory (a low-end phone could not
  * hold eight decoded parts). Volumes go through Web Audio gain nodes, because
  * iPhones ignore an audio element's own volume. Your part is the clock; any
- * other part that drifts from it by more than DRIFT seconds is put back.
+ * other part that drifts from it by more than DRIFT seconds, or stalls while
+ * loading, makes all of them line up again and start together.
  */
-const DRIFT = 0.03;
+const DRIFT = 0.05;
 
 /**
  * Today's videos play the other parts at MuseScore volume 36 against 127. MIDI
@@ -45,6 +46,11 @@ export class Mixer {
   private master = 0;
   private others = DEFAULT_OTHERS;
   private driftTimer: number | undefined;
+  /** What the singer asked for; the parts may briefly be paused to line up. */
+  private wanted = false;
+  /** Bumped by every alignment, so an older one that finishes late does nothing. */
+  private generation = 0;
+  private aligning = false;
 
   constructor(urls: string[]) {
     this.elements = urls.map((url) => {
@@ -52,6 +58,7 @@ export class Mixer {
       audio.preload = "auto";
       audio.preservesPitch = true;
       audio.src = url;
+      audio.addEventListener("ended", () => { this.wanted = false; this.stopWatching(); });
       return audio;
     });
   }
@@ -76,8 +83,14 @@ export class Mixer {
     this.applyGains();
   }
 
+  /** Whether the singer has it playing (the play button's state). */
   get playing(): boolean {
-    return !this.masterElement.paused;
+    return this.wanted;
+  }
+
+  /** Whether sound is actually coming out right now. */
+  get running(): boolean {
+    return this.wanted && !this.aligning && !this.masterElement.paused;
   }
 
   time(): number {
@@ -87,21 +100,26 @@ export class Mixer {
   async play(): Promise<void> {
     this.ensureContext();
     await this.context?.resume();
-    const t = this.time();
-    for (const el of this.elements) if (Math.abs(el.currentTime - t) > DRIFT) el.currentTime = t;
-    await Promise.all(this.elements.map((el) => el.play()));
-    window.clearInterval(this.driftTimer);
-    this.driftTimer = window.setInterval(() => this.keepTogether(), 250);
+    this.wanted = true;
+    await this.align(this.time());
   }
 
   pause(): void {
+    this.wanted = false;
+    this.generation++;
+    this.aligning = false;
     for (const el of this.elements) el.pause();
-    window.clearInterval(this.driftTimer);
+    this.stopWatching();
   }
 
+  /** Moves every part to `seconds`, and if playing, starts them again together. */
   seek(seconds: number): void {
     const t = Math.max(0, seconds);
-    for (const el of this.elements) el.currentTime = t;
+    if (this.wanted) {
+      void this.align(t);
+    } else {
+      for (const el of this.elements) el.currentTime = t;
+    }
   }
 
   setRate(rate: number): void {
@@ -121,13 +139,39 @@ export class Mixer {
     return this.elements[this.master]!;
   }
 
+  /**
+   * Lines the parts up: pause them all, put them all at `t`, wait until every one
+   * has found its place and has sound to play, then start them together. Each
+   * part is its own file, so starting them one by one, or seeking one alone while
+   * the others play, is how they drift apart.
+   */
+  private async align(t: number): Promise<void> {
+    const generation = ++this.generation;
+    this.aligning = true;
+    this.stopWatching();
+    for (const el of this.elements) el.pause();
+    for (const el of this.elements) el.currentTime = t;
+    await Promise.all(this.elements.map(ready));
+    if (generation !== this.generation) return;
+    this.aligning = false;
+    if (!this.wanted) return;
+    await Promise.all(this.elements.map((el) => el.play()));
+    if (generation !== this.generation) return;
+    this.driftTimer = window.setInterval(() => this.keepTogether(), 250);
+  }
+
+  private stopWatching(): void {
+    window.clearInterval(this.driftTimer);
+    this.driftTimer = undefined;
+  }
+
+  /** While playing: if a part stalls or wanders off, line them all up again. */
   private keepTogether(): void {
+    if (!this.wanted || this.aligning) return;
     const t = this.time();
-    for (const el of this.elements) {
-      if (el === this.masterElement) continue;
-      if (Math.abs(el.currentTime - t) > DRIFT) el.currentTime = t;
-      if (el.paused && !this.masterElement.paused) void el.play();
-    }
+    const stalled = this.elements.some((el) => el.paused || el.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
+    const drifted = this.elements.some((el) => Math.abs(el.currentTime - t) > DRIFT);
+    if (stalled || drifted) void this.align(t);
   }
 
   /** Created on the first tap on play: browsers allow audio only after one. */
@@ -156,4 +200,25 @@ export class Mixer {
       this.elements.forEach((el, i) => { el.volume = levels[i]!; });
     }
   }
+}
+
+/** Resolves once a part has finished seeking and has enough to play on (or after 3 s). */
+function ready(el: HTMLAudioElement): Promise<void> {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!el.seeking && el.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+        done();
+      }
+    };
+    const done = () => {
+      window.clearTimeout(timer);
+      el.removeEventListener("seeked", check);
+      el.removeEventListener("canplay", check);
+      resolve();
+    };
+    const timer = window.setTimeout(done, 3000);
+    el.addEventListener("seeked", check);
+    el.addEventListener("canplay", check);
+    check();
+  });
 }
