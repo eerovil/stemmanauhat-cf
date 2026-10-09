@@ -9,14 +9,14 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await page.getByRole("link", { name: "Kokeilulaulu" }).click();
   await expect(page.getByRole("heading", { name: "Kokeilulaulu" })).toBeVisible();
 
-  // Your part loud, the others at today's video level; switching part swaps them.
+  // Your part loud, the others a bit above the videos' level; switching part swaps them.
   const tenori = page.getByRole("button", { name: "Tenori" });
   const basso = page.getByRole("button", { name: "Basso" });
-  await expect(tenori).toHaveAttribute("data-gain", "1.000");
-  await expect(basso).toHaveAttribute("data-gain", "0.080");
+  await expect(tenori).toHaveAttribute("data-gain", "0.931");
+  await expect(basso).toHaveAttribute("data-gain", "0.149");
   await basso.click();
-  await expect(basso).toHaveAttribute("data-gain", "1.000");
-  await expect(tenori).toHaveAttribute("data-gain", "0.080");
+  await expect(basso).toHaveAttribute("data-gain", "0.931");
+  await expect(tenori).toHaveAttribute("data-gain", "0.149");
   await page.getByRole("button", { name: "Vain oma" }).click();
   await expect(tenori).toHaveAttribute("data-gain", "0.000");
 
@@ -26,8 +26,8 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   // switching part still gives your part full volume and the others the video level.
   await page.getByRole("button", { name: "Vain oma" }).click();
   await tenori.click();
-  await expect(tenori).toHaveAttribute("data-gain", "1.000");
-  await expect(basso).toHaveAttribute("data-gain", "0.080");
+  await expect(tenori).toHaveAttribute("data-gain", "0.931");
+  await expect(basso).toHaveAttribute("data-gain", "0.149");
   const volumes = await page.evaluate(() => [...document.querySelectorAll("audio")].map((a) => a.volume));
   expect(volumes).toEqual([1, 1]);
 
