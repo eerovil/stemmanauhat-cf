@@ -48,6 +48,30 @@ export function curveAt(curve: ScrollCurve, seconds: number): number {
 }
 
 /**
+ * The time at which the view shows `x`, found by walking the curve from `near`
+ * (where playback is now) toward `x`. It stops at a repeat's jump, so dragging
+ * moves through the music being played instead of leaping to another pass.
+ */
+export function timeAtX(curve: ScrollCurve, x: number, near: number): number {
+  const { xs, step } = curve;
+  const last = xs.length - 1;
+  let i = Math.min(last, Math.max(0, Math.round(near / step)));
+  const jump = (a: number, b: number) => xs[b]! < xs[a]!;
+  if (x >= xs[i]!) {
+    while (i < last && !jump(i, i + 1) && xs[i + 1]! <= x) i++;
+    if (i < last && !jump(i, i + 1) && xs[i + 1]! > xs[i]!) {
+      return (i + (x - xs[i]!) / (xs[i + 1]! - xs[i]!)) * step;
+    }
+  } else {
+    while (i > 0 && !jump(i - 1, i) && xs[i - 1]! >= x) i--;
+    if (i > 0 && !jump(i - 1, i) && xs[i]! > xs[i - 1]!) {
+      return (i - 1 + (x - xs[i - 1]!) / (xs[i]! - xs[i - 1]!)) * step;
+    }
+  }
+  return i * step;
+}
+
+/**
  * A clock that moves every frame. Browsers update an audio element's time in
  * coarse steps (a few times a second on some), which makes a scroll read from it
  * stutter. This runs on the frame clock and is pulled gently toward the audio,

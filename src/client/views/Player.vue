@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { getJson, Refused, remembered, type Me, type Song } from "../api";
 import { DEFAULT_OTHERS, Mixer } from "../player/mixer";
 import type { Score } from "../player/score";
-import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, type ScrollCurve } from "../player/scroll";
+import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, timeAtX, type ScrollCurve } from "../player/scroll";
 import { loopRange, loopTarget, nearest, parseTiming, positionAt, startsOf, type Timing } from "../player/timing";
 import RefusedView from "./Refused.vue";
 
@@ -121,7 +121,7 @@ function onResize() {
 function tick() {
   frame = requestAnimationFrame(tick);
   if (!mixer || !timing || !score) return;
-  const t = smoothClock.read(mixer.time(), mixer.playing, rate.value, performance.now());
+  const t = drag?.moved ? drag.t : smoothClock.read(mixer.time(), mixer.playing, rate.value, performance.now());
   const target = mixer.playing ? loopTarget(loopWindow, t) : null;
   if (target !== null) mixer.seek(target);
   now.value = t;
@@ -220,6 +220,47 @@ function verticalOffset(boxHeight: number): number {
   return Math.min(room, Math.max(0, centre - boxHeight / 2));
 }
 
+/**
+ * In the one-line view, dragging the score sideways moves through the song like
+ * the position slider: left is forward. A tap without moving is still a tap on a bar.
+ */
+interface Drag { pointer: number; startX: number; startT: number; t: number; moved: boolean; lastSeek: number }
+let drag: Drag | null = null;
+let dragJustEnded = false;
+const DRAG_THRESHOLD = 8;
+
+function onPointerDown(event: PointerEvent) {
+  if (!singleLine.value || !mixer || !curve) return;
+  const t = mixer.time();
+  drag = { pointer: event.pointerId, startX: event.clientX, startT: t, t, moved: false, lastSeek: 0 };
+}
+
+function onPointerMove(event: PointerEvent) {
+  if (!drag || event.pointerId !== drag.pointer || !curve || !mixer) return;
+  const dx = event.clientX - drag.startX;
+  if (!drag.moved && Math.abs(dx) < DRAG_THRESHOLD) return;
+  if (!drag.moved) {
+    drag.moved = true;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+  drag.t = Math.min(duration.value, timeAtX(curve, curveAt(curve, drag.startT) - dx, drag.startT));
+  // Seek the sound along, but not on every pointer event.
+  if (event.timeStamp - drag.lastSeek > 80) {
+    drag.lastSeek = event.timeStamp;
+    mixer.seek(drag.t);
+  }
+}
+
+function onPointerUp(event: PointerEvent) {
+  if (!drag || event.pointerId !== drag.pointer) return;
+  if (drag.moved && mixer) {
+    mixer.seek(drag.t);
+    setLoopWindow();
+    dragJustEnded = true;
+  }
+  drag = null;
+}
+
 function toggleSingleLine() {
   singleLine.value = !singleLine.value;
   remembered.setSingleLine(singleLine.value);
@@ -286,6 +327,7 @@ function toggleLoop() {
 }
 
 function onScoreClick(event: MouseEvent) {
+  if (dragJustEnded) { dragJustEnded = false; return; }
   if (!score || !timing || !mixer || !scoreBox.value) return;
   const box = scoreBox.value.getBoundingClientRect();
   const bar = score.barAt(event.clientX - box.left, event.clientY - box.top);
@@ -338,7 +380,9 @@ const loopHint = computed(() => ({
     <p v-else-if="failure" class="error page">Kappaleen lataus epäonnistui: {{ failure }}</p>
 
     <template v-else-if="song">
-      <div ref="scrollBox" class="score-scroll" :class="{ 'single-line': singleLine }" data-testid="score-scroll">
+      <div ref="scrollBox" class="score-scroll" :class="{ 'single-line': singleLine }" data-testid="score-scroll"
+        @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp"
+        @pointercancel="onPointerUp">
         <div class="score-wrap">
           <div ref="scoreBox" class="score" data-testid="score" @click="onScoreClick"></div>
           <div ref="cursor" class="cursor" data-testid="cursor" aria-hidden="true"></div>

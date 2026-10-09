@@ -72,6 +72,24 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await page.getByRole("button", { name: "Tauko" }).click();
   expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:single-line"))).toBe("1");
 
+  // Dragging the line sideways moves through the song: left is forward, right is back.
+  const audioTime = () => page.evaluate(() => document.querySelector("audio")!.currentTime);
+  await page.getByRole("button", { name: "5 sekuntia taaksepäin" }).click();
+  const line = (await scroller.boundingBox())!;
+  const drag = async (from: number, by: number) => {
+    const y = line.y + line.height / 2;
+    await page.mouse.move(line.x + from, y);
+    await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(line.x + from + (by * i) / 8, y);
+    await page.mouse.up();
+  };
+  const start = await audioTime();
+  await drag(250, -120);
+  const forward = await audioTime();
+  expect(forward).toBeGreaterThan(start + 0.5);
+  await drag(100, 60);
+  expect(await audioTime()).toBeLessThan(forward - 0.2);
+
   // The part and the song are remembered for next time.
   await page.goto("/c/jm");
   await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();

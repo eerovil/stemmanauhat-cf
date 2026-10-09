@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCurve, curveAt, SmoothClock } from "../../src/client/player/scroll";
+import { buildCurve, curveAt, SmoothClock, timeAtX } from "../../src/client/player/scroll";
 
 describe("scroll curve", () => {
   it("keeps a steady scroll steady", () => {
@@ -35,5 +35,21 @@ describe("SmoothClock", () => {
     expect(nudged).toBeLessThan(1.25);
     // ...a seek moves it at once.
     expect(clock.read(30, true, 1, 300)).toBe(30);
+  });
+});
+
+describe("timeAtX", () => {
+  it("finds the time a position is shown, both ways", () => {
+    const c = buildCurve(10, (t) => t * 100, 300);
+    expect(timeAtX(c, 700, 5)).toBeCloseTo(7, 2);
+    expect(timeAtX(c, 250, 5)).toBeCloseTo(2.5, 2);
+    expect(timeAtX(c, 5000, 5)).toBeCloseTo(10, 2);
+    expect(timeAtX(c, -50, 5)).toBe(0);
+  });
+  it("stays in the pass being played when a repeat comes back over the same place", () => {
+    const c = buildCurve(10, (t) => (t < 5 ? t * 100 : (t - 5) * 100), 200);
+    // The second pass (after 5 s) shows the same positions again.
+    expect(timeAtX(c, 300, 7)).toBeCloseTo(8, 1);
+    expect(timeAtX(c, 300, 2)).toBeCloseTo(3, 1);
   });
 });

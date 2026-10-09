@@ -63,7 +63,7 @@ footer { margin-top: 1.5rem; }
 .loop-hint { margin: 0.2rem 0 0; }
 .score-wrap { position: relative; background: #fff; margin: 0 auto; max-width: 70rem; }
 /* One line, scrolled sideways under the playhead like the videos. */
-.score-scroll.single-line { overflow: hidden; background: #fff; }
+.score-scroll.single-line { overflow: hidden; background: #fff; touch-action: none; user-select: none; cursor: grab; }
 /* The one-line view fills the screen between the title and the controls and never scrolls the page. */
 .player.one-line { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; }
 .player.one-line .score-scroll { flex: 1; min-height: 0; }
