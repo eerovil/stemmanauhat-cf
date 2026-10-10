@@ -92,9 +92,12 @@ export class Score {
    */
   barLengths = new Map<number, number>();
 
-  /** The singer's own zoom, times the size that suits the screen. */
+  /** The singer's own note size; OSMD's zoom is this times `baseZoom`. */
   zoom = 1;
-  /** The size the last layout used for this screen width; OSMD's zoom is this times `zoom`. */
+  /**
+   * The note size at 100 %: smaller on a phone. Chosen by the screen's shorter
+   * side, so it stays the same when a phone turns.
+   */
   baseZoom = 1;
   /** The whole score on one line that scrolls sideways, as in the videos. */
   singleLine = false;
@@ -137,7 +140,7 @@ export class Score {
     this.stretch = 1;
     this.renderedZoom = this.zoom;
     this.osmd.setOptions({ renderSingleHorizontalStaffline: this.singleLine });
-    this.baseZoom = window.innerWidth < 600 ? 0.6 : 0.8;
+    this.baseZoom = Math.min(window.innerWidth, window.innerHeight) < 600 ? 0.9 : 1.2;
     this.osmd.Zoom = this.baseZoom * this.zoom;
     this.osmd.render();
     // OSMD may reuse the SVG element: drop any stretch a zoom left on it.

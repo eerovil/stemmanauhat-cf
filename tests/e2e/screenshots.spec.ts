@@ -27,6 +27,13 @@ test("player on a phone: first visit, playing, settings, own staff", async ({ pa
   await page.locator(".backdrop").click({ position: { x: 100, y: 100 } });
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${dir}/player-own-staff-phone.png` });
+  // Turned sideways in "Kaikki": the notes stay the size they were upright.
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await page.getByRole("group", { name: "Viivastot" }).getByRole("button", { name: "Kaikki" }).click();
+  await page.locator(".backdrop").click({ position: { x: 100, y: 100 } });
+  await page.setViewportSize({ width: 839, height: 412 });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${dir}/player-sideways-phone.png` });
 });
 
 test("player on a desktop, entered by the old link", async ({ browser }) => {

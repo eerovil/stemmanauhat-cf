@@ -80,9 +80,10 @@ export type SongOrder = "name" | "date";
 
 export type MixMode = "focus" | "equal" | "minus" | "solo";
 
-/** What this browser remembers about one song: the singer's part and tempo there. */
+/** What this browser remembers about one song: the singer's part there. */
 export interface SongMemory {
   part?: string;
+  /** The tempo this song was left at before tempo carried between songs (eerovil/stemmanauhat-cf#24). */
   rate?: number;
 }
 
@@ -105,6 +106,13 @@ export interface CarriedSettings {
   mode?: MixMode;
   others?: number;
   staves?: "all" | "own";
+  /** The tempo, 0.5–1.5 of the written one. */
+  rate?: number;
+}
+
+/** A tempo the player accepts: 0.5–1.5 of the written one. */
+export function validRate(value: unknown): number | undefined {
+  return typeof value === "number" && value >= 0.5 && value <= 1.5 ? value : undefined;
 }
 
 export function carriedSettings(): CarriedSettings {
