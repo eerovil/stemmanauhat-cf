@@ -1,6 +1,6 @@
 // Fresh local D1 and R2 for the browser tests: the migrations, made-up
 // members, a passphrase link for jm, the synthetic two-part song uploaded for jm
-// and for the public demo, and a stand-in for the piano (spessasynth's own tiny
+// and for the public demo, a synthetic song with one crowded bar for jm, and a stand-in for the piano (spessasynth's own tiny
 // saw-wave sound bank; the real piano is MuseScore's and lives only in R2).
 // Run from the repo root.
 import { execFileSync } from "node:child_process";
@@ -10,7 +10,6 @@ import { BasicSoundBank } from "spessasynth_core";
 
 export const PASSPHRASE = "testilinkki-jm";
 const VERSION = "20261009T120000Z";
-const FIXTURE = "tests/fixtures/two-part";
 const FILES = ["score.musicxml", "timing.json", "manifest.json", "score.mid"];
 const PARTS = JSON.stringify([
   { name: "Tenori", file: "parts/1-Tenori.mp3" },
@@ -30,24 +29,25 @@ wrangler("d1", "migrations", "apply", "stemmanauhat", "--local");
 
 const salt = Buffer.from("fixed-test-salt!");
 const songs = [
-  ["jm", "kokeilu", "Kokeilulaulu"],
-  ["public", "esittely", "Esittelylaulu"],
+  ["jm", "kokeilu", "Kokeilulaulu", "tests/fixtures/two-part", 8.0],
+  ["public", "esittely", "Esittelylaulu", "tests/fixtures/two-part", 8.0],
+  ["jm", "epatasainen", "Epätasainen", "tests/fixtures/uneven", 12.0],
 ];
 const sql = [
   "INSERT INTO members (choir, email, added_at) VALUES ('jm', 'laulaja@example.com', '2026-10-09T00:00:00Z');",
   "INSERT INTO members (choir, email, added_at) VALUES ('naiskuoro', 'laulaja2@example.com', '2026-10-09T00:00:00Z');",
   "INSERT INTO admins (email) VALUES ('yllapito@example.com');",
   `INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES ('jm', '${salt.toString("base64url")}', '${await hash(PASSPHRASE, salt)}', 10000, 1);`,
-  ...songs.map(([choir, slug, title]) =>
-    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${VERSION}/', '${PARTS}', 8.0, '2026-10-09T12:00:00Z');`),
+  ...songs.map(([choir, slug, title, , duration]) =>
+    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${VERSION}/', '${PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z');`),
 ].join("\n");
 writeFileSync("tests/fixtures/seed.generated.sql", sql + "\n");
 wrangler("d1", "execute", "stemmanauhat", "--local", "--file", "tests/fixtures/seed.generated.sql");
 
-for (const [choir, slug] of songs) {
+for (const [choir, slug, , fixture] of songs) {
   for (const file of FILES) {
     wrangler("r2", "object", "put", `stemmanauhat/songs/${choir}/${slug}/${VERSION}/${file}`,
-      "--local", "--file", `${FIXTURE}/${file}`);
+      "--local", "--file", `${fixture}/${file}`);
   }
 }
 writeFileSync(".wrangler/test-piano.sf2", Buffer.from(BasicSoundBank.getSampleSoundBankFile()));

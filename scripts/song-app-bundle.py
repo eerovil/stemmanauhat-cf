@@ -6,7 +6,8 @@
 #
 # Each <out-dir>/<slug>/ gets what song-app's publish uploads, plus score.mid:
 # manifest.json, score.musicxml, score.mid, timing.json and parts/<n>-<name>.mp3.
-# The tempo for a score without one is the recording's, as in song-app's publish.
+# The tempo for a score without one is the recording's, as in song-app's publish,
+# and so are the tempo changes set for the recording.
 # Remove once song-app's publish uploads score.mid itself.
 import json
 import os
@@ -36,7 +37,9 @@ for slug in slugs:
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(os.path.join(out, "parts"))
     with tempfile.TemporaryDirectory() as tmp:
-        bundle = publish.build_bundle(cleaned, tmp, initial_bpm=bpm, log=print)
+        # The tempo changes the video was recorded with (song-app #387), so the site plays the same.
+        tempo_changes = song.data.get("record", {}).get("tempo_changes") or None
+        bundle = publish.build_bundle(cleaned, tmp, initial_bpm=bpm, tempo_changes=tempo_changes, log=print)
         shutil.copy(bundle.musicxml, os.path.join(out, "score.musicxml"))
         # build_bundle exports the MIDI next to the score; publish does not upload it yet.
         shutil.copy(os.path.join(tmp, "score.mid"), os.path.join(out, "score.mid"))

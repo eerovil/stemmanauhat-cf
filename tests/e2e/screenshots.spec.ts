@@ -121,3 +121,17 @@ test.describe("installed app", () => {
     await context.setOffline(false);
   });
 });
+
+test("one-line view with a crowded bar: its neighbours widened", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 500 } });
+  const page = await context.newPage();
+  await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  await page.getByRole("link", { name: "Epätasainen" }).click();
+  await choosePartIfAsked(page, "Tenori");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await expect(page.locator(".player.one-line")).toHaveCount(1);
+  await expect(page.getByTestId("score")).toHaveAttribute("data-step", /\d/);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${dir}/one-line-crowded-bar-desktop.png` });
+  await context.close();
+});
