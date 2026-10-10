@@ -2,6 +2,7 @@ import { decideAccess, isAdmin, loadFacts, type Access } from "./access";
 import type { Env } from "./env";
 import { serveObject, safeSongPath } from "./files";
 import { AUTHORIZE_URL, TOKEN_URL, authorizeUrl, exchangeCode, normalizeEmail, readEmail } from "./google";
+import { publicOrigin } from "./origin";
 import { newPassphraseRecord, passphraseMatches } from "./passphrase";
 import { clearSessionCookie, readSession, sessionCookie, type Session } from "./session";
 import { base64UrlEncode, cookieValue, readValue, signValue } from "./signing";
@@ -147,7 +148,7 @@ async function login(ctx: Ctx): Promise<Response> {
   const next = safeNext(ctx.url.searchParams.get("next"));
   const cookie = await signValue(ctx.secret, { state, nonce, next, exp: ctx.now + OAUTH_SECONDS });
   const location = authorizeUrl(env.GOOGLE_AUTH_URL ?? AUTHORIZE_URL, env.GOOGLE_CLIENT_ID,
-    `${ctx.url.origin}/auth/callback`, state, nonce);
+    `${publicOrigin(ctx.url, ctx.request.headers)}/auth/callback`, state, nonce);
   return redirect(location, {
     "Set-Cookie": `${OAUTH_COOKIE}=${cookie}; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=${OAUTH_SECONDS}`,
   });
@@ -165,7 +166,7 @@ async function callback(ctx: Ctx): Promise<Response> {
     return redirect(signinUrl("/", "failed"));
   }
   const idToken = await exchangeCode(env.GOOGLE_TOKEN_URL ?? TOKEN_URL, env.GOOGLE_CLIENT_ID,
-    env.GOOGLE_CLIENT_SECRET, `${url.origin}/auth/callback`, code);
+    env.GOOGLE_CLIENT_SECRET, `${publicOrigin(url, ctx.request.headers)}/auth/callback`, code);
   const email = idToken && readEmail(idToken, env.GOOGLE_CLIENT_ID, pending.nonce, ctx.now);
   if (!email) return redirect(signinUrl(safeNext(pending.next ?? "/"), "failed"));
 
