@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { choosePartIfAsked } from "./helpers";
 
 /**
  * iPhone/Safari's rule for audio, reproduced in Chromium (the suite's browser
@@ -24,7 +25,7 @@ test("the sound is started from the tap itself, as iPhones require", async ({ pa
   });
   await page.goto("/c/public");
   await page.getByRole("link", { name: "Esittelylaulu" }).click();
-  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await choosePartIfAsked(page, "Tenori");
   await page.getByRole("button", { name: "Soita" }).click();
   await expect(page.getByRole("button", { name: "Tauko" })).toHaveAttribute("data-sounding", "1", { timeout: 10_000 });
   expect(await page.evaluate(() => (window as unknown as { refused: string[] }).refused)).toEqual([]);

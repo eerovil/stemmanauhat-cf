@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import UiSwitch from "./components/UiSwitch.vue";
 import Admin from "./views/Admin.vue";
 import Home from "./views/Home.vue";
 import Player from "./views/Player.vue";
@@ -11,7 +10,6 @@ const parts = location.pathname.split("/").filter(Boolean).map(decodeURIComponen
 </script>
 
 <template>
-  <UiSwitch />
   <SignIn v-if="parts[0] === 'signin'" />
   <Admin v-else-if="parts[0] === 'admin'" />
   <Player v-else-if="parts[0] === 'c' && parts.length >= 3" :choir="parts[1]!" :slug="parts[2]!" />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loopRange, loopTarget, parseTiming, positionAt, startsOf, type Timing } from "../../src/client/player/timing";
+import { nearest, parseTiming, positionAt, startsOf, type Timing } from "../../src/client/player/timing";
 
 // Bar 0 at 1 s a beat, then bar 1 played twice (a repeat), then bar 2.
 const timing: Timing = parseTiming({
@@ -28,42 +28,18 @@ describe("positionAt", () => {
   });
 });
 
-describe("repeats and loops", () => {
+describe("repeats", () => {
   it("finds each play-through of a bar", () => {
     // Bar 1 is repeated straight after itself: its beat going back marks the second pass.
     expect(startsOf(timing, 1)).toEqual([2, 4]);
     expect(startsOf(timing, 2)).toEqual([6]);
   });
-  it("loops from a bar to the end of another", () => {
-    expect(loopRange(timing, 0, 1, 0)).toEqual([0, 4]);
-    expect(loopRange(timing, 1, 1, 4.5)).toEqual([4, 6]);
-    expect(loopRange(timing, 2, 2, 9)).toEqual([6, 10]);
-    expect(loopRange(timing, 2, 0, 9)).toBeNull();
+  it("jumps to the play-through of a bar nearest the current time", () => {
+    expect(nearest(startsOf(timing, 1), 0)).toBe(2);
+    expect(nearest(startsOf(timing, 1), 4.5)).toBe(4);
   });
   it("refuses a file that is not version 1", () => {
     expect(() => parseTiming({ version: 2, points: [] })).toThrow();
     expect(() => parseTiming({ version: 1, points: [[0, 0]] })).toThrow();
-  });
-});
-
-describe("a loop whose start bar repeats", () => {
-  // Bars 0-5 at 2 s each (0-12 s), then a D.C. plays them all again (12-24 s).
-  const points: [number, number, number][] = [];
-  for (let pass = 0; pass < 2; pass++) {
-    for (let bar = 0; bar < 6; bar++) {
-      const t = pass * 12 + bar * 2;
-      points.push([t, bar, 0], [t + 1, bar, 1], [t + 2, bar, 2]);
-    }
-  }
-  const dc = parseTiming({ version: 1, measures: 6, duration: 24, points });
-
-  it("keeps the range it was set with, and wraps at its end", () => {
-    const range = loopRange(dc, 0, 5, 0);
-    expect(range).toEqual([0, 12]);
-    // Recomputing near the end would pick the second pass, which never wraps.
-    expect(loopRange(dc, 0, 5, 11.9)).toEqual([12, 24]);
-    expect(loopTarget(range, 11)).toBeNull();
-    expect(loopTarget(range, 11.99)).toBe(0);
-    expect(loopTarget(null, 11.99)).toBeNull();
   });
 });

@@ -69,32 +69,14 @@ export const remembered = {
     return value >= 0.5 && value <= 2 ? value : 1;
   },
   setZoom: (zoom: number) => localStorage.setItem("stemmanauhat:zoom", String(zoom)),
-  /** One scrolling line (true) or page lines (false), on this device. */
-  singleLine: () => localStorage.getItem("stemmanauhat:single-line") === "1",
-  setSingleLine: (on: boolean) => localStorage.setItem("stemmanauhat:single-line", on ? "1" : "0"),
-  hidden: (choir: string): string[] => {
-    try {
-      const value = JSON.parse(localStorage.getItem(`stemmanauhat:${choir}:hidden`) ?? "[]");
-      return Array.isArray(value) ? value.filter((n) => typeof n === "string") : [];
-    } catch {
-      return [];
-    }
-  },
-  setHidden: (choir: string, names: string[]) =>
-    localStorage.setItem(`stemmanauhat:${choir}:hidden`, JSON.stringify(names)),
 };
 
 export type MixMode = "focus" | "equal" | "minus" | "solo";
 
-/** What this browser remembers about one song: the singer's part, mix, tempo, staves and last loop. */
+/** What this browser remembers about one song: the singer's part and tempo there. */
 export interface SongMemory {
   part?: string;
-  mode?: MixMode;
-  others?: number;
   rate?: number;
-  hidden?: string[];
-  staves?: "all" | "own";
-  loop?: [number, number] | null;
 }
 
 export function songMemory(choir: string, slug: string): SongMemory {

@@ -13,6 +13,11 @@ describe("mixLevels", () => {
     for (const others of [0.6, 0.8, 1]) expect(sum(mixLevels(8, 0, others))).toBeCloseTo(budget, 6);
     expect(new Set(mixLevels(4, 0, 1).map((x) => x.toFixed(6))).size).toBe(1);
   });
+  it("mutes your part for 'Ilman omaa' and keeps the mix no louder than the default", () => {
+    const levels = mixLevels(4, 1, 1, false);
+    expect(levels[1]).toBe(0);
+    expect(sum(levels)).toBeCloseTo(sum(mixLevels(4, 1, DEFAULT_OTHERS)), 6);
+  });
   it("plays your part alone at full volume", () => {
     expect(mixLevels(4, 1, 0)).toEqual([0, 1, 0, 0]);
   });

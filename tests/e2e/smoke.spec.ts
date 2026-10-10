@@ -1,78 +1,75 @@
 import { expect, test } from "@playwright/test";
-import { fetchIn, PASSPHRASE, playAndSeeCursorMove, signInAs } from "./helpers";
+import { choosePartIfAsked, fetchIn, gains, PASSPHRASE, playAndSeeCursorMove, signInAs } from "./helpers";
 
 test("a member signs in with Google, plays a song, and the cursor follows", async ({ page }) => {
   await signInAs(page, "/c/jm", "laulaja@example.com");
   await expect(page).toHaveURL(/\/c\/jm$/);
   await expect(page.getByRole("heading", { name: "Joensuun Mieslaulajat" })).toBeVisible();
-
   await page.getByRole("link", { name: "Kokeilulaulu" }).click();
-  await expect(page.getByRole("heading", { name: "Kokeilulaulu" })).toBeVisible();
 
-  // Your part loud, the others a bit above the videos' level; switching part swaps them.
-  const tenori = page.getByRole("button", { name: "Tenori" });
-  const basso = page.getByRole("button", { name: "Basso" });
-  await expect(tenori).toHaveAttribute("data-gain", "1.000");
-  await expect(basso).toHaveAttribute("data-gain", "0.160");
-  await basso.click();
-  await expect(basso).toHaveAttribute("data-gain", "1.000");
-  await expect(tenori).toHaveAttribute("data-gain", "0.160");
-  await page.getByRole("button", { name: "Vain oma" }).click();
-  await expect(tenori).toHaveAttribute("data-gain", "0.000");
+  // The first time, the singer is asked for their part rather than given the first one.
+  const dialog = page.getByRole("dialog", { name: "Valitse oma stemma" });
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(10, 10);
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Tenori", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator(".info-title")).toHaveText("Kokeilulaulu");
+  await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toHaveText("Tenori");
+
+  // A one-time hint explains tapping and dragging the score.
+  await page.getByRole("button", { name: "Selvä" }).click();
+
+  // Your part loud and the others quieter; the four ways of listening.
+  await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.160");
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  const listen = page.getByRole("group", { name: "Miten kuuntelet" });
+  await listen.getByRole("button", { name: "Ilman omaa" }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "0.000 1.000");
+  await listen.getByRole("button", { name: "Tasan" }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "0.580 0.580");
+  await listen.getByRole("button", { name: "Vain oma" }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.000");
+  await listen.getByRole("button", { name: "Oma esillä" }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.160");
+
+  // A tap outside the panel (here on the score) closes it, without starting playback.
+  await page.locator(".backdrop").click({ position: { x: 100, y: 100 } });
+  await expect(page.locator(".dock-sheet")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
+
+  // Changing part goes through the same picker.
+  await page.getByRole("button", { name: "Vaihda oma stemma" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Basso", exact: true }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "0.160 1.000");
+  await page.getByRole("button", { name: "Vaihda oma stemma" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Tenori", exact: true }).click();
 
   await playAndSeeCursorMove(page);
 
-  // Once playing, the gains are the ones the synth's channels carry, and
-  // switching part still gives your part full volume and the others the default.
-  await page.getByRole("button", { name: "Vain oma" }).click();
-  await tenori.click();
-  await expect(tenori).toHaveAttribute("data-gain", "1.000");
-  await expect(basso).toHaveAttribute("data-gain", "0.160");
+  // The bar number, not seconds, and a jump to any bar by its number.
+  await page.getByRole("button", { name: "Tauko" }).click();
+  await page.getByRole("button", { name: "Siirry tahtiin" }).click();
+  await page.getByLabel("Tahdin numero").fill("3");
+  await page.getByRole("button", { name: "Mene" }).click();
+  await expect(page.locator(".info-meta")).toContainText("Tahti 3 / 4");
 
-  // Hiding the other part's staff leaves only yours; yours cannot be hidden.
-  const staffNotes = () => page.getByTestId("score").locator("g.vf-stavenote").count();
-  const before = await staffNotes();
-  await page.getByRole("button", { name: "Viivastot" }).click();
-  const staves = page.getByRole("group", { name: "Näytettävät viivastot" });
-  await expect(staves.getByLabel("Tenori")).toBeDisabled();
-  await staves.getByLabel("Basso").uncheck();
-  await expect.poll(staffNotes).toBe(before / 2);
-  // The cursor band still sits over a note of the staff left showing.
-  const band = await page.getByTestId("cursor").boundingBox();
-  const note = await page.getByTestId("score").locator("g.vf-stavenote").first().boundingBox();
-  expect(band!.y).toBeLessThanOrEqual(note!.y + note!.height);
-  expect(band!.y + band!.height).toBeGreaterThanOrEqual(note!.y);
-  await staves.getByLabel("Basso").check();
-  await expect.poll(staffNotes).toBe(before);
-
-  // Zoom makes the score bigger, and the size is remembered.
-  const height = async () => (await page.getByTestId("score").locator("svg").first().boundingBox())!.height;
-  const small = await height();
-  await page.getByRole("button", { name: "Suurenna nuottia" }).click();
-  await expect.poll(height).toBeGreaterThan(small);
-  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:zoom"))).toBe("1.15");
-
-  // The one-line view puts the whole score on one line that scrolls with the music.
-  await page.getByRole("button", { name: "Vieritys" }).click();
+  // "Kaikki": one line sliding sideways; the page never scrolls; your note stays in view.
   const scroller = page.getByTestId("score-scroll");
-  const lineWidth = () => page.getByTestId("score").evaluate((el) => el.getBoundingClientRect().width);
-  await expect.poll(async () => (await lineWidth()) > (await scroller.evaluate((el) => el.clientWidth))).toBe(true);
   await page.getByRole("button", { name: "Soita" }).click();
   const shift = () => scroller.evaluate((el) => (el.firstElementChild as HTMLElement).getBoundingClientRect().left
     - el.getBoundingClientRect().left);
   await expect.poll(shift, { timeout: 10_000 }).toBeLessThan(0);
-  // It never scrolls the page up and down, and your part's playing note is in view.
   expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= innerHeight)).toBe(true);
   const view = (await scroller.boundingBox())!;
   const mine = (await page.getByTestId("score").locator(".lit-focus").first().boundingBox())!;
   expect(mine.y).toBeGreaterThanOrEqual(view.y);
   expect(mine.y + mine.height).toBeLessThanOrEqual(view.y + view.height);
   await page.getByRole("button", { name: "Tauko" }).click();
-  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:single-line"))).toBe("1");
 
   // Dragging the line sideways moves through the song: left is forward, right is back.
-  const audioTime = async () => Number(await page.locator("input.seek").inputValue());
-  await page.getByRole("button", { name: "5 sekuntia taaksepäin" }).click();
+  const position = async () => Number(await page.locator("input.progress").inputValue());
+  await page.locator("input.progress").fill("1");
   const line = (await scroller.boundingBox())!;
   const drag = async (from: number, by: number) => {
     const y = line.y + line.height / 2;
@@ -81,20 +78,56 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
     for (let i = 1; i <= 8; i++) await page.mouse.move(line.x + from + (by * i) / 8, y);
     await page.mouse.up();
   };
-  const start = await audioTime();
+  const start = await position();
   await drag(250, -120);
-  const forward = await audioTime();
+  const forward = await position();
   expect(forward).toBeGreaterThan(start + 0.5);
   await drag(100, 60);
-  expect(await audioTime()).toBeLessThan(forward - 0.2);
+  expect(await position()).toBeLessThan(forward - 0.2);
 
   // A tap on the score plays, and another pauses.
-  await page.getByTestId("score-scroll").click();
+  await scroller.click();
   await expect(page.getByRole("button", { name: "Tauko" })).toBeVisible();
-  await page.getByTestId("score-scroll").click();
+  await scroller.click();
   await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
 
-  // The part and the song are remembered for next time.
+  // "Oma": your staff alone, in page lines, the page no longer a single line.
+  const staffNotes = () => page.getByTestId("score").locator("g.vf-stavenote").count();
+  const before = await staffNotes();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  const staves = page.getByRole("group", { name: "Viivastot" });
+  await staves.getByRole("button", { name: "Oma" }).click();
+  await expect.poll(staffNotes).toBe(before / 2);
+  await expect(page.locator(".player.one-line")).toHaveCount(0);
+  await staves.getByRole("button", { name: "Kaikki" }).click();
+  await expect.poll(staffNotes).toBe(before);
+  await expect(page.locator(".player.one-line")).toHaveCount(1);
+
+  // Zoom makes the score bigger, and the size is remembered.
+  const height = async () => (await page.getByTestId("score").locator("svg").first().boundingBox())!.height;
+  const small = await height();
+  await page.getByRole("button", { name: "Suurenna nuottia" }).click();
+  await expect.poll(height).toBeGreaterThan(small);
+  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:zoom"))).toBe("1.15");
+
+  // Tempo belongs to the song; the listening choice follows the singer to the next song.
+  await page.getByRole("button", { name: "Nopeammin" }).click();
+  await page.getByRole("group", { name: "Miten kuuntelet" }).getByRole("button", { name: "Ilman omaa" }).click();
+  await page.reload();
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("105 %");
+  await expect(page.getByRole("group", { name: "Miten kuuntelet" }).getByRole("button", { name: "Ilman omaa" }))
+    .toHaveAttribute("aria-pressed", "true");
+  await page.goto("/c/public/esittely");
+  await choosePartIfAsked(page, "Tenori");
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("100 %");
+  await expect(page.getByRole("group", { name: "Miten kuuntelet" }).getByRole("button", { name: "Ilman omaa" }))
+    .toHaveAttribute("aria-pressed", "true");
+
+  // The song is remembered on the choir's list.
   await page.goto("/c/jm");
   await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();
 });
@@ -103,6 +136,7 @@ test("the old passphrase link gets in without a Google account", async ({ page }
   await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
   await expect(page).toHaveURL(/\/c\/jm$/);
   await page.getByRole("link", { name: "Kokeilulaulu" }).click();
+  await choosePartIfAsked(page, "Tenori");
   await playAndSeeCursorMove(page);
 });
 

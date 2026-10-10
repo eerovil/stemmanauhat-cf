@@ -21,7 +21,7 @@ export async function playAndSeeCursorMove(page: Page) {
 
   await page.getByRole("button", { name: "Soita" }).click();
   await expect(page.getByRole("button", { name: "Tauko" })).toBeVisible();
-  await expect(page.getByTestId("time")).not.toHaveText(/^0:00 /, { timeout: 10_000 });
+  await expect(page.getByTestId("time")).not.toHaveText("0:00", { timeout: 10_000 });
   await expect(cursor).not.toHaveAttribute("data-measure", "0", { timeout: 10_000 });
   const after = await cursor.evaluate((el) => (el as HTMLElement).style.transform);
   expect(after).not.toBe(before);
@@ -52,4 +52,16 @@ export async function fetchIn(page: Page, url: string, headers: Record<string, s
       type: r.headers.get("Content-Type"),
     };
   }, [url, headers] as const);
+}
+
+/** Answers the first-time "Mikä on sinun stemmasi?" question, if it is asked. */
+export async function choosePartIfAsked(page: Page, part: string) {
+  const dialog = page.getByRole("dialog", { name: "Valitse oma stemma" });
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  if (await dialog.count()) await dialog.getByRole("button", { name: part, exact: true }).click();
+}
+
+/** The gain each part plays at, in part order, as the player reports them. */
+export function gains(page: Page) {
+  return page.locator(".dock");
 }

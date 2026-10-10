@@ -20,11 +20,16 @@ Live address (once set up): https://stemmanauhat.eerovil.workers.dev
   passphrases at `/admin`.
 - **Songs:** song-app writes each version to R2 under `songs/<choir>/<slug>/<version>/` and points
   a D1 `songs` row at it. The format is in song-app's `docs/stemmanauhat-site.md`.
-- **Player:** the score is drawn by OpenSheetMusicDisplay, with the videos' blue for the notes being
-  sung and their translucent cursor band, as page lines or one scrolling line. `score.mid` is played
-  by spessasynth (an AudioWorklet synth) with MuseScore's grand piano: each part's MIDI channel has
-  its own gain (yours 1, the others 0.16 by default), then +15 dB and a limiter. Tempo changes the
-  MIDI's speed, not its pitch. `timing.json` (from the same MIDI clock) moves the cursor.
+- **Player:** the score is drawn by OpenSheetMusicDisplay with the videos' blue for the notes being
+  sung and their translucent cursor band. "Kaikki" shows every staff that fits on one line sliding
+  sideways under a fixed cursor (drag it to move); "Oma" shows your own staff alone in page lines.
+  One bottom bar: back, the song with its bar number (tap to jump to a bar), your part (tap to
+  change), play, and Säädöt: how you listen (Oma esillä / Tasan / Ilman omaa / Vain oma), the other
+  parts' level, tempo, score size and staves. Tapping the score plays or pauses. Your part and tempo
+  are remembered per song; how you listen, the staves and the size carry from song to song.
+  `score.mid` is played by spessasynth (an AudioWorklet synth) with MuseScore's grand piano: each
+  part's MIDI channel has its own gain, then +15 dB and a limiter. `timing.json` (from the same
+  MIDI clock) moves the cursor.
 
 ## Running it
 
