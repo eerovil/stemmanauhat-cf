@@ -119,6 +119,17 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await expect(page.getByTestId("cursor")).toHaveAttribute("data-measure", "2");
   await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
 
+  // Zooming in "Oma" never makes the page wider than the screen, not even before the lines re-wrap.
+  // (A phone widens its layout to fit wide content, so measure against the screen itself.)
+  const widest = () => page.evaluate(() => Math.max(innerWidth,
+    document.querySelector(".sheet")!.getBoundingClientRect().width) - visualViewport!.width);
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await page.getByRole("button", { name: "Suurenna nuottia" }).click();
+  expect(await widest()).toBeLessThanOrEqual(0);
+  await page.getByRole("button", { name: "Pienennä nuottia" }).click();
+  expect(await widest()).toBeLessThanOrEqual(0);
+  await page.getByRole("button", { name: "Sulje säädöt" }).click();
+
   // Turned sideways in "Oma" (past the 600 px width where the base size changes), then back to "Kaikki".
   await page.setViewportSize({ width: 839, height: 412 });
   await page.waitForTimeout(1000);
