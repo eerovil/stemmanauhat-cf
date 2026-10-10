@@ -9,7 +9,7 @@ import { MidiPlayer } from "../player/midi";
 import { DEFAULT_OTHERS } from "../player/mix";
 import type { Score } from "../player/score";
 import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, timeAtX, type ScrollCurve } from "../player/scroll";
-import { nearest, parseTiming, positionAt, startsOf, type Timing } from "../player/timing";
+import { barLengths, nearest, parseTiming, positionAt, startsOf, type Timing } from "../player/timing";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string; slug: string }>();
@@ -137,6 +137,7 @@ onMounted(async () => {
     // OpenSheetMusicDisplay is most of the app's size: load it only on a song page.
     const { Score } = await import("../player/score");
     score = new Score(scoreBox.value!);
+    score.barLengths = barLengths(timing);
     score.singleLine = singleLine.value;
     score.zoom = (singleLine.value ? 1 : OWN_ZOOM) * zoom.value;
     if (dock.value) dockObserver.observe(dock.value);
