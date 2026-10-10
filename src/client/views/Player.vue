@@ -7,6 +7,7 @@ import {
 import Icon from "../components/Icon.vue";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
+import { ScoreTiles } from "../player/tiles";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
 import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, timeAtX, type ScrollCurve } from "../player/scroll";
@@ -81,6 +82,8 @@ let curve: ScrollCurve | null = null;
 let curveVersion = -1;
 
 let mixer: MidiPlayer | FilePlayer | null = null;
+/** Firefox on Android slides the one-line view in pieces (player/tiles.ts). */
+let tiles: ScoreTiles | null = null;
 let score: Score | null = null;
 let timing: Timing | null = null;
 let frame = 0;
@@ -156,6 +159,7 @@ onBeforeUnmount(() => {
   dockObserver.disconnect();
   window.removeEventListener("resize", onResize);
   mixer?.destroy();
+  tiles?.destroy();
 });
 
 /** The screen stays on while playing: singers sing along without touching the phone. */
@@ -251,7 +255,13 @@ function scrollTo(t: number) {
     curveVersion = score.version;
   }
   const offset = Math.max(0, curveAt(curve, t) - box.clientWidth * PLAYHEAD);
-  wrap.style.transform = `translate3d(${-offset}px, ${-verticalOffset(box.clientHeight)}px, 0)`;
+  const vertical = verticalOffset(box.clientHeight);
+  wrap.style.transform = `translate3d(${-offset}px, ${-vertical}px, 0)`;
+  if (wantsFilePlayback()) {
+    tiles ??= new ScoreTiles(box);
+    tiles.sync(score.version, scoreBox.value?.querySelector("svg:not(.highlights)") ?? null, wrap);
+    tiles.place(offset, vertical);
+  }
 }
 
 /** The line never scrolls up and down: centred when it fits, else centred on your staff. */
@@ -306,6 +316,7 @@ function setStaffMode(next: StaffMode) {
   carrySettings({ staves: next });
   const wrap = scrollBox.value?.firstElementChild as HTMLElement | null;
   if (wrap) wrap.style.transform = "";
+  tiles?.clear();
   window.scrollTo(0, 0);
   score.singleLine = singleLine.value;
   score.zoom = (singleLine.value ? fitZoom : OWN_ZOOM) * zoom.value;

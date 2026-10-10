@@ -71,6 +71,12 @@ footer { margin-top: 1.5rem; }
 .score-scroll.single-line { overflow: hidden; background: #fff; touch-action: none; user-select: none; cursor: grab; }
 .score-scroll.single-line .score-wrap { max-width: none; width: max-content; margin: 0; will-change: transform; }
 .player:not(.one-line) .score-wrap { margin-top: 0.6rem; }
+/* Firefox on Android: the line as pieces, only those on screen shown (player/tiles.ts).
+   Under the moving line, which keeps the highlights and the marker on top. */
+.score-tiles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.score-tile { position: absolute; left: 0; top: 0; overflow: hidden; display: none; will-change: transform; }
+.score-tile img { position: absolute; top: 0; max-width: none; }
+.score-scroll.single-line .score-wrap { z-index: 1; }
 
 /* ---------- Player: the dock (design A, round 2) ---------- */
 .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: var(--surface);
