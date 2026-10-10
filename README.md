@@ -30,6 +30,11 @@ Live address (once set up): https://stemmanauhat.eerovil.workers.dev
   `score.mid` is played by spessasynth (an AudioWorklet synth) with MuseScore's grand piano: each
   part's MIDI channel has its own gain, then +15 dB and a limiter. `timing.json` (from the same
   MIDI clock) moves the cursor.
+- **App:** the site installs to a phone's home screen ("Lisää aloitusnäytölle" / "Asenna sovellus"):
+  `public/manifest.webmanifest` and the icons drawn from `public/icon.svg` by
+  `scripts/make-pwa-icons.mjs`. `public/sw.js` only shows an offline page when there is no network;
+  it caches the icons and that page, never a song, a page or the API, so access checks and new
+  versions work as before.
 
 ## Running it
 

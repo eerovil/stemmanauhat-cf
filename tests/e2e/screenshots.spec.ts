@@ -98,3 +98,19 @@ test("choir link: the join offer and the admin's link", async ({ page, browser }
     body: JSON.stringify({ choir: "jm", passphrase }),
   }), PASSPHRASE);
 });
+
+test.describe("installed app", () => {
+  test.use({ serviceWorkers: "allow" });
+
+  test("the offline page", async ({ page, context }) => {
+    await page.goto("/c/public");
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
+    await context.setOffline(true);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Ei verkkoyhteyttä" })).toBeVisible();
+    await expect(page.locator("img")).toHaveJSProperty("complete", true);
+    await page.screenshot({ path: `${dir}/offline-phone.png` });
+    await context.setOffline(false);
+  });
+});
