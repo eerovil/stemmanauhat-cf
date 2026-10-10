@@ -5,6 +5,7 @@ import {
   type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
+import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
@@ -79,7 +80,7 @@ const smoothClock = new SmoothClock();
 let curve: ScrollCurve | null = null;
 let curveVersion = -1;
 
-let mixer: MidiPlayer | null = null;
+let mixer: MidiPlayer | FilePlayer | null = null;
 let score: Score | null = null;
 let timing: Timing | null = null;
 let frame = 0;
@@ -122,7 +123,7 @@ onMounted(async () => {
     ]);
     timing = parseTiming(timingJson);
     barCount.value = timing.measures;
-    mixer = await MidiPlayer.create(s.base + "score.mid", s.parts.map((p) => p.name),
+    mixer = await (wantsFilePlayback() ? FilePlayer : MidiPlayer).create(s.base + "score.mid", s.parts.map((p) => p.name),
       (note) => { loadingNote.value = note; });
     mixer.setMaster(myPart.value);
     mixer.onEnded = () => { playing.value = false; };
