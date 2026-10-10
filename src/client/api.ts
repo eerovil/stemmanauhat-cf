@@ -69,7 +69,12 @@ export const remembered = {
     return value >= 0.5 && value <= 2 ? value : 1;
   },
   setZoom: (zoom: number) => localStorage.setItem("stemmanauhat:zoom", String(zoom)),
+  /** How the song lists are sorted on this device: by name or newest first. */
+  order: (): SongOrder => (localStorage.getItem("stemmanauhat:order") === "date" ? "date" : "name"),
+  setOrder: (order: SongOrder) => localStorage.setItem("stemmanauhat:order", order),
 };
+
+export type SongOrder = "name" | "date";
 
 export type MixMode = "focus" | "equal" | "minus" | "solo";
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { getJson, Refused, remembered, type Me, type SongSummary } from "../api";
+import { getJson, Refused, remembered, type Me, type SongOrder, type SongSummary } from "../api";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string }>();
@@ -9,6 +9,11 @@ const choirName = ref("");
 const me = ref<Me | null>(null);
 const refused = ref<number | null>(null);
 const query = ref("");
+const order = ref<SongOrder>(remembered.order());
+function sortBy(value: SongOrder) {
+  order.value = value;
+  remembered.setOrder(value);
+}
 
 onMounted(async () => {
   me.value = await getJson<Me>("/api/me");
@@ -29,8 +34,10 @@ const shown = computed(() => {
   const q = query.value.trim().toLowerCase();
   return [...songs.value]
     .filter((s) => !q || s.title.toLowerCase().includes(q))
-    .sort((a, b) => a.title.localeCompare(b.title, "fi"));
+    .sort((a, b) => (order.value === "date" ? b.published_at.localeCompare(a.published_at) : 0)
+      || a.title.localeCompare(b.title, "fi"));
 });
+const day = (at: string) => new Date(at).toLocaleDateString("fi-FI");
 const last = computed(() => {
   const slug = remembered.last(props.choir);
   return songs.value.find((s) => s.slug === slug) ?? null;
@@ -47,10 +54,15 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
     </header>
     <a v-if="last" class="button primary continue" :href="songUrl(last.slug)">▶ Jatka siitä: {{ last.title }}</a>
     <input v-model="query" class="search" type="search" placeholder="Hae kappaletta" aria-label="Hae kappaletta" />
+    <div class="segmented two order" role="group" aria-label="Järjestys">
+      <button type="button" :class="{ on: order === 'name' }" :aria-pressed="order === 'name'" @click="sortBy('name')">Nimi</button>
+      <button type="button" :class="{ on: order === 'date' }" :aria-pressed="order === 'date'" @click="sortBy('date')">Uusimmat</button>
+    </div>
     <ul class="songs">
       <li v-for="s in shown" :key="s.slug">
         <a :href="songUrl(s.slug)">{{ s.title }}</a>
         <span v-if="newest.has(s.slug)" class="badge">Uusi</span>
+        <span v-if="order === 'date'" class="date">{{ day(s.published_at) }}</span>
       </li>
     </ul>
     <p v-if="!songs.length" class="hint">Ei vielä kappaleita.</p>

@@ -44,6 +44,11 @@ button.link { border: none; background: none; color: var(--accent); padding: 0.2
 .songs a { flex: 1; padding: 0.95rem 1.1rem; text-decoration: none; color: var(--fg); font-weight: 500; }
 .badge { font-size: 0.72rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); border-radius: 1rem;
   padding: 0.15rem 0.55rem; margin-right: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.segmented.order { margin: 0 0 0.8rem auto; }
+.segmented.order button { min-height: 0; border: none; background: none; padding: 0; color: var(--fg); font-size: 14px;
+  border-radius: 999px; }
+.songs .date { color: var(--muted); font-size: 0.85rem; margin-right: 1.1rem; white-space: nowrap; }
+.songs .badge + .date { margin-left: -0.5rem; }
 footer { margin-top: 1.5rem; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4rem 1rem 1rem; margin: 1rem 0; }
 .card textarea, .card input[type="text"] { width: 100%; font: inherit; padding: 0.5rem; border: 1px solid var(--line);
