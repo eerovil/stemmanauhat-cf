@@ -17,12 +17,15 @@ describe("publishPlan", () => {
       "parts/1-Tenori.mp3", "parts/2-Basso.mp3"]);
     expect(plan.r2Manifest).toMatchObject({ choir: "public", version: "20261010T123456Z", midi: "score.mid" });
   });
-  it("upserts the row with quotes escaped and moves the song from another choir", () => {
-    const { sql } = publishPlan(manifest, "public", date);
+  it("upserts the row with quotes escaped and moves the song from another choir, but not from public", () => {
+    const { sql } = publishPlan(manifest, "jm", date);
     expect(sql).toContain("'Kokeilijan ''laulu'''");
     expect(sql).toContain("ON CONFLICT (choir, slug) DO UPDATE");
     expect(sql).toContain("'2026-10-10T12:34:56Z'");
-    expect(sql).toContain("DELETE FROM songs WHERE slug = 'kokeilu' AND choir <> 'public';");
+    expect(sql).toContain("DELETE FROM songs WHERE slug = 'kokeilu' AND choir NOT IN ('jm', 'public');");
+  });
+  it("leaves the choirs' copies alone when publishing to public", () => {
+    expect(publishPlan(manifest, "public", date).sql).not.toContain("DELETE");
   });
   it("refuses an unknown choir and a broken manifest", () => {
     expect(() => publishPlan(manifest, "kaikki", date)).toThrow(/unknown choir/);

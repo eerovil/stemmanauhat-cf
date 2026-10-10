@@ -43,8 +43,11 @@ export function publishPlan(manifest, choir, date) {
     + [quote(choir), quote(slug), quote(title), quote(prefix), quote(partsJson), Number(duration), quote(publishedAt)].join(", ")
     + ") ON CONFLICT (choir, slug) DO UPDATE SET title = excluded.title, prefix = excluded.prefix,"
     + " parts = excluded.parts, duration = excluded.duration, published_at = excluded.published_at;"
-    // Publishing a song for another choir moves it, as song-app does.
-    + `\nDELETE FROM songs WHERE slug = ${quote(slug)} AND choir <> ${quote(choir)};`;
+    // Publishing a song for another choir moves it, as song-app does, except
+    // that the public list keeps its copy: a public-domain song may be in a
+    // choir's own list too. Publishing to public moves nothing.
+    + (choir === "public" ? ""
+      : `\nDELETE FROM songs WHERE slug = ${quote(slug)} AND choir NOT IN (${quote(choir)}, 'public');`);
   return { prefix, files, sql, r2Manifest };
 }
 
