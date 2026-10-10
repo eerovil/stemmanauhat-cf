@@ -1,5 +1,5 @@
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
-import { barAnchors, xOnAnchors, type Anchor } from "./bar";
+import { barAnchors, joinBars, xOnAnchors, type Anchor } from "./bar";
 
 /** OSMD lays out in units of 10 px at zoom 1. */
 const UNIT = 10;
@@ -31,12 +31,21 @@ interface Bar {
 export class Score {
   private readonly osmd: OpenSheetMusicDisplay;
   private bars: (Bar | undefined)[] = [];
-  private lit: Sounding[] = [];
+  /**
+   * The sounding notes, copied in their highlight colour onto a layer of their
+   * own over the score. Colouring the notes in the score itself made the browser
+   * paint the whole score again at every note, which a phone cannot always do
+   * within one frame, so the sliding line hitched each time the marker stepped.
+   */
+  private readonly highlights = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  private copies = new Map<Sounding, SVGGElement>();
   /** Each part's staff, top to bottom with room for notes above and lyrics below. */
   private spans = new Map<number, { top: number; bottom: number }>();
   private noteWidth = 0;
 
   constructor(private readonly container: HTMLElement) {
+    this.highlights.classList.add("highlights");
+    this.highlights.setAttribute("aria-hidden", "true");
     this.osmd = new OpenSheetMusicDisplay(container, {
       autoResize: false,
       backend: "svg",
@@ -98,7 +107,7 @@ export class Score {
   setZoom(zoom: number): void {
     this.zoom = zoom;
     this.stretch = zoom / this.renderedZoom;
-    const svg = this.container.querySelector("svg");
+    const svg = this.drawing();
     if (svg) {
       svg.style.width = `${Number(svg.getAttribute("width")) * this.stretch}px`;
       svg.style.height = `${Number(svg.getAttribute("height")) * this.stretch}px`;
@@ -121,9 +130,14 @@ export class Score {
     this.osmd.Zoom = (window.innerWidth < 600 ? 0.6 : 0.8) * this.zoom;
     this.osmd.render();
     // OSMD may reuse the SVG element: drop any stretch a zoom left on it.
-    const svg = this.container.querySelector("svg");
+    const svg = this.drawing();
     if (svg) { svg.style.width = ""; svg.style.height = ""; }
     this.measure();
+  }
+
+  /** OSMD's drawing of the score (not the highlight layer). */
+  private drawing(): SVGSVGElement | null {
+    return this.container.querySelector("svg:not(.highlights)");
   }
 
   get barCount(): number {
@@ -152,12 +166,12 @@ export class Score {
 
   /** The drawn score's width in pixels. */
   get width(): number {
-    return this.container.querySelector("svg")?.getBoundingClientRect().width ?? 0;
+    return this.drawing()?.getBoundingClientRect().width ?? 0;
   }
 
   /** The drawn score's height in pixels. */
   get height(): number {
-    return this.container.querySelector("svg")?.getBoundingClientRect().height ?? 0;
+    return this.drawing()?.getBoundingClientRect().height ?? 0;
   }
 
   /**
@@ -177,12 +191,20 @@ export class Score {
   light(measure: number | null, beat: number, focusPart: number): number {
     const bar = measure === null ? undefined : this.bars[measure];
     const now = bar ? bar.notes.filter((n) => n.start <= beat + 1e-6 && beat < n.end - 1e-6) : [];
-    for (const n of this.lit) if (!now.includes(n)) n.el.classList.remove("lit-focus", "lit-other");
-    for (const n of now) {
-      n.el.classList.toggle("lit-focus", n.part === focusPart);
-      n.el.classList.toggle("lit-other", n.part !== focusPart);
+    for (const [n, copy] of this.copies) {
+      if (!now.includes(n)) { copy.remove(); this.copies.delete(n); }
     }
-    this.lit = now;
+    for (const n of now) {
+      let copy = this.copies.get(n);
+      if (!copy) {
+        copy = n.el.cloneNode(true) as SVGGElement;
+        for (const el of [copy, ...copy.querySelectorAll("[id]")]) el.removeAttribute("id");
+        this.highlights.appendChild(copy);
+        this.copies.set(n, copy);
+      }
+      copy.classList.toggle("lit-focus", n.part === focusPart);
+      copy.classList.toggle("lit-other", n.part !== focusPart);
+    }
     return now.length;
   }
 
@@ -196,7 +218,7 @@ export class Score {
   }
 
   private measure(): void {
-    const svg = this.container.querySelector("svg");
+    const svg = this.drawing();
     const box = this.container.getBoundingClientRect();
     const svgBox = svg?.getBoundingClientRect() ?? box;
     const dx = svgBox.left - box.left;
@@ -204,12 +226,17 @@ export class Score {
     const scale = UNIT * this.osmd.Zoom * this.stretch;
     const px = (u: number, offset: number) => u * scale + offset;
     this.noteWidth = NOTEHEAD * scale;
-    // OSMD may reuse note elements across a new layout: clear every highlight,
-    // not just the ones this layout's list knows about.
-    for (const el of this.container.querySelectorAll(".lit-focus, .lit-other")) {
-      el.classList.remove("lit-focus", "lit-other");
-    }
-    this.lit = [];
+    // The highlight layer lies exactly over the drawing, in the same units, and
+    // starts empty after every layout. OSMD may clear the container: put it back.
+    const layer = this.highlights;
+    this.container.appendChild(layer);
+    layer.replaceChildren();
+    this.copies = new Map();
+    layer.setAttribute("viewBox", svg?.getAttribute("viewBox")
+      ?? `0 0 ${svg?.getAttribute("width") ?? 0} ${svg?.getAttribute("height") ?? 0}`);
+    layer.style.width = `${svgBox.width}px`;
+    layer.style.height = `${svgBox.height}px`;
+    layer.style.transform = `translate(${dx}px, ${dy}px)`;
     this.spans = new Map();
     const instruments = this.osmd.Sheet.Instruments;
 
@@ -257,5 +284,6 @@ export class Score {
         notes,
       };
     });
+    joinBars(this.bars);
   }
 }

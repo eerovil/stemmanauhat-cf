@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barAnchors, xOnAnchors } from "../../src/client/player/bar";
+import { barAnchors, joinBars, xOnAnchors } from "../../src/client/player/bar";
 import { barLengths, parseTiming, positionAt } from "../../src/client/player/timing";
 
 // A 4/4 song with a 3-beat pickup bar, as Finlandia-hymni has: bar 0 ends at beat 3.
@@ -36,5 +36,22 @@ describe("a short first bar", () => {
     const wrong = barAnchors(onsets, 4, -8, 302);
     expect(xOnAnchors(wrong, 3) - xOnAnchors(wrong, 2)).toBeCloseTo(50, 6);
     expect(xOnAnchors(wrong, 3)).toBeCloseTo(250, 6);
+  });
+});
+
+describe("joinBars", () => {
+  // Two bars on one line: the bar line at 300 px, the next bar's first note at 316 px.
+  const first = { x1: 302, top: 10, anchors: barAnchors(new Map([[0, 0], [1, 100], [2, 200]]), 3, -8, 302) };
+  const second = { x1: 702, top: 10, anchors: barAnchors(new Map([[0, 316], [1, 416]]), 2, 302, 702) };
+  const otherLine = { x1: 402, top: 200, anchors: barAnchors(new Map([[0, 20]]), 1, 0, 402) };
+  joinBars([first, second, otherLine]);
+
+  it("glides from a bar's last note to the next bar's first, with no jump at the bar line", () => {
+    expect(xOnAnchors(first.anchors, 3)).toBe(xOnAnchors(second.anchors, 0));
+    expect(xOnAnchors(first.anchors, 2.5)).toBe(258);
+  });
+
+  it("leaves a bar that ends a line at its bar line", () => {
+    expect(xOnAnchors(second.anchors, 2)).toBe(700);
   });
 });

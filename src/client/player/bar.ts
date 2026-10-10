@@ -27,3 +27,18 @@ export function xOnAnchors(a: Anchor[], beat: number): number {
   }
   return a[a.length - 1]![1];
 }
+
+/**
+ * Ends each bar where the next bar's music starts, when the two sit on one line,
+ * instead of at the bar line. Otherwise the position jumps the gap between the
+ * bar line and the next bar's first note at every bar, and the smoothed scroll
+ * turns each jump into a sudden change of speed (a hitch the eye catches).
+ */
+export function joinBars(bars: ({ x1: number; top: number; anchors: Anchor[] } | undefined)[]): void {
+  for (let i = 0; i + 1 < bars.length; i++) {
+    const bar = bars[i];
+    const next = bars[i + 1];
+    if (!bar || !next || Math.abs(next.top - bar.top) > 1 || next.anchors[0]![1] < bar.x1 - 2) continue;
+    bar.anchors[bar.anchors.length - 1]![1] = next.anchors[0]![1];
+  }
+}
