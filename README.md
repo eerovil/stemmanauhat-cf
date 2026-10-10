@@ -58,6 +58,18 @@ Still to do:
 4. `./scripts/add-admin.sh <your Google email>`, sign in, and set each choir's passphrase at
    `/admin` (or with `./scripts/set-passphrase.sh jm`) to today's, so the old links keep working.
 
+## Publishing songs by hand
+
+Until song-app's own publish uploads `score.mid` (eerovil/musescore-choir-plugins#382), a bundle that
+song-app built (`manifest.json`, `score.musicxml`, `score.mid`, `timing.json`, `parts/`) goes up with
+
+```sh
+./scripts/publish-songs.sh public <bundle-dir> ...          # the live site
+./scripts/publish-songs.sh --local public <bundle-dir> ...  # the local one
+```
+
+It writes the same R2 layout and D1 row as song-app. Only public-domain songs go in `public`.
+
 ## The piano
 
 `scripts/make-piano-soundfont.mjs` cuts MuseScore's `MuseScore_General.sf3` (MIT licensed, inside
