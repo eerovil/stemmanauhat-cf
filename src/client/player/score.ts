@@ -1,5 +1,6 @@
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import { barAnchors, joinBars, xOnAnchors, type Anchor } from "./bar";
+import { biggestStep, cappedTargets, needsWidening, nextFactors } from "./spacing";
 
 /** OSMD lays out in units of 10 px at zoom 1. */
 const UNIT = 10;
@@ -19,6 +20,8 @@ interface Bar {
   x1: number;
   top: number;
   bottom: number;
+  /** How long the bar plays, in quarters. */
+  length: number;
   /** [beat in quarters, x], sorted by beat; the last one is the bar's end. */
   anchors: Anchor[];
   notes: Sounding[];
@@ -142,11 +145,53 @@ export class Score {
     this.osmd.setOptions({ renderSingleHorizontalStaffline: this.singleLine });
     this.baseZoom = Math.min(window.innerWidth, window.innerHeight) < 600 ? 0.9 : 1.2;
     this.osmd.Zoom = this.baseZoom * this.zoom;
+    this.evenOut();
+  }
+
+  /** Extra layouts the bar widening took last time (0: the score was even already). */
+  widenings = 0;
+
+  /**
+   * Lays the score out, and in the one-line view widens the bars that would
+   * scroll too fast for their neighbours (spacing.ts), as the videos do. OSMD
+   * widens a bar by a factor, which does not map exactly onto its width, so it
+   * is measured and corrected once. The page view keeps its own layout: it does
+   * not scroll, and each line is stretched to the screen's width anyway.
+   */
+  private evenOut(): void {
+    const measures = this.osmd.Sheet.SourceMeasures;
+    for (const m of measures) m.WidthFactor = 1;
+    this.layout();
+    this.widenings = 0;
+    if (this.singleLine) {
+      const want = cappedTargets(this.travels(), this.lengths());
+      let factors = measures.map(() => 1);
+      while (this.widenings < 2 && needsWidening(this.travels(), want)) {
+        factors = nextFactors(factors, this.travels(), want);
+        measures.forEach((m, i) => { m.WidthFactor = factors[i] ?? 1; });
+        this.layout();
+        this.widenings++;
+      }
+    }
+    this.container.dataset.widenings = String(this.widenings);
+    this.container.dataset.step = biggestStep(this.travels(), this.lengths()).toFixed(3);
+  }
+
+  private layout(): void {
     this.osmd.render();
     // OSMD may reuse the SVG element: drop any stretch a zoom left on it.
     const svg = this.drawing();
     if (svg) { svg.style.width = ""; svg.style.height = ""; }
     this.measure();
+  }
+
+  /** How far the music travels through each bar: its first note to where the next bar's begins. */
+  private travels(): number[] {
+    return this.bars.map((bar) => (bar ? bar.anchors[bar.anchors.length - 1]![1] - bar.anchors[0]![1] : 0));
+  }
+
+  private lengths(): number[] {
+    return this.bars.map((bar) => bar?.length ?? 0);
   }
 
   /** OSMD's drawing of the score (not the highlight layer). */
@@ -351,6 +396,7 @@ export class Score {
 
       return {
         x0, x1,
+        length,
         top: px(first.AbsolutePosition.y - 1.5, dy),
         bottom: px(last.AbsolutePosition.y + 5.5, dy),
         anchors,
