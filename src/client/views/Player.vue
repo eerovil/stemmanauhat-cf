@@ -186,10 +186,17 @@ function onResize() {
   resizeTimer = window.setTimeout(() => { score?.render(); fit(); }, 250);
 }
 
-function tick() {
+/**
+ * `frameTime` is when this frame will be shown. Everything is placed for that
+ * moment, not for when this code happens to run: on a busy frame (a note
+ * changing colour, say) the code runs late, and a position read from the clock
+ * then would land a few milliseconds ahead and make the scroll hitch.
+ */
+function tick(frameTime: number) {
   frame = requestAnimationFrame(tick);
   if (!mixer || !timing || !score) return;
-  const t = drag?.moved ? drag.t : smoothClock.read(mixer.time(), mixer.running, rate.value, performance.now());
+  const late = mixer.running ? ((performance.now() - frameTime) / 1000) * rate.value : 0;
+  const t = drag?.moved ? drag.t : smoothClock.read(mixer.time() - late, mixer.running, rate.value, frameTime);
   now.value = t;
   playing.value = mixer.playing;
   if (mixer.running && frame % 15 === 0) sounding.value = mixer.sounding();

@@ -1,5 +1,5 @@
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
-import { barAnchors, xOnAnchors, type Anchor } from "./bar";
+import { barAnchors, joinBars, xOnAnchors, type Anchor } from "./bar";
 
 /** OSMD lays out in units of 10 px at zoom 1. */
 const UNIT = 10;
@@ -257,5 +257,6 @@ export class Score {
         notes,
       };
     });
+    joinBars(this.bars);
   }
 }
