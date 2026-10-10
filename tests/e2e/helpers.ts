@@ -12,11 +12,9 @@ export async function signInAs(page: Page, path: string, email: string) {
 }
 
 /** Plays from the start and checks the time and the cursor both move. */
-export async function playAndSeeCursorMove(page: Page, { pieces = false } = {}) {
+export async function playAndSeeCursorMove(page: Page) {
   const score = page.getByTestId("score");
-  // Firefox on Android shows the one-line score as pieces of an image, the drawing hidden.
-  if (pieces) await expect(page.locator(".score-tile img").first()).toBeVisible();
-  else await expect(score.locator("svg").first()).toBeVisible();
+  await expect(score.locator("svg").first()).toBeVisible();
   const cursor = page.getByTestId("cursor");
   await expect(cursor).toHaveAttribute("data-measure", "0");
   const before = await cursor.evaluate((el) => (el as HTMLElement).style.transform);
