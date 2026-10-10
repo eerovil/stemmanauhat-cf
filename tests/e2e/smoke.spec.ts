@@ -96,16 +96,40 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
 
   // "Oma": your staff alone, in page lines, the page no longer a single line.
-  const staffNotes = () => page.getByTestId("score").locator("g.vf-stavenote").count();
+  const staffNotes = () => page.getByTestId("score").locator("svg:not(.highlights) g.vf-stavenote").count();
   const before = await staffNotes();
+  const noteSize = () => page.getByTestId("score").locator("g.vf-notehead").first()
+    .evaluate((el) => el.getBoundingClientRect().width);
+  const lineNote = await noteSize();
   await page.getByRole("button", { name: "Säädöt" }).click();
   const staves = page.getByRole("group", { name: "Viivastot" });
   await staves.getByRole("button", { name: "Oma" }).click();
   await expect.poll(staffNotes).toBe(before / 2);
   await expect(page.locator(".player.one-line")).toHaveCount(0);
+  // The staff keeps its size when the other staves go.
+  await expect.poll(async () => Math.abs((await noteSize()) - lineNote)).toBeLessThan(1);
+  // And when the song opens straight in "Oma".
+  await page.reload();
+  await expect.poll(staffNotes).toBe(before / 2);
+  await expect.poll(async () => Math.abs((await noteSize()) - lineNote)).toBeLessThan(1);
+
+  // In "Oma" a tap on a note moves there and leaves the sound paused: bar 3's third beat is 5 s in.
+  await page.getByTestId("score").locator("svg:not(.highlights) g.vf-stavenote").nth(10).click();
+  await expect(page.getByTestId("time")).toHaveText("0:05");
+  await expect(page.getByTestId("cursor")).toHaveAttribute("data-measure", "2");
+  await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
+
+  // Turned sideways in "Oma" (past the 600 px width where the base size changes), then back to "Kaikki".
+  await page.setViewportSize({ width: 839, height: 412 });
+  await page.waitForTimeout(1000);
+  const turnedNote = await noteSize();
+  await page.getByRole("button", { name: "Säädöt" }).click();
   await staves.getByRole("button", { name: "Kaikki" }).click();
   await expect.poll(staffNotes).toBe(before);
   await expect(page.locator(".player.one-line")).toHaveCount(1);
+  await expect.poll(async () => Math.abs((await noteSize()) - turnedNote)).toBeLessThan(1);
+  await page.setViewportSize({ width: 412, height: 839 });
+  await page.waitForTimeout(1000);
 
   // Zoom makes the score bigger, and the size is remembered.
   const height = async () => (await page.getByTestId("score").locator("svg").first().boundingBox())!.height;

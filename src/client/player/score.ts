@@ -86,6 +86,8 @@ export class Score {
 
   /** The singer's own zoom, times the size that suits the screen. */
   zoom = 1;
+  /** The size the last layout used for this screen width; OSMD's zoom is this times `zoom`. */
+  baseZoom = 1;
   /** The whole score on one line that scrolls sideways, as in the videos. */
   singleLine = false;
 
@@ -127,7 +129,8 @@ export class Score {
     this.stretch = 1;
     this.renderedZoom = this.zoom;
     this.osmd.setOptions({ renderSingleHorizontalStaffline: this.singleLine });
-    this.osmd.Zoom = (window.innerWidth < 600 ? 0.6 : 0.8) * this.zoom;
+    this.baseZoom = window.innerWidth < 600 ? 0.6 : 0.8;
+    this.osmd.Zoom = this.baseZoom * this.zoom;
     this.osmd.render();
     // OSMD may reuse the SVG element: drop any stretch a zoom left on it.
     const svg = this.drawing();
@@ -215,6 +218,28 @@ export class Score {
       if (bar && x >= bar.x0 && x <= bar.x1 && y >= bar.top && y <= bar.bottom) return i;
     }
     return null;
+  }
+
+  /**
+   * The note under a tap in the page view, in container pixels: the nearest note
+   * of the bar tapped, or null off the staves. Lyrics just below count as the staff.
+   */
+  noteAt(x: number, y: number): { measure: number; beat: number } | null {
+    let found: { measure: number; bar: Bar; distance: number } | null = null;
+    this.bars.forEach((bar, measure) => {
+      if (!bar || x < bar.x0 || x > bar.x1) return;
+      const distance = y < bar.top ? bar.top - y : y > bar.bottom ? y - bar.bottom : 0;
+      if (distance > bar.bottom - bar.top || (found && found.distance <= distance)) return;
+      found = { measure, bar, distance };
+    });
+    if (!found) return null;
+    const { measure, bar } = found as { measure: number; bar: Bar };
+    let beat = bar.anchors[0]![0];
+    let gap = Infinity;
+    for (const [b, ax] of bar.anchors.slice(0, -1)) {
+      if (Math.abs(ax - x) < gap) { gap = Math.abs(ax - x); beat = b; }
+    }
+    return { measure, beat };
   }
 
   private measure(): void {

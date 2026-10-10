@@ -83,6 +83,28 @@ export function barLengths(timing: Timing): Map<number, number> {
   return lengths;
 }
 
+/**
+ * When the music reaches `beat` of `measure`, in the play-through nearest `near`
+ * (a repeated bar has several): positionAt the other way round.
+ */
+export function timeOf(timing: Timing, measure: number, beat: number, near: number): number | null {
+  const { points } = timing;
+  let best: number | null = null;
+  for (let i = 0; i < points.length; i++) {
+    if (points[i]![1] !== measure || !startsPass(points, i)) continue;
+    let t = points[i]![0];
+    for (let j = i; j + 1 < points.length && points[j + 1]![1] === measure && !startsPass(points, j + 1); j++) {
+      const [t0, , b0] = points[j]!;
+      const [t1, , b1] = points[j + 1]!;
+      if (beat >= b1) { t = t1; continue; }
+      if (beat > b0 && b1 > b0) t = t0 + ((beat - b0) / (b1 - b0)) * (t1 - t0);
+      break;
+    }
+    if (best === null || Math.abs(t - near) < Math.abs(best - near)) best = t;
+  }
+  return best;
+}
+
 export function nearest(times: number[], now: number): number | null {
   let best: number | null = null;
   for (const t of times) if (best === null || Math.abs(t - now) < Math.abs(best - now)) best = t;

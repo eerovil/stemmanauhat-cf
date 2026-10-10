@@ -9,7 +9,7 @@ import { MidiPlayer } from "../player/midi";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
 import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, timeAtX, type ScrollCurve } from "../player/scroll";
-import { barLengths, nearest, parseTiming, positionAt, startsOf, type Timing } from "../player/timing";
+import { barLengths, nearest, parseTiming, positionAt, startsOf, timeOf, type Timing } from "../player/timing";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string; slug: string }>();
@@ -51,12 +51,18 @@ const MODES: { id: MixMode; label: string; hint: string }[] = [
 type StaffMode = "all" | "own";
 const staffMode = ref<StaffMode>("all");
 const singleLine = computed(() => staffMode.value === "all");
-/** With "Oma" the size is the singer's zoom times this (a single staff can be big). */
-const OWN_ZOOM = window.innerWidth < 600 ? 1.5 : 1.2;
 const ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const zoom = ref(remembered.zoom());
-/** The zoom at which the score fills its area; the − / + buttons scale from it. */
+/**
+ * The zoom at which "Kaikki" fills its area; the − / + buttons scale from it.
+ * "Oma" uses it too, so the staves stay the same size when the view changes.
+ */
 let fitZoom = 1;
+/**
+ * "Kaikki"'s line at OSMD zoom 1: its height and a bar's average width. Kept
+ * apart from the screen-width base size, which changes when a phone turns.
+ */
+let lineSize: { height: number; barWidth: number } | null = null;
 
 const sheetOpen = ref(false);
 const askPart = ref(false);
@@ -136,10 +142,17 @@ onMounted(async () => {
     const { Score } = await import("../player/score");
     score = new Score(scoreBox.value!);
     score.barLengths = barLengths(timing);
-    score.singleLine = singleLine.value;
-    score.zoom = (singleLine.value ? 1 : OWN_ZOOM) * zoom.value;
     if (dock.value) dockObserver.observe(dock.value);
-    await score.load(xml, visibleParts());
+    // Laid out as "Kaikki" first, even for "Oma": its size is the size of both.
+    score.singleLine = true;
+    score.zoom = zoom.value;
+    await score.load(xml);
+    if (!singleLine.value) {
+      fit();
+      score.singleLine = false;
+      score.zoom = fitZoom * zoom.value;
+      score.setVisible(visibleParts());
+    }
     await new Promise(requestAnimationFrame);
     fit();
     window.addEventListener("resize", onResize);
@@ -258,22 +271,28 @@ function verticalOffset(boxHeight: number): number {
 /**
  * Sizes the score: in the one-line view the staves fill the height, but never
  * so big that fewer than about three bars fit across (singers read ahead).
- * The singer's − / + choice is a factor on top.
+ * "Oma" keeps that size. The singer's − / + choice is a factor on top.
  */
 function fit() {
   if (!score) return;
-  if (!singleLine.value) {
-    fitZoom = OWN_ZOOM;
-  } else {
-    const box = scrollBox.value;
-    if (!box || !score.height) return;
-    const byHeight = (box.clientHeight * 0.92) / (score.height / score.zoom);
-    const barWidth = score.width / Math.max(1, score.barCount) / score.zoom;
-    const byWidth = box.clientWidth / (3 * barWidth);
+  measureLine();
+  const box = scrollBox.value;
+  if (box && lineSize) {
+    // The one-line view fills the screen above the dock; the page view is as wide.
+    const height = singleLine.value ? box.clientHeight : window.innerHeight - (dock.value?.offsetHeight ?? 0);
+    const byHeight = (height * 0.92) / (lineSize.height * score.baseZoom);
+    const byWidth = box.clientWidth / (3 * lineSize.barWidth * score.baseZoom);
     fitZoom = Math.min(3, Math.max(0.3, Math.min(byHeight, byWidth)));
   }
   score.setZoom(fitZoom * zoom.value);
   lastTop = -1;
+}
+
+/** Notes "Kaikki"'s size while the score is laid out as it. */
+function measureLine() {
+  if (!score || !score.singleLine || !score.height) return;
+  const scale = score.zoom * score.baseZoom;
+  lineSize = { height: score.height / scale, barWidth: score.width / Math.max(1, score.barCount) / scale };
 }
 
 function changeZoom(step: number) {
@@ -299,7 +318,7 @@ function setStaffMode(next: StaffMode) {
   if (wrap) wrap.style.transform = "";
   window.scrollTo(0, 0);
   score.singleLine = singleLine.value;
-  score.zoom = (singleLine.value ? fitZoom : OWN_ZOOM) * zoom.value;
+  score.zoom = fitZoom * zoom.value;
   score.setVisible(visibleParts());
   void new Promise(requestAnimationFrame).then(fit);
 }
@@ -385,12 +404,28 @@ function closePanels() {
   sheetOpen.value = false;
 }
 
-/** A tap on the score plays or pauses; with a panel open it just closes the panel. */
-function onScoreClick() {
+/**
+ * A tap on the score plays or pauses; in the "Oma" page view a tap on a note
+ * moves there instead. With a panel open it just closes the panel.
+ */
+function onScoreClick(event: MouseEvent) {
   if (dragJustEnded) { dragJustEnded = false; return; }
   if (showHint.value) dismissHint();
   if (sheetOpen.value) { closePanels(); return; }
+  if (!singleLine.value && seekToNote(event)) return;
   void togglePlay();
+}
+
+/** Moves to the note tapped, in the play-through nearest now; playing or paused stays as it was. */
+function seekToNote(event: MouseEvent): boolean {
+  const box = scoreBox.value;
+  if (!box || !score || !timing || !mixer) return false;
+  const rect = box.getBoundingClientRect();
+  const note = score.noteAt(event.clientX - rect.left, event.clientY - rect.top);
+  const t = note ? timeOf(timing, note.measure, note.beat, mixer.time()) : null;
+  if (t === null) return false;
+  mixer.seek(t);
+  return true;
 }
 
 /**
@@ -459,7 +494,8 @@ function onPointerUp(event: PointerEvent) {
       <!-- A one-time hint: a small card above the dock, like the other sheets. -->
       <div v-if="showHint && !askPart && !sheetOpen" class="hint-card" role="note" :style="{ bottom: `${dockHeight + 12}px` }">
         <ul>
-          <li><Icon name="tap" :size="20" /><span><b>Napauta</b> nuottia: soita tai pysäytä</span></li>
+          <li v-if="singleLine"><Icon name="tap" :size="20" /><span><b>Napauta</b> nuottia: soita tai pysäytä</span></li>
+          <li v-else><Icon name="tap" :size="20" /><span><b>Napauta</b> nuottia: siirry siihen</span></li>
           <li v-if="singleLine"><Icon name="scroll" :size="20" /><span><b>Vedä</b> nuottia sivulle: siirry</span></li>
         </ul>
         <button type="button" @click="dismissHint">Selvä</button>
