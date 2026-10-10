@@ -1,6 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error a plain .mjs script without types
 import { cloudflareStore, publishAll, publishPlan, versionFor } from "../../scripts/publish-songs.mjs";
@@ -29,6 +31,22 @@ describe("publishPlan", () => {
   });
   it("leaves the choirs' copies alone when publishing to public", () => {
     expect(publishPlan(manifest, "public", date).sql).not.toContain("DELETE");
+  });
+  it("keeps the date a song first came out when it is published again or moved", () => {
+    const db = new DatabaseSync(":memory:");
+    for (const f of readdirSync("migrations").sort()) db.exec(readFileSync(join("migrations", f), "utf8"));
+    const day = (choir: string) => db.prepare("SELECT published_at FROM songs WHERE choir = ?").get(choir)?.published_at;
+    db.exec(publishPlan(manifest, "jm", new Date("2025-03-01T10:00:00Z")).sql);
+    expect(day("jm")).toBe("2025-03-01T10:00:00Z");
+    db.exec(publishPlan({ ...manifest, title: "Uusi nimi" }, "jm", date).sql);
+    expect(day("jm")).toBe("2025-03-01T10:00:00Z");
+    expect(db.prepare("SELECT title FROM songs").get()?.title).toBe("Uusi nimi");
+    db.exec(publishPlan(manifest, "naiskuoro", date).sql);
+    expect(day("jm")).toBeUndefined();
+    expect(day("naiskuoro")).toBe("2025-03-01T10:00:00Z");
+    db.exec(publishPlan({ ...manifest, slug: "toinen" }, "jm", date).sql);
+    expect(db.prepare("SELECT published_at FROM songs WHERE slug = 'toinen'").get()?.published_at)
+      .toBe("2026-10-10T12:34:56Z");
   });
   it("refuses an unknown choir and a broken manifest", () => {
     expect(() => publishPlan(manifest, "kaikki", date)).toThrow(/unknown choir/);
