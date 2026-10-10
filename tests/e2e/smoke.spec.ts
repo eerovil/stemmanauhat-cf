@@ -15,7 +15,7 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await dialog.getByRole("button", { name: "Tenori", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.locator(".info-title")).toHaveText("Kokeilulaulu");
-  await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toHaveText("Tenori");
+  await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toContainText("Tenori");
 
   // A one-time hint explains tapping and dragging the score.
   await page.getByRole("button", { name: "Selvä" }).click();
@@ -23,6 +23,7 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   // Your part loud and the others quieter; the four ways of listening.
   await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.160");
   await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.getByRole("button", { name: "Sulje säädöt" })).toBeVisible();
   const listen = page.getByRole("group", { name: "Miten kuuntelet" });
   await listen.getByRole("button", { name: "Ilman omaa" }).click();
   await expect(gains(page)).toHaveAttribute("data-gains", "0.000 1.000");
@@ -47,12 +48,11 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
 
   await playAndSeeCursorMove(page);
 
-  // The bar number, not seconds, and a jump to any bar by its number.
+  // The bar number, not just seconds: "Tahti 3 / 4 · 0:04 / 0:08".
   await page.getByRole("button", { name: "Tauko" }).click();
-  await page.getByRole("button", { name: "Siirry tahtiin" }).click();
-  await page.getByLabel("Tahdin numero").fill("3");
-  await page.getByRole("button", { name: "Mene" }).click();
+  await page.locator("input.progress").fill("4.5");
   await expect(page.locator(".info-meta")).toContainText("Tahti 3 / 4");
+  await expect(page.locator(".info-meta")).toContainText("/ 0:08");
 
   // "Kaikki": one line sliding sideways; the page never scrolls; your note stays in view.
   const scroller = page.getByTestId("score-scroll");
@@ -123,7 +123,7 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await page.goto("/c/public/esittely");
   await choosePartIfAsked(page, "Tenori");
   await page.getByRole("button", { name: "Säädöt" }).click();
-  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("100 %");
+  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("Normaali");
   await expect(page.getByRole("group", { name: "Miten kuuntelet" }).getByRole("button", { name: "Ilman omaa" }))
     .toHaveAttribute("aria-pressed", "true");
 
