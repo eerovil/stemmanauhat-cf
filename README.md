@@ -55,8 +55,11 @@ Still to do:
 3. Create a Google OAuth client (web app) with the redirect URI
    `https://stemmanauhat.eerovil.workers.dev/auth/callback`, then run
    `./scripts/set-worker-secrets.sh`, which also creates `SESSION_SECRET`.
-4. `./scripts/add-admin.sh <your Google email>`, sign in, and set each choir's passphrase at
-   `/admin` (or with `./scripts/set-passphrase.sh jm`) to today's, so the old links keep working.
+4. `./scripts/add-admin.sh <your Google email>`, sign in, and make each choir's link at `/admin`.
+   To keep the old site's links working instead, set the old passphrase with
+   `./scripts/set-passphrase.sh jm`; `/admin` cannot show that link, and "Tee uusi linkki" replaces it.
+   Anyone who opens a choir's link gets its songs at once, and signing in with Google from the
+   offer on the song list makes their Google account a member.
 
 ## Publishing songs by hand
 

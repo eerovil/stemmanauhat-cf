@@ -9,6 +9,8 @@ export interface Me {
   linked: string[];
   admin: boolean;
   choirs: Choir[];
+  /** Choirs this browser is in only by link, which a Google sign-in would join. */
+  joinable: string[];
 }
 
 export interface Part {

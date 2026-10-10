@@ -34,7 +34,7 @@ test("the piano is served to anyone, cached for good", async ({ page }) => {
   expect((await page.request.get("/sound/missing-9.sf3")).status()).toBe(404);
 });
 
-test("an admin adds a member and changing the passphrase signs link users out", async ({ page, browser }) => {
+test("an admin adds a member, and a new link signs old link users out and lets a Google account join", async ({ page, browser }) => {
   const linked = await browser.newContext();
   const linkedPage = await linked.newPage();
   await linkedPage.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
@@ -47,16 +47,37 @@ test("an admin adds a member and changing the passphrase signs link users out", 
   await jm.getByRole("button", { name: "Lisää" }).click();
   await expect(jm.getByText("uusi.laulaja@example.com")).toBeVisible();
 
-  await jm.getByLabel("Uusi salasana: Joensuun Mieslaulajat").fill("uusi-salasana-123");
-  await jm.getByRole("button", { name: "Vaihda" }).click();
-  await expect(jm.getByText("Salasana vaihdettu")).toBeVisible();
+  // The seeded link was set by passphrase, so it works but cannot be shown.
+  await expect(jm.getByText("Vanha linkki on käytössä")).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await jm.getByRole("button", { name: "Tee uusi linkki" }).click();
+  await expect(jm.getByText("Uusi linkki tehty")).toBeVisible();
+  const url = await jm.getByLabel("Linkki: Joensuun Mieslaulajat").inputValue();
+  expect(url).toMatch(/\/\?user=jm&passphrase=[\w-]{24}$/);
   expect((await fetchIn(linkedPage, "/api/songs?choir=jm")).status).toBe(403);
   await linked.close();
 
+  // The new link opens the songs at once and offers to add a Google account.
+  const joiner = await browser.newContext();
+  const joinerPage = await joiner.newPage();
+  await joinerPage.goto(url);
+  await expect(joinerPage).toHaveURL(/\/c\/jm$/);
+  await joinerPage.getByRole("link", { name: "Lisää Google-tili" }).click();
+  await joinerPage.getByLabel("Email").fill("liittyja@example.com");
+  await joinerPage.getByRole("button", { name: "Continue" }).click();
+  await expect(joinerPage).toHaveURL(/\/c\/jm$/);
+  await expect(joinerPage.getByRole("heading", { name: "Joensuun Mieslaulajat" })).toBeVisible();
+  await expect(joinerPage.getByRole("link", { name: "Lisää Google-tili" })).toHaveCount(0);
+  await joiner.close();
+  await page.reload();
+  await expect(jm.getByText("liittyja@example.com")).toBeVisible();
+
   // Put the seeded passphrase back for any later test.
-  await jm.getByLabel("Uusi salasana: Joensuun Mieslaulajat").fill(PASSPHRASE);
-  await jm.getByRole("button", { name: "Vaihda" }).click();
-  await expect(jm.getByText("Salasana vaihdettu")).toBeVisible();
+  const restored = await page.evaluate(async (passphrase) => (await fetch("/api/admin/link", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ choir: "jm", passphrase }),
+  })).status, PASSPHRASE);
+  expect(restored).toBe(200);
 });
 
 test("a member who is not an admin cannot open the admin page", async ({ page }) => {

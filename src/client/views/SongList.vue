@@ -35,6 +35,7 @@ const last = computed(() => {
   const slug = remembered.last(props.choir);
   return songs.value.find((s) => s.slug === slug) ?? null;
 });
+const joinUrl = computed(() => `/auth/login?next=${encodeURIComponent(`/c/${props.choir}`)}`);
 const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encodeURIComponent(slug)}`;
 </script>
 
@@ -45,6 +46,10 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       <a href="/" class="home-link">Stemmanauhat</a>
       <h1>{{ choirName }}</h1>
     </header>
+    <aside v-if="me?.joinable.includes(choir)" class="join card">
+      <p>Pääsit sisään linkillä. Lisää Google-tilisi kuoron jäseneksi, niin pysyt kirjautuneena kaikilla laitteillasi.</p>
+      <a class="button primary" :href="joinUrl">Lisää Google-tili</a>
+    </aside>
     <a v-if="last" class="button primary continue" :href="songUrl(last.slug)">▶ Jatka siitä: {{ last.title }}</a>
     <input v-model="query" class="search" type="search" placeholder="Hae kappaletta" aria-label="Hae kappaletta" />
     <ul class="songs">

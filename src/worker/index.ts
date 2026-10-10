@@ -2,6 +2,7 @@ import { decideAccess, isAdmin, loadFacts, type Access } from "./access";
 import type { Env } from "./env";
 import { serveObject, safeSongPath } from "./files";
 import { AUTHORIZE_URL, TOKEN_URL, authorizeUrl, exchangeCode, normalizeEmail, readEmail } from "./google";
+import { joinUrl, linkKey } from "./links";
 import { publicOrigin } from "./origin";
 import { newPassphraseRecord, passphraseMatches } from "./passphrase";
 import { clearSessionCookie, readSession, sessionCookie, type Session } from "./session";
@@ -170,10 +171,29 @@ async function callback(ctx: Ctx): Promise<Response> {
   const email = idToken && readEmail(idToken, env.GOOGLE_CLIENT_ID, pending.nonce, ctx.now);
   if (!email) return redirect(signinUrl(safeNext(pending.next ?? "/"), "failed"));
 
+  await joinLinkedChoirs(ctx, email);
   const headers = new Headers({ Location: safeNext(pending.next ?? "/") });
   headers.append("Set-Cookie", await sessionCookie(ctx.secret, { email, links: ctx.session?.links }, ctx.now));
   headers.append("Set-Cookie", `${OAUTH_COOKIE}=; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
   return new Response(null, { status: 302, headers });
+}
+
+/**
+ * Signing in with Google while holding a choir's current link makes that
+ * Google account a member, so the person stays in on every device and after
+ * the link changes. Holding the link is the proof, as it is for the link itself.
+ */
+async function joinLinkedChoirs(ctx: Ctx, email: string): Promise<void> {
+  const db = ctx.env.DB;
+  const at = new Date(ctx.now * 1000).toISOString();
+  const joins = [];
+  for (const [choir, generation] of Object.entries(ctx.session?.links ?? {})) {
+    const facts = await loadFacts(db, ctx.session, choir);
+    if (facts.choirPublic || facts.linkGeneration === null || facts.linkGeneration !== generation) continue;
+    joins.push(db.prepare("INSERT INTO members (choir, email, added_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
+      .bind(choir, email, at));
+  }
+  if (joins.length) await db.batch(joins);
 }
 
 function signinUrl(next: string, error?: string): string {
@@ -208,7 +228,18 @@ async function me(ctx: Ctx): Promise<Response> {
     linked: Object.keys(ctx.session?.links ?? {}),
     admin: await isAdmin(ctx.env.DB, ctx.session),
     choirs: await visibleChoirs(ctx),
+    joinable: await joinableChoirs(ctx),
   });
+}
+
+/** Choirs this browser is in only by link, which its Google account could join. */
+async function joinableChoirs(ctx: Ctx): Promise<string[]> {
+  const out = [];
+  for (const [choir, generation] of Object.entries(ctx.session?.links ?? {})) {
+    const facts = await loadFacts(ctx.env.DB, ctx.session, choir);
+    if (!facts.choirPublic && facts.linkGeneration === generation && !facts.isMember) out.push(choir);
+  }
+  return out;
 }
 
 /** Every choir this visitor may open, public ones included. */
@@ -281,21 +312,30 @@ async function adminState(ctx: Ctx): Promise<Response> {
   const [choirs, members, links, admins] = await db.batch([
     db.prepare("SELECT id, name, public FROM choirs ORDER BY name"),
     db.prepare("SELECT choir, email, added_at FROM members ORDER BY email"),
-    db.prepare("SELECT choir, hash IS NOT NULL AS enabled, generation FROM choir_links"),
+    db.prepare("SELECT choir, salt, hash, iterations, generation FROM choir_links WHERE hash IS NOT NULL"),
     db.prepare("SELECT email FROM admins ORDER BY email"),
   ]);
   type Member = { choir: string; email: string; added_at: string };
-  type Link = { choir: string; enabled: number };
+  type Link = { choir: string; salt: string; hash: string; iterations: number; generation: number };
+  const origin = publicOrigin(ctx.url, ctx.request.headers);
+  const out = [];
+  for (const c of (choirs!.results as { id: string; name: string; public: number }[]).filter((c) => c.public !== 1)) {
+    const link = (links!.results as Link[]).find((l) => l.choir === c.id);
+    // A link set by passphrase (set-passphrase.sh, or the old site's) works but
+    // cannot be shown: only its hash is stored. "New link" replaces it.
+    const key = link ? await linkKey(ctx.secret, c.id, link.generation) : null;
+    const url = link && key && (await passphraseMatches(key, link)) ? joinUrl(origin, c.id, key) : null;
+    out.push({
+      id: c.id,
+      name: c.name,
+      members: (members!.results as Member[]).filter((m) => m.choir === c.id)
+        .map((m) => ({ email: m.email, added_at: m.added_at })),
+      link: link !== undefined,
+      url,
+    });
+  }
   return json({
-    choirs: (choirs!.results as { id: string; name: string; public: number }[])
-      .filter((c) => c.public !== 1)
-      .map((c) => ({
-        id: c.id,
-        name: c.name,
-        members: (members!.results as Member[]).filter((m) => m.choir === c.id)
-          .map((m) => ({ email: m.email, added_at: m.added_at })),
-        link: (links!.results as Link[]).some((l) => l.choir === c.id && l.enabled === 1),
-      })),
+    choirs: out,
     admins: (admins!.results as { email: string }[]).map((a) => a.email),
   });
 }
@@ -359,6 +399,18 @@ async function adminLink(ctx: Ctx): Promise<Response> {
        ON CONFLICT (choir) DO UPDATE SET salt = NULL, hash = NULL, generation = generation + 1`,
     ).bind(choir).run();
     return json({ link: false });
+  }
+  if (body.renew === true) {
+    const current = await db.prepare("SELECT generation FROM choir_links WHERE choir = ?").bind(choir)
+      .first<{ generation: number }>();
+    const generation = (current?.generation ?? 0) + 1;
+    const key = await linkKey(ctx.secret, choir, generation);
+    const record = await newPassphraseRecord(key);
+    await db.prepare(
+      `INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT (choir) DO UPDATE SET salt = ?2, hash = ?3, iterations = ?4, generation = ?5`,
+    ).bind(choir, record.salt, record.hash, record.iterations, generation).run();
+    return json({ link: true, url: joinUrl(publicOrigin(ctx.url, ctx.request.headers), choir, key) });
   }
   const passphrase = typeof body.passphrase === "string" ? body.passphrase.trim() : "";
   if (passphrase.length < 6) return json({ error: "Salasanan pitää olla vähintään 6 merkkiä." }, 400);

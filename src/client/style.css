@@ -49,6 +49,7 @@ footer { margin-top: 1.5rem; }
 .card textarea, .card input[type="text"] { width: 100%; font: inherit; padding: 0.5rem; border: 1px solid var(--line);
   border-radius: 0.4rem; margin-bottom: 0.4rem; }
 .card .row input[type="text"] { width: auto; flex: 1; margin: 0; }
+.join { background: var(--accent-soft); border-color: var(--accent-soft); padding: 0.2rem 1rem 1rem; }
 .members { list-style: none; padding: 0; }
 .members li { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 0.3rem 0; }
 

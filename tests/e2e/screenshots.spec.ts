@@ -59,3 +59,24 @@ test("refused and admin pages", async ({ page, browser }) => {
   await expect(admin.getByRole("heading", { name: "Ylläpito" })).toBeVisible();
   await admin.screenshot({ path: `${dir}/admin.png`, fullPage: true });
 });
+
+test("choir link: the join offer and the admin's link", async ({ page, browser }) => {
+  const linked = await browser.newContext();
+  const linkedPage = await linked.newPage();
+  await linkedPage.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  await expect(linkedPage.getByRole("link", { name: "Lisää Google-tili" })).toBeVisible();
+  await expect(linkedPage.getByRole("link", { name: "Kokeilulaulu" })).toBeVisible();
+  await linkedPage.screenshot({ path: `${dir}/join-offer-phone.png` });
+  await linked.close();
+
+  await signInAs(page, "/admin", "yllapito@example.com");
+  const jm = page.locator('[data-choir="jm"]');
+  page.once("dialog", (dialog) => dialog.accept());
+  await jm.getByRole("button", { name: "Tee uusi linkki" }).click();
+  await expect(jm.getByLabel("Linkki: Joensuun Mieslaulajat")).toHaveValue(/passphrase=/);
+  await page.screenshot({ path: `${dir}/admin-link-phone.png`, fullPage: true });
+  await page.evaluate(async (passphrase) => fetch("/api/admin/link", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ choir: "jm", passphrase }),
+  }), PASSPHRASE);
+});

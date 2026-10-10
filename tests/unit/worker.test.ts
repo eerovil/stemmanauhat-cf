@@ -3,6 +3,7 @@ import { decideAccess, type AccessFacts } from "../../src/worker/access";
 import { parseRange, safeSongPath } from "../../src/worker/files";
 import { readEmail } from "../../src/worker/google";
 import { parseEmails, safeNext, versionOf } from "../../src/worker/index";
+import { joinUrl, linkKey } from "../../src/worker/links";
 import { publicOrigin } from "../../src/worker/origin";
 import { newPassphraseRecord, passphraseMatches } from "../../src/worker/passphrase";
 import { readSession, sessionCookie } from "../../src/worker/session";
@@ -134,5 +135,19 @@ describe("publicOrigin", () => {
     expect(publicOrigin(worker, new Headers({ ...proxied, "X-Forwarded-Proto": "http" })))
       .toBe("https://stemmanauhat.eerovil.workers.dev");
     expect(publicOrigin(new URL("http://127.0.0.1:8787/"), new Headers(proxied))).toBe("http://127.0.0.1:8787");
+  });
+});
+
+describe("choir links", () => {
+  it("give one key per choir and generation, from the secret", async () => {
+    const key = await linkKey("secret", "jm", 2);
+    expect(key).toHaveLength(24);
+    expect(await linkKey("secret", "jm", 2)).toBe(key);
+    expect(await linkKey("secret", "jm", 3)).not.toBe(key);
+    expect(await linkKey("secret", "naiskuoro", 2)).not.toBe(key);
+    expect(await linkKey("other", "jm", 2)).not.toBe(key);
+  });
+  it("use the old site's link shape", () => {
+    expect(joinUrl("https://x.example", "jm", "a-b_c")).toBe("https://x.example/?user=jm&passphrase=a-b_c");
   });
 });
