@@ -105,10 +105,11 @@ export class FilePlayer {
     if (!this.swapping) this.audio.currentTime = this.position / this.fileRate;
   }
 
+  /** Renders the song again at the new tempo, once the tapping stops. */
   setRate(rate: number): void {
     if (rate === this.rate) return;
     this.rate = rate;
-    this.request();
+    this.mixLater(400);
   }
 
   sounding(): boolean {
@@ -122,10 +123,10 @@ export class FilePlayer {
     if (this.url) URL.revokeObjectURL(this.url);
   }
 
-  /** Mix changes come in bursts (a slider): mix once they settle. */
-  private mixLater(): void {
+  /** Changes come in bursts (a slider, tapping the tempo): make the file once they settle. */
+  private mixLater(wait = 150): void {
     window.clearTimeout(this.remix);
-    this.remix = window.setTimeout(() => this.request(), 150);
+    this.remix = window.setTimeout(() => this.request(), wait);
   }
 
   private request(): void {
