@@ -14,6 +14,8 @@ test("player on a phone: first visit, playing, settings, own staff", async ({ pa
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.screenshot({ path: `${dir}/player-asks-part-phone.png` });
   await page.getByRole("dialog").getByRole("button", { name: "Basso", exact: true }).click();
+  await expect(page.getByRole("note")).toBeVisible();
+  await page.screenshot({ path: `${dir}/player-hint-phone.png` });
   await page.getByRole("button", { name: "Selvä" }).click();
   await page.getByRole("button", { name: "Soita" }).click();
   await expect(page.getByTestId("cursor")).toHaveAttribute("data-measure", "2", { timeout: 10_000 });

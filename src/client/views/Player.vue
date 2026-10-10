@@ -456,10 +456,14 @@ function onPointerUp(event: PointerEvent) {
         </div>
       </div>
 
-      <p v-if="showHint && !askPart" class="toast" :style="{ bottom: `${dockHeight + 10}px` }">
-        Napauta nuottia: soita / tauko · Vedä nuottia sivulle: siirry eteen tai taakse
-        <button type="button" class="toast-btn" @click="dismissHint">Selvä</button>
-      </p>
+      <!-- A one-time hint: a small card above the dock, like the other sheets. -->
+      <div v-if="showHint && !askPart && !sheetOpen" class="hint-card" role="note" :style="{ bottom: `${dockHeight + 12}px` }">
+        <ul>
+          <li><Icon name="tap" :size="20" /><span><b>Napauta</b> nuottia: soita tai pysäytä</span></li>
+          <li v-if="singleLine"><Icon name="scroll" :size="20" /><span><b>Vedä</b> nuottia sivulle: siirry</span></li>
+        </ul>
+        <button type="button" @click="dismissHint">Selvä</button>
+      </div>
 
       <!-- Säädöt: a sheet just above the dock; a tap on the dimmed score closes it. -->
       <div v-if="sheetOpen" class="backdrop" @click="closePanels"></div>
