@@ -180,6 +180,18 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
     .toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("group", { name: "Nuotin koko" })).toContainText("115 %");
 
+  // A tempo saved for a song before tempo carried is not lost: it becomes the carried one.
+  await page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem("stemmanauhat:settings") ?? "{}");
+    delete settings.rate;
+    localStorage.setItem("stemmanauhat:settings", JSON.stringify(settings));
+    localStorage.setItem("stemmanauhat:song:public/esittely", JSON.stringify({ part: "Tenori", rate: 0.8 }));
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("80 %");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("stemmanauhat:settings")!).rate)).toBe(0.8);
+
   // The song is remembered on the choir's list.
   await page.goto("/c/jm");
   await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();

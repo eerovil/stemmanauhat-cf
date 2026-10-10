@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
-  carriedSettings, carrySettings, getJson, Refused, remembered, rememberSong, songMemory,
+  carriedSettings, carrySettings, getJson, Refused, remembered, rememberSong, songMemory, validRate,
   type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
@@ -133,7 +133,12 @@ onMounted(async () => {
     mixer.onEnded = () => { playing.value = false; };
     setMode(carried.mode ?? "focus", false);
     if (carried.others !== undefined && carried.mode !== "minus" && carried.mode !== "solo") setOthers(carried.others, false);
-    if (carried.rate) setRate(carried.rate, false);
+    // Before tempo carried, each song kept its own: the first song opened after
+    // the change hands its tempo on, so nobody's saved tempo resets to 100 %.
+    const carriedRate = validRate(carried.rate);
+    const oldRate = validRate(memory.rate);
+    if (carriedRate) setRate(carriedRate, false);
+    else if (oldRate) setRate(oldRate);
     loading.value = false;
     // The score box exists only once loading is false.
     await new Promise(requestAnimationFrame);
