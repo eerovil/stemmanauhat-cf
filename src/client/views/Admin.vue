@@ -8,13 +8,14 @@ interface AdminChoir {
   name: string;
   members: { email: string; added_at: string }[];
   link: boolean;
+  /** The join link, or null when the link was set by passphrase and cannot be shown. */
+  url: string | null;
 }
 
 const choirs = ref<AdminChoir[]>([]);
 const admins = ref<string[]>([]);
 const refused = ref<number | null>(null);
 const toAdd = reactive<Record<string, string>>({});
-const passphrase = reactive<Record<string, string>>({});
 const message = reactive<Record<string, string>>({});
 
 async function load() {
@@ -48,10 +49,14 @@ const remove = (choir: string, email: string) => run(choir, async () => {
   await postJson("/api/admin/members", { choir, remove: [email] });
   return `Poistettu ${email}.`;
 });
-const setLink = (choir: string) => run(choir, async () => {
-  await postJson("/api/admin/link", { choir, passphrase: passphrase[choir] ?? "" });
-  passphrase[choir] = "";
-  return "Salasana vaihdettu. Vanhalla linkillä tulleet on kirjattu ulos.";
+const renewLink = (choir: string, had: boolean) => run(choir, async () => {
+  if (had && !confirm("Tehdäänkö uusi linkki? Vanha linkki lakkaa toimimaan.")) return "";
+  await postJson("/api/admin/link", { choir, renew: true });
+  return had ? "Uusi linkki tehty. Vanhalla linkillä tulleet on kirjattu ulos." : "Linkki tehty.";
+});
+const copy = (choir: string, url: string) => run(choir, async () => {
+  await navigator.clipboard.writeText(url);
+  return "Linkki kopioitu.";
 });
 const linkOff = (choir: string) => run(choir, async () => {
   if (!confirm("Poistetaanko linkillä kirjautuminen tästä kuorosta?")) return "";
@@ -79,12 +84,16 @@ const linkOff = (choir: string) => run(choir, async () => {
         </li>
       </ul>
 
-      <h3>Vanha linkki</h3>
-      <p class="hint">{{ c.link ? "Linkillä pääsee sisään ilman Google-tiliä." : "Linkillä kirjautuminen on pois päältä." }}</p>
+      <h3>Kuoron linkki</h3>
+      <p class="hint">Linkillä pääsee kappaleisiin heti, ja Google-tilin voi lisätä jäseneksi samalla.</p>
+      <p v-if="c.url" class="row">
+        <input :value="c.url" type="text" readonly :aria-label="`Linkki: ${c.name}`" @focus="($event.target as HTMLInputElement).select()" />
+        <button type="button" @click="copy(c.id, c.url)">Kopioi</button>
+      </p>
+      <p v-else-if="c.link" class="hint">Vanha linkki on käytössä, mutta sitä ei voi näyttää. Tee uusi, jos haluat jakaa linkin täältä.</p>
+      <p v-else class="hint">Linkillä kirjautuminen on pois päältä.</p>
       <div class="row">
-        <input v-model="passphrase[c.id]" type="text" autocomplete="off" placeholder="Uusi salasana"
-          :aria-label="`Uusi salasana: ${c.name}`" />
-        <button type="button" @click="setLink(c.id)">Vaihda</button>
+        <button type="button" @click="renewLink(c.id, c.link)">{{ c.link ? "Tee uusi linkki" : "Tee linkki" }}</button>
         <button v-if="c.link" type="button" class="link" @click="linkOff(c.id)">Pois päältä</button>
       </div>
     </section>
