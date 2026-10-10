@@ -60,15 +60,23 @@ Still to do:
 
 ## Publishing songs by hand
 
-Until song-app's own publish uploads `score.mid` (eerovil/musescore-choir-plugins#382), a bundle that
-song-app built (`manifest.json`, `score.musicxml`, `score.mid`, `timing.json`, `parts/`) goes up with
+Until song-app's own publish uploads `score.mid`, songs go up in two steps. First build each
+song's bundle with song-app's own code, on the host where song-app and MuseScore live:
 
 ```sh
-./scripts/publish-songs.sh public <bundle-dir> ...          # the live site
-./scripts/publish-songs.sh --local public <bundle-dir> ...  # the local one
+<song-app>/.venv/bin/python scripts/song-app-bundle.py <song-app> /tmp/bundles <slug> ...
 ```
 
-It writes the same R2 layout and D1 row as song-app. Only public-domain songs go in `public`.
+Each `/tmp/bundles/<slug>/` then holds `manifest.json`, `score.musicxml`, `score.mid`,
+`timing.json` and `parts/`. Then upload them:
+
+```sh
+./scripts/publish-songs.sh public /tmp/bundles/<slug> ...          # the live site
+./scripts/publish-songs.sh --local public /tmp/bundles/<slug> ...  # the local one
+```
+
+It writes the same R2 layout and D1 row as song-app. Only public-domain songs go in `public`
+(every composer, lyricist, translator and arranger died over 70 years ago).
 
 ## The piano
 
