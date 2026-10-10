@@ -37,7 +37,7 @@ async function render(rate: number): Promise<RenderedParts> {
   // Two seconds past the last note, for the piano and the reverb to ring out.
   const frames = Math.ceil((song.duration / rate + 2) * sampleRate);
   const parts = partChannels.map(() => new Int16Array(frames));
-  const effects = new Int16Array(frames * 2);
+  const effects = new Int16Array(frames);
   const outs = Array.from({ length: 16 }, () => [new Float32Array(128), new Float32Array(128)]);
   const fxL = new Float32Array(128);
   const fxR = new Float32Array(128);
@@ -56,10 +56,7 @@ async function render(rate: number): Promise<RenderedParts> {
         parts[p]![at + k] = clip(v);
       }
     });
-    for (let k = 0; k < n; k++) {
-      effects[2 * (at + k)] = clip(fxL[k]!);
-      effects[2 * (at + k) + 1] = clip(fxR[k]!);
-    }
+    for (let k = 0; k < n; k++) effects[at + k] = clip((fxL[k]! + fxR[k]!) / 2);
     if ((at / 128) % 2000 === 0) post({ type: "progress", fraction: at / frames });
   }
   return { sampleRate, parts, effects };

@@ -17,7 +17,8 @@ export function wantsFilePlayback(userAgent = navigator.userAgent): boolean {
   return /Android/.test(userAgent) && /Firefox\//.test(userAgent);
 }
 
-const SAMPLE_RATE = 44100;
+/** Low enough for Firefox to keep up while the page animates (see wav.ts); Eero heard no difference from 32 kHz. */
+const SAMPLE_RATE = 22050;
 /** The Web Audio player's limiter sits at -3 dB. */
 const CEILING = 10 ** (-3 / 20);
 
