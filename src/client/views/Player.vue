@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   carriedSettings, carrySettings, getJson, Refused, remembered, rememberSong, songMemory,
   type Me, type MixMode, type Song,
@@ -54,17 +54,11 @@ type StaffMode = "all" | "own";
 const staffMode = ref<StaffMode>("all");
 const singleLine = computed(() => staffMode.value === "all");
 const ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2];
+/**
+ * The note size: a staff is always the same height on this device, however many
+ * staves the song has and whichever view shows it (Eero, eerovil/stemmanauhat-cf#24).
+ */
 const zoom = ref(remembered.zoom());
-/**
- * The zoom at which "Kaikki" fills its area; the − / + buttons scale from it.
- * "Oma" uses it too, so the staves stay the same size when the view changes.
- */
-let fitZoom = 1;
-/**
- * "Kaikki"'s line at OSMD zoom 1: its height and a bar's average width. Kept
- * apart from the screen-width base size, which changes when a phone turns.
- */
-let lineSize: { height: number; barWidth: number } | null = null;
 
 const sheetOpen = ref(false);
 const askPart = ref(false);
@@ -95,6 +89,8 @@ let timing: Timing | null = null;
 let frame = 0;
 let lastTop = -1;
 let resizeTimer: number | undefined;
+/** The width the score was last laid out for: only a new width needs a new layout. */
+let laidOutWidth = 0;
 
 const duration = computed(() => song.value?.duration ?? 0);
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -120,8 +116,7 @@ onMounted(async () => {
   myPart.value = Math.max(0, part);
   askPart.value = firstAsk.value = part < 0;
   showHint.value = !localStorage.getItem("stemmanauhat:hint-seen");
-  // The listening mix and the staves follow the singer from song to song;
-  // the part and the tempo belong to the song.
+  // The settings follow the singer from song to song; the part belongs to the song.
   const carried = carriedSettings();
   staffMode.value = carried.staves === "own" ? "own" : "all";
 
@@ -138,7 +133,7 @@ onMounted(async () => {
     mixer.onEnded = () => { playing.value = false; };
     setMode(carried.mode ?? "focus", false);
     if (carried.others !== undefined && carried.mode !== "minus" && carried.mode !== "solo") setOthers(carried.others, false);
-    if (memory.rate) setRate(memory.rate, false);
+    if (carried.rate) setRate(carried.rate, false);
     loading.value = false;
     // The score box exists only once loading is false.
     await new Promise(requestAnimationFrame);
@@ -147,18 +142,10 @@ onMounted(async () => {
     score = new Score(scoreBox.value!);
     score.barLengths = barLengths(timing);
     if (dock.value) dockObserver.observe(dock.value);
-    // Laid out as "Kaikki" first, even for "Oma": its size is the size of both.
-    score.singleLine = true;
+    score.singleLine = singleLine.value;
     score.zoom = zoom.value;
-    await score.load(xml);
-    if (!singleLine.value) {
-      fit();
-      score.singleLine = false;
-      score.zoom = fitZoom * zoom.value;
-      score.setVisible(visibleParts());
-    }
-    await new Promise(requestAnimationFrame);
-    fit();
+    await score.load(xml, visibleParts());
+    laidOutWidth = window.innerWidth;
     window.addEventListener("resize", onResize);
     frame = requestAnimationFrame(tick);
   } catch (error) {
@@ -197,9 +184,19 @@ function reload() {
   location.reload();
 }
 
+/**
+ * Laid out again only for a new width (page lines re-wrap, a phone turns). A
+ * phone's address bar showing or hiding changes just the height: laying out
+ * then made the one-line view jump in the middle of a song.
+ */
 function onResize() {
   window.clearTimeout(resizeTimer);
-  resizeTimer = window.setTimeout(() => { score?.render(); fit(); }, 250);
+  resizeTimer = window.setTimeout(() => {
+    if (window.innerWidth === laidOutWidth) return;
+    laidOutWidth = window.innerWidth;
+    score?.render();
+    lastTop = -1;
+  }, 250);
 }
 
 /**
@@ -261,9 +258,12 @@ function scrollTo(t: number) {
   if (!curve || curveVersion !== score.version) {
     const s = score;
     const tm = timing;
+    let last = 0;
     curve = buildCurve(duration.value, (sec) => {
       const p = positionAt(tm, sec);
-      return s.xAt(p.measure, p.beat) ?? 0;
+      // A bar with nothing drawn stays where the music was, not at the song's start.
+      last = s.xAt(p.measure, p.beat) ?? last;
+      return last;
     }, box.clientWidth * JUMP_FRACTION);
     curveVersion = score.version;
   }
@@ -306,40 +306,13 @@ function verticalOffset(boxHeight: number): number {
   return Math.min(room, Math.max(0, (span.top + span.bottom) / 2 - boxHeight / 2));
 }
 
-/**
- * Sizes the score: in the one-line view the staves fill the height, but never
- * so big that fewer than about three bars fit across (singers read ahead).
- * "Oma" keeps that size. The singer's − / + choice is a factor on top.
- */
-function fit() {
-  if (!score) return;
-  measureLine();
-  const box = scrollBox.value;
-  if (box && lineSize) {
-    // The one-line view fills the screen above the dock; the page view is as wide.
-    const height = singleLine.value ? box.clientHeight : window.innerHeight - (dock.value?.offsetHeight ?? 0);
-    const byHeight = (height * 0.92) / (lineSize.height * score.baseZoom);
-    const byWidth = box.clientWidth / (3 * lineSize.barWidth * score.baseZoom);
-    fitZoom = Math.min(3, Math.max(0.3, Math.min(byHeight, byWidth)));
-  }
-  score.setZoom(fitZoom * zoom.value);
-  lastTop = -1;
-}
-
-/** Notes "Kaikki"'s size while the score is laid out as it. */
-function measureLine() {
-  if (!score || !score.singleLine || !score.height) return;
-  const scale = score.zoom * score.baseZoom;
-  lineSize = { height: score.height / scale, barWidth: score.width / Math.max(1, score.barCount) / scale };
-}
-
 function changeZoom(step: number) {
   const i = ZOOMS.findIndex((z) => z >= zoom.value - 1e-6);
   const next = ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, (i < 0 ? ZOOMS.length - 1 : i) + step))]!;
   if (next === zoom.value) return;
   zoom.value = next;
   remembered.setZoom(next);
-  score?.setZoom(fitZoom * next);
+  score?.setZoom(next);
   lastTop = -1;
 }
 
@@ -348,18 +321,19 @@ function visibleParts(): boolean[] {
   return song.value!.parts.map((_, i) => singleLine.value || i === myPart.value);
 }
 
-function setStaffMode(next: StaffMode) {
+async function setStaffMode(next: StaffMode) {
   if (!score || next === staffMode.value) return;
   staffMode.value = next;
+  // Laid out once the page is in the new view: the one-line view's box is as wide as its content.
+  await nextTick();
   carrySettings({ staves: next });
   const wrap = scrollBox.value?.firstElementChild as HTMLElement | null;
   if (wrap) wrap.style.transform = "";
   leavePieces(wrap);
   window.scrollTo(0, 0);
   score.singleLine = singleLine.value;
-  score.zoom = fitZoom * zoom.value;
   score.setVisible(visibleParts());
-  void new Promise(requestAnimationFrame).then(fit);
+  lastTop = -1;
 }
 
 function choosePart(index: number) {
@@ -372,7 +346,7 @@ function choosePart(index: number) {
   if (mixer) levels.value = mixer.effectiveLevels();
   if (ownStaffChanges && score) {
     score.setVisible(visibleParts());
-    fit();
+    lastTop = -1;
   }
 }
 
@@ -404,7 +378,7 @@ function onOthersSlider(value: number) {
 
 function setRate(value: number, save = true) {
   rate.value = value;
-  if (save) rememberSong(props.choir, props.slug, { rate: value });
+  if (save) carrySettings({ rate: value });
   mixer?.setRate(value);
 }
 

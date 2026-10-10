@@ -80,10 +80,9 @@ export type SongOrder = "name" | "date";
 
 export type MixMode = "focus" | "equal" | "minus" | "solo";
 
-/** What this browser remembers about one song: the singer's part and tempo there. */
+/** What this browser remembers about one song: the singer's part there. */
 export interface SongMemory {
   part?: string;
-  rate?: number;
 }
 
 export function songMemory(choir: string, slug: string): SongMemory {
@@ -105,6 +104,8 @@ export interface CarriedSettings {
   mode?: MixMode;
   others?: number;
   staves?: "all" | "own";
+  /** The tempo, 0.5–1.5 of the written one. */
+  rate?: number;
 }
 
 export function carriedSettings(): CarriedSettings {

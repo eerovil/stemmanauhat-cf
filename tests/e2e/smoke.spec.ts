@@ -71,6 +71,19 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   expect(mine.y + mine.height).toBeLessThanOrEqual(view.y + view.height);
   await page.getByRole("button", { name: "Tauko" }).click();
 
+  // Only the height changing (a phone's address bar, a short window): the notes keep
+  // their size and the line stays where it was.
+  const notehead = () => page.getByTestId("score").locator("g.vf-notehead").first()
+    .evaluate((el) => el.getBoundingClientRect().height);
+  const headBefore = await notehead();
+  const shiftBefore = await shift();
+  await page.setViewportSize({ width: 412, height: 360 });
+  await page.waitForTimeout(600);
+  expect(Math.abs((await notehead()) - headBefore)).toBeLessThan(0.5);
+  expect(Math.abs((await shift()) - shiftBefore)).toBeLessThan(1);
+  await page.setViewportSize({ width: 412, height: 839 });
+  await page.waitForTimeout(600);
+
   // Dragging the line sideways moves through the song: left is forward, right is back.
   const position = async () => Number(await page.locator("input.progress").inputValue());
   await page.locator("input.progress").fill("1");
@@ -130,7 +143,7 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   expect(await widest()).toBeLessThanOrEqual(0);
   await page.getByRole("button", { name: "Sulje säädöt" }).click();
 
-  // Turned sideways in "Oma" (past the 600 px width where the base size changes), then back to "Kaikki".
+  // Turned sideways in "Oma", then back to "Kaikki": the notes keep their size.
   await page.setViewportSize({ width: 839, height: 412 });
   await page.waitForTimeout(1000);
   const turnedNote = await noteSize();
@@ -149,7 +162,7 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await expect.poll(height).toBeGreaterThan(small);
   expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:zoom"))).toBe("1.15");
 
-  // Tempo belongs to the song; the listening choice follows the singer to the next song.
+  // The tempo, the listening choice and the note size follow the singer to the next song.
   await page.getByRole("button", { name: "Nopeammin" }).click();
   await page.getByRole("group", { name: "Miten kuuntelet" }).getByRole("button", { name: "Ilman omaa" }).click();
   await page.reload();
@@ -162,9 +175,10 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await page.goto("/c/public/esittely");
   await choosePartIfAsked(page, "Tenori");
   await page.getByRole("button", { name: "Säädöt" }).click();
-  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("Normaali");
+  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("105 %");
   await expect(page.getByRole("group", { name: "Miten kuuntelet" }).getByRole("button", { name: "Ilman omaa" }))
     .toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("group", { name: "Nuotin koko" })).toContainText("115 %");
 
   // The song is remembered on the choir's list.
   await page.goto("/c/jm");
