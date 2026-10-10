@@ -4,10 +4,70 @@ The choirs' practice-track player, hosted on Cloudflare. It replaces
 [eerovil/stemmanauhat](https://github.com/eerovil/stemmanauhat), where each song was a YouTube video per voice part behind a passphrase.
 
 - **Score:** drawn in the browser from the song's MusicXML, with a cursor that follows the music.
-- **Sound:** the same per-part MP3s MuseScore exports today, so playback sounds exactly as before. Your own part is loud and the others are quieter.
+- **Sound:** the song's MIDI from MuseScore, played in the browser with MuseScore's own grand piano. Every part runs on one clock, so they stay exactly together; your own part is loud and the others are quieter.
 - **Login:** Google sign-in with a per-choir email allow-list.
 - **Songs:** published by song-app ([eerovil/musescore-choir-plugins](https://github.com/eerovil/musescore-choir-plugins)).
 
-**No data in this repository.** Songs (MusicXML, MP3s, timing files) live in Cloudflare R2. The email allow-lists live in Cloudflare D1. Secrets are Cloudflare secrets. This repo is public and holds code only.
+**No data in this repository.** Songs (MusicXML, MIDI, timing files) live in Cloudflare R2. The email allow-lists live in Cloudflare D1. Secrets are Cloudflare secrets. This repo is public and holds code only.
 
-Status: being built; see the open issues.
+Live address (once set up): https://stemmanauhat.eerovil.workers.dev
+
+## How it works
+
+- **Who gets in:** a Google account on the choir's email list, or a browser that opened the choir's
+  old link (`/?user=jm&passphrase=...`). The old link is checked against a hash in D1 and then
+  removed from the address bar. `public` is open to everyone. Admins manage the lists and the
+  passphrases at `/admin`.
+- **Songs:** song-app writes each version to R2 under `songs/<choir>/<slug>/<version>/` and points
+  a D1 `songs` row at it. The format is in song-app's `docs/stemmanauhat-site.md`.
+- **Player:** the score is drawn by OpenSheetMusicDisplay with the videos' blue for the notes being
+  sung and their translucent cursor band. "Kaikki" shows every staff that fits on one line sliding
+  sideways under a fixed cursor (drag it to move); "Oma" shows your own staff alone in page lines.
+  One bottom bar: back, the song with its bar number (tap to jump to a bar), your part (tap to
+  change), play, and Säädöt: how you listen (Oma esillä / Tasan / Ilman omaa / Vain oma), the other
+  parts' level, tempo, score size and staves. Tapping the score plays or pauses. Your part and tempo
+  are remembered per song; how you listen, the staves and the size carry from song to song.
+  `score.mid` is played by spessasynth (an AudioWorklet synth) with MuseScore's grand piano: each
+  part's MIDI channel has its own gain, then +15 dB and a limiter. `timing.json` (from the same
+  MIDI clock) moves the cursor.
+
+## Running it
+
+There is no node on the host, so everything runs in the Playwright container:
+
+```sh
+./scripts/run.sh corepack pnpm install
+./scripts/run.sh corepack pnpm test        # typecheck, unit tests, browser tests
+./scripts/run.sh --serve corepack pnpm dev # needs .dev.vars with SESSION_SECRET etc.
+```
+
+## Setting up Cloudflare (once)
+
+Done already: the D1 database `stemmanauhat` and the R2 bucket `stemmanauhat` exist in the
+ruokalista Cloudflare account, with the migrations applied (`scripts/cloudflare-setup.sh`, which is
+safe to run again). The credentials are in `~/.local/share/stemmanauhat/cloudflare.env`.
+
+Still to do:
+
+1. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets (the same
+   values as in that file). Until then the deploy job skips itself.
+2. Merge to `main`: CI tests, migrates and deploys.
+3. Create a Google OAuth client (web app) with the redirect URI
+   `https://stemmanauhat.eerovil.workers.dev/auth/callback`, then run
+   `./scripts/set-worker-secrets.sh`, which also creates `SESSION_SECRET`.
+4. `./scripts/add-admin.sh <your Google email>`, sign in, and set each choir's passphrase at
+   `/admin` (or with `./scripts/set-passphrase.sh jm`) to today's, so the old links keep working.
+
+## The piano
+
+`scripts/make-piano-soundfont.mjs` cuts MuseScore's `MuseScore_General.sf3` (MIT licensed, inside
+MuseScore 3) down to the grand piano, and `scripts/upload-piano.sh` puts it in R2 as
+`sound/piano-1.sf3` (done for the live bucket on 2026-10-09). A new piano needs a new name.
+
+## Moving off YouTube
+
+1. Publish every song in the old lists from song-app (eerovil/musescore-choir-plugins#382).
+2. Check each one plays on the new site.
+3. Merge eerovil/stemmanauhat#9: the old address becomes a redirect here, and the YouTube
+   workflow goes away.
+4. Delete the YouTube videos with song-app's "Delete from YouTube".

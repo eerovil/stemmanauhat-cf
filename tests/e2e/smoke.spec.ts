@@ -1,0 +1,163 @@
+import { expect, test } from "@playwright/test";
+import { choosePartIfAsked, fetchIn, gains, PASSPHRASE, playAndSeeCursorMove, signInAs } from "./helpers";
+
+test("a member signs in with Google, plays a song, and the cursor follows", async ({ page }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await expect(page).toHaveURL(/\/c\/jm$/);
+  await expect(page.getByRole("heading", { name: "Joensuun Mieslaulajat" })).toBeVisible();
+  await page.getByRole("link", { name: "Kokeilulaulu" }).click();
+
+  // The first time, the singer is asked for their part rather than given the first one.
+  const dialog = page.getByRole("dialog", { name: "Valitse oma stemma" });
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(10, 10);
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Tenori", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator(".info-title")).toHaveText("Kokeilulaulu");
+  await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toHaveText("Tenori");
+
+  // A one-time hint explains tapping and dragging the score.
+  await page.getByRole("button", { name: "Selvä" }).click();
+
+  // Your part loud and the others quieter; the four ways of listening.
+  await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.160");
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  const listen = page.getByRole("group", { name: "Miten kuuntelet" });
+  await listen.getByRole("button", { name: "Ilman omaa" }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "0.000 1.000");
+  await listen.getByRole("button", { name: "Tasan" }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "0.580 0.580");
+  await listen.getByRole("button", { name: "Vain oma" }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.000");
+  await listen.getByRole("button", { name: "Oma esillä" }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.160");
+
+  // A tap outside the panel (here on the score) closes it, without starting playback.
+  await page.locator(".backdrop").click({ position: { x: 100, y: 100 } });
+  await expect(page.locator(".dock-sheet")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
+
+  // Changing part goes through the same picker.
+  await page.getByRole("button", { name: "Vaihda oma stemma" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Basso", exact: true }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "0.160 1.000");
+  await page.getByRole("button", { name: "Vaihda oma stemma" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Tenori", exact: true }).click();
+
+  await playAndSeeCursorMove(page);
+
+  // The bar number, not seconds, and a jump to any bar by its number.
+  await page.getByRole("button", { name: "Tauko" }).click();
+  await page.getByRole("button", { name: "Siirry tahtiin" }).click();
+  await page.getByLabel("Tahdin numero").fill("3");
+  await page.getByRole("button", { name: "Mene" }).click();
+  await expect(page.locator(".info-meta")).toContainText("Tahti 3 / 4");
+
+  // "Kaikki": one line sliding sideways; the page never scrolls; your note stays in view.
+  const scroller = page.getByTestId("score-scroll");
+  await page.getByRole("button", { name: "Soita" }).click();
+  const shift = () => scroller.evaluate((el) => (el.firstElementChild as HTMLElement).getBoundingClientRect().left
+    - el.getBoundingClientRect().left);
+  await expect.poll(shift, { timeout: 10_000 }).toBeLessThan(0);
+  expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= innerHeight)).toBe(true);
+  const view = (await scroller.boundingBox())!;
+  const mine = (await page.getByTestId("score").locator(".lit-focus").first().boundingBox())!;
+  expect(mine.y).toBeGreaterThanOrEqual(view.y);
+  expect(mine.y + mine.height).toBeLessThanOrEqual(view.y + view.height);
+  await page.getByRole("button", { name: "Tauko" }).click();
+
+  // Dragging the line sideways moves through the song: left is forward, right is back.
+  const position = async () => Number(await page.locator("input.progress").inputValue());
+  await page.locator("input.progress").fill("1");
+  const line = (await scroller.boundingBox())!;
+  const drag = async (from: number, by: number) => {
+    const y = line.y + line.height / 2;
+    await page.mouse.move(line.x + from, y);
+    await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(line.x + from + (by * i) / 8, y);
+    await page.mouse.up();
+  };
+  const start = await position();
+  await drag(250, -120);
+  const forward = await position();
+  expect(forward).toBeGreaterThan(start + 0.5);
+  await drag(100, 60);
+  expect(await position()).toBeLessThan(forward - 0.2);
+
+  // A tap on the score plays, and another pauses.
+  await scroller.click();
+  await expect(page.getByRole("button", { name: "Tauko" })).toBeVisible();
+  await scroller.click();
+  await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
+
+  // "Oma": your staff alone, in page lines, the page no longer a single line.
+  const staffNotes = () => page.getByTestId("score").locator("g.vf-stavenote").count();
+  const before = await staffNotes();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  const staves = page.getByRole("group", { name: "Viivastot" });
+  await staves.getByRole("button", { name: "Oma" }).click();
+  await expect.poll(staffNotes).toBe(before / 2);
+  await expect(page.locator(".player.one-line")).toHaveCount(0);
+  await staves.getByRole("button", { name: "Kaikki" }).click();
+  await expect.poll(staffNotes).toBe(before);
+  await expect(page.locator(".player.one-line")).toHaveCount(1);
+
+  // Zoom makes the score bigger, and the size is remembered.
+  const height = async () => (await page.getByTestId("score").locator("svg").first().boundingBox())!.height;
+  const small = await height();
+  await page.getByRole("button", { name: "Suurenna nuottia" }).click();
+  await expect.poll(height).toBeGreaterThan(small);
+  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:zoom"))).toBe("1.15");
+
+  // Tempo belongs to the song; the listening choice follows the singer to the next song.
+  await page.getByRole("button", { name: "Nopeammin" }).click();
+  await page.getByRole("group", { name: "Miten kuuntelet" }).getByRole("button", { name: "Ilman omaa" }).click();
+  await page.reload();
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("105 %");
+  await expect(page.getByRole("group", { name: "Miten kuuntelet" }).getByRole("button", { name: "Ilman omaa" }))
+    .toHaveAttribute("aria-pressed", "true");
+  await page.goto("/c/public/esittely");
+  await choosePartIfAsked(page, "Tenori");
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("100 %");
+  await expect(page.getByRole("group", { name: "Miten kuuntelet" }).getByRole("button", { name: "Ilman omaa" }))
+    .toHaveAttribute("aria-pressed", "true");
+
+  // The song is remembered on the choir's list.
+  await page.goto("/c/jm");
+  await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();
+});
+
+test("the old passphrase link gets in without a Google account", async ({ page }) => {
+  await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  await expect(page).toHaveURL(/\/c\/jm$/);
+  await page.getByRole("link", { name: "Kokeilulaulu" }).click();
+  await choosePartIfAsked(page, "Tenori");
+  await playAndSeeCursorMove(page);
+});
+
+test("a wrong passphrase lands on sign-in", async ({ page }) => {
+  await page.goto("/?user=jm&passphrase=vaara-salasana");
+  await expect(page).toHaveURL(/\/signin\?next=%2Fc%2Fjm/);
+  await expect(page.getByRole("link", { name: "Kirjaudu Google-tilillä" })).toBeVisible();
+});
+
+test("a Google account not on the list is refused", async ({ page }) => {
+  const statuses: number[] = [];
+  page.on("response", (r) => { if (new URL(r.url()).pathname === "/c/jm") statuses.push(r.status()); });
+  await signInAs(page, "/c/jm", "ulkopuolinen@example.com");
+  await expect(page.getByText("ulkopuolinen@example.com")).toBeVisible();
+  await expect(page.getByText("ei ole pääsyä tähän kuoroon")).toBeVisible();
+  expect(statuses).toContain(403);
+  expect((await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/score.musicxml")).status).toBe(403);
+});
+
+test("the public demo opens without signing in", async ({ page }) => {
+  await page.goto("/c/public");
+  await page.getByRole("link", { name: "Esittelylaulu" }).click();
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+});
