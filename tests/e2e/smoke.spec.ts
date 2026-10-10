@@ -132,6 +132,18 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await expect(page.getByTestId("cursor")).toHaveAttribute("data-measure", "2");
   await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
 
+  // In "Oma", a shorter screen (same width) still brings the line being sung into view.
+  await page.locator("input.progress").fill("6.5");
+  await expect(page.getByTestId("cursor")).toHaveAttribute("data-measure", "3");
+  await page.setViewportSize({ width: 412, height: 200 });
+  await expect.poll(() => page.evaluate(() => {
+    const cursor = document.querySelector("[data-testid=cursor]")!.getBoundingClientRect();
+    const dock = document.querySelector(".dock")!.getBoundingClientRect();
+    return cursor.top >= 0 && cursor.bottom <= dock.top;
+  })).toBe(true);
+  await page.setViewportSize({ width: 412, height: 839 });
+  await page.waitForTimeout(600);
+
   // Zooming in "Oma" never makes the page wider than the screen, not even before the lines re-wrap.
   // (A phone widens its layout to fit wide content, so measure against the screen itself.)
   const widest = () => page.evaluate(() => Math.max(innerWidth,

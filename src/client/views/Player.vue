@@ -197,10 +197,11 @@ function reload() {
 function onResize() {
   window.clearTimeout(resizeTimer);
   resizeTimer = window.setTimeout(() => {
+    // The page view checks again that the line being sung is still in view.
+    lastTop = -1;
     if (window.innerWidth === laidOutWidth) return;
     laidOutWidth = window.innerWidth;
     score?.render();
-    lastTop = -1;
   }, 250);
 }
 
