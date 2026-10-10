@@ -3,6 +3,7 @@ import { decideAccess, type AccessFacts } from "../../src/worker/access";
 import { parseRange, safeSongPath } from "../../src/worker/files";
 import { readEmail } from "../../src/worker/google";
 import { parseEmails, safeNext, versionOf } from "../../src/worker/index";
+import { publicOrigin } from "../../src/worker/origin";
 import { newPassphraseRecord, passphraseMatches } from "../../src/worker/passphrase";
 import { readSession, sessionCookie } from "../../src/worker/session";
 import { base64UrlEncode } from "../../src/worker/signing";
@@ -117,5 +118,21 @@ describe("safeNext", () => {
 describe("versionOf", () => {
   it("takes the last folder of the prefix", () => {
     expect(versionOf("songs/jm/kokeilu/20261009T120000Z/")).toBe("20261009T120000Z");
+  });
+});
+
+describe("publicOrigin", () => {
+  const worker = new URL("https://stemmanauhat.eerovil.workers.dev/auth/login");
+  const proxied = { "X-Forwarded-Host": "stemmanauhat.vilpponen.fi", "X-Forwarded-Proto": "https" };
+  it("uses the public name behind the VPS proxy", () => {
+    expect(publicOrigin(worker, new Headers(proxied))).toBe("https://stemmanauhat.vilpponen.fi");
+  });
+  it("keeps the request origin otherwise", () => {
+    expect(publicOrigin(worker, new Headers())).toBe("https://stemmanauhat.eerovil.workers.dev");
+    expect(publicOrigin(worker, new Headers({ ...proxied, "X-Forwarded-Host": "evil.example" })))
+      .toBe("https://stemmanauhat.eerovil.workers.dev");
+    expect(publicOrigin(worker, new Headers({ ...proxied, "X-Forwarded-Proto": "http" })))
+      .toBe("https://stemmanauhat.eerovil.workers.dev");
+    expect(publicOrigin(new URL("http://127.0.0.1:8787/"), new Headers(proxied))).toBe("http://127.0.0.1:8787");
   });
 });
