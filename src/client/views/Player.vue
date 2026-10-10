@@ -6,7 +6,7 @@ import {
 } from "../api";
 import Icon from "../components/Icon.vue";
 import { MidiPlayer } from "../player/midi";
-import { DEFAULT_OTHERS } from "../player/mix";
+import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
 import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, timeAtX, type ScrollCurve } from "../player/scroll";
 import { barLengths, nearest, parseTiming, positionAt, startsOf, type Timing } from "../player/timing";
@@ -59,8 +59,6 @@ const zoom = ref(remembered.zoom());
 let fitZoom = 1;
 
 const sheetOpen = ref(false);
-const goToOpen = ref(false);
-const goToValue = ref("");
 const askPart = ref(false);
 /** True on the very first ask for this song: a part has to be chosen. */
 const firstAsk = ref(false);
@@ -367,13 +365,6 @@ function jumpTo(barIndex: number) {
   if (t !== null) mixer.seek(t);
 }
 
-/** Jumps to a bar by its number, the way the conductor names it. */
-function goToBar() {
-  const n = Math.round(Number(goToValue.value));
-  if (n >= 1 && n <= barCount.value) jumpTo(n - 1);
-  goToOpen.value = false;
-}
-
 function seekTo(event: Event) {
   mixer?.seek(Number((event.target as HTMLInputElement).value));
 }
@@ -385,14 +376,13 @@ function dismissHint() {
 
 function closePanels() {
   sheetOpen.value = false;
-  goToOpen.value = false;
 }
 
 /** A tap on the score plays or pauses; with a panel open it just closes the panel. */
 function onScoreClick() {
   if (dragJustEnded) { dragJustEnded = false; return; }
   if (showHint.value) dismissHint();
-  if (sheetOpen.value || goToOpen.value) { closePanels(); return; }
+  if (sheetOpen.value) { closePanels(); return; }
   void togglePlay();
 }
 
@@ -464,90 +454,89 @@ function onPointerUp(event: PointerEvent) {
         <button type="button" class="toast-btn" @click="dismissHint">Selvä</button>
       </p>
 
-      <div v-if="askPart" class="ask-part" role="dialog" aria-label="Valitse oma stemma"
-        @click.self="if (!firstAsk) askPart = false;">
-        <div class="ask-card">
-          <h2>Mikä on sinun stemmasi?</h2>
-          <p class="hint">Se soi kovimmin ja sen nuotit näkyvät tummalla sinisellä. Voit vaihtaa sitä myöhemmin.</p>
-          <div class="ask-grid">
-            <button v-for="(p, i) in song.parts" :key="p.file" type="button" class="ask-choice"
-              :class="{ mine: i === myPart && !firstAsk }" @click="pickPart(i)">{{ p.name }}</button>
+      <!-- Säädöt: a sheet just above the dock; a tap on the dimmed score closes it. -->
+      <div v-if="sheetOpen" class="backdrop" @click="closePanels"></div>
+      <div v-if="sheetOpen" class="sheet" :style="{ bottom: `${dockHeight - 1}px` }">
+        <div class="handle" aria-hidden="true"></div>
+        <div class="section-label">Kuuntelu</div>
+        <div class="segmented modes" role="group" aria-label="Miten kuuntelet">
+          <button v-for="m in MODES" :key="m.id" type="button" :class="{ on: mode === m.id }"
+            :aria-pressed="mode === m.id" @click="setMode(m.id)">{{ m.label }}</button>
+        </div>
+        <div class="mode-hint">{{ MODES.find((m) => m.id === mode)?.hint }}</div>
+        <div v-if="mode !== 'solo'" class="others-row">
+          <span class="row-label">Muut stemmat</span>
+          <input type="range" min="0" max="1" step="0.01" :value="others" aria-label="Muiden stemmojen voimakkuus"
+            @input="onOthersSlider(Number(($event.target as HTMLInputElement).value))" />
+          <span class="others-value">{{ Math.round(gainOf(others) * 100) }} %</span>
+        </div>
+        <div class="setting">
+          <span class="row-label">Tempo</span>
+          <div class="stepper" role="group" aria-label="Tempo">
+            <button type="button" aria-label="Hitaammin" :disabled="rate <= 0.5" @click="stepTempo(-0.05)">−</button>
+            <button type="button" class="value" aria-label="Normaali tempo" @click="setRate(1)">
+              {{ rate === 1 ? "Normaali" : `${Math.round(rate * 100)} %` }}</button>
+            <button type="button" aria-label="Nopeammin" :disabled="rate >= 1.5" @click="stepTempo(0.05)">+</button>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="section-label">Nuotti</div>
+        <div class="setting">
+          <span class="row-label">Viivastot</span>
+          <div class="segmented two" role="group" aria-label="Viivastot">
+            <button type="button" :class="{ on: staffMode === 'all' }" :aria-pressed="staffMode === 'all'"
+              @click="setStaffMode('all')">Kaikki</button>
+            <button type="button" :class="{ on: staffMode === 'own' }" :aria-pressed="staffMode === 'own'"
+              @click="setStaffMode('own')">Oma</button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="row-label">Nuotin koko</span>
+          <div class="stepper" role="group" aria-label="Nuotin koko">
+            <button type="button" aria-label="Pienennä nuottia" :disabled="zoom <= ZOOMS[0]!" @click="changeZoom(-1)">−</button>
+            <span class="value">{{ Math.round(zoom * 100) }} %</span>
+            <button type="button" aria-label="Suurenna nuottia" :disabled="zoom >= ZOOMS[ZOOMS.length - 1]!"
+              @click="changeZoom(1)">+</button>
           </div>
         </div>
       </div>
 
-      <!-- A tap anywhere outside an open panel closes it. -->
-      <div v-if="sheetOpen || goToOpen" class="backdrop" @click="closePanels"></div>
-
-      <!-- One quiet bar; everything else in a sheet. -->
+      <!-- The dock: the position line on its top edge, then one row. -->
       <section ref="dock" class="dock" :data-gains="levels.map((g) => g.toFixed(3)).join(' ')">
-        <div v-if="sheetOpen" class="dock-sheet">
-          <div class="handle" aria-hidden="true"></div>
-          <div class="srow stacked">
-            <span class="slabel">Kuuntelu</span>
-            <div class="pills four" role="group" aria-label="Miten kuuntelet">
-              <button v-for="m in MODES" :key="m.id" type="button" :class="{ on: mode === m.id }"
-                :aria-pressed="mode === m.id" @click="setMode(m.id)">{{ m.label }}</button>
-            </div>
-            <span class="snote">{{ MODES.find((m) => m.id === mode)?.hint }}</span>
-          </div>
-          <div v-if="mode !== 'solo'" class="srow">
-            <span class="slabel">Muut stemmat</span>
-            <input class="range" type="range" min="0" max="1" step="0.01" :value="others"
-              :style="{ '--fill': `${others * 100}%` }" aria-label="Muiden stemmojen voimakkuus"
-              @input="onOthersSlider(Number(($event.target as HTMLInputElement).value))" />
-          </div>
-          <div class="srow">
-            <span class="slabel">Tempo</span>
-            <div class="pills stepper" role="group" aria-label="Tempo">
-              <button type="button" aria-label="Hitaammin" :disabled="rate <= 0.5" @click="stepTempo(-0.05)">−</button>
-              <button type="button" class="val" aria-label="Normaali tempo" @click="setRate(1)">{{ Math.round(rate * 100) }} %</button>
-              <button type="button" aria-label="Nopeammin" :disabled="rate >= 1.5" @click="stepTempo(0.05)">+</button>
-            </div>
-          </div>
-          <div class="srow">
-            <span class="slabel">Nuotin koko</span>
-            <div class="pills stepper" role="group" aria-label="Nuotin koko">
-              <button type="button" aria-label="Pienennä nuottia" :disabled="zoom <= ZOOMS[0]!" @click="changeZoom(-1)">−</button>
-              <span class="val">{{ Math.round(zoom * 100) }} %</span>
-              <button type="button" aria-label="Suurenna nuottia" :disabled="zoom >= ZOOMS[ZOOMS.length - 1]!"
-                @click="changeZoom(1)">+</button>
-            </div>
-          </div>
-          <div class="srow">
-            <span class="slabel">Viivastot</span>
-            <div class="pills" role="group" aria-label="Viivastot">
-              <button type="button" :class="{ on: staffMode === 'all' }" :aria-pressed="staffMode === 'all'"
-                @click="setStaffMode('all')">Kaikki</button>
-              <button type="button" :class="{ on: staffMode === 'own' }" :aria-pressed="staffMode === 'own'"
-                @click="setStaffMode('own')">Oma</button>
-            </div>
-          </div>
-        </div>
-        <form v-if="goToOpen" class="dock-goto" @submit.prevent="goToBar">
-          <span class="slabel">Siirry tahtiin</span>
-          <input v-model="goToValue" type="number" inputmode="numeric" min="1" :max="barCount" aria-label="Tahdin numero" />
-          <button type="submit" class="go">Mene</button>
-        </form>
         <input class="progress" type="range" min="0" :max="duration" step="0.1" :value="now"
           :style="{ '--fill': `${duration ? (now / duration) * 100 : 0}%` }" aria-label="Kohta kappaleessa"
           @input="seekTo" />
-        <div class="dock-bar">
-          <a :href="`/c/${encodeURIComponent(props.choir)}`" class="ghost" aria-label="Takaisin lauluihin">
+        <div class="dock-row">
+          <a :href="`/c/${encodeURIComponent(props.choir)}`" class="back" aria-label="Takaisin lauluihin">
             <Icon name="chevronLeft" :size="24" /></a>
-          <button type="button" class="info" :aria-expanded="goToOpen" aria-label="Siirry tahtiin"
-            @click="goToOpen = !goToOpen; sheetOpen = false; goToValue = String(bar)">
+          <div class="info">
             <span class="info-title">{{ song.title }}</span>
-            <span class="info-meta">Tahti {{ bar }} / {{ barCount }} · <span data-testid="time">{{ clock(now) }}</span></span>
-          </button>
-          <button type="button" class="part-pill" aria-label="Vaihda oma stemma" @click="askPart = true">
-            <Icon name="solo" :size="15" />{{ song.parts[myPart]?.name }}</button>
-          <button type="button" class="play-btn" :aria-label="playing ? 'Tauko' : 'Soita'"
+            <span class="info-meta">Tahti {{ bar }} / {{ barCount }} ·
+              <span data-testid="time">{{ clock(now) }}</span> / {{ clock(duration) }}</span>
+          </div>
+          <button type="button" class="own" aria-label="Vaihda oma stemma" @click="askPart = true">
+            <span class="own-tag">Oma</span><span class="own-name">{{ song.parts[myPart]?.name }}</span></button>
+          <button type="button" class="play" :aria-label="playing ? 'Tauko' : 'Soita'"
             :data-sounding="sounding ? '1' : '0'" @click="togglePlay"><Icon :name="playing ? 'pause' : 'play'" :size="24" /></button>
-          <button type="button" class="ghost" :class="{ on: sheetOpen }" :aria-expanded="sheetOpen" aria-label="Säädöt"
-            @click="sheetOpen = !sheetOpen; goToOpen = false"><Icon :name="sheetOpen ? 'close' : 'more'" :size="22" /></button>
+          <button type="button" class="settings" :class="{ on: sheetOpen }" :aria-expanded="sheetOpen"
+            :aria-label="sheetOpen ? 'Sulje säädöt' : 'Säädöt'" @click="sheetOpen = !sheetOpen">
+            <Icon :name="sheetOpen ? 'close' : 'more'" :size="22" /></button>
         </div>
       </section>
+
+      <!-- Oma stemma: a sheet from the bottom, over everything. On the first visit a part must be picked. -->
+      <template v-if="askPart">
+        <div class="picker-backdrop" @click="if (!firstAsk) askPart = false;"></div>
+        <div class="picker" role="dialog" aria-label="Valitse oma stemma">
+          <div class="handle" aria-hidden="true"></div>
+          <h2>Mikä on sinun stemmasi?</h2>
+          <p>Se soi kovimmin ja sen nuotit näkyvät tummalla sinisellä. Voit vaihtaa sitä myöhemmin napauttamalla Oma-painiketta.</p>
+          <div class="picker-grid">
+            <button v-for="(p, i) in song.parts" :key="p.file" type="button"
+              :class="{ mine: i === myPart && !firstAsk }" @click="pickPart(i)">{{ p.name }}</button>
+          </div>
+        </div>
+      </template>
     </template>
   </main>
 </template>
