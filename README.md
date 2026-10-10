@@ -78,7 +78,9 @@ Each `/tmp/bundles/<slug>/` then holds `manifest.json`, `score.musicxml`, `score
 ./scripts/publish-songs.sh --local public /tmp/bundles/<slug> ...  # the local one
 ```
 
-It writes the same R2 layout and D1 row as song-app. Only public-domain songs go in `public`
+It writes the same R2 layout and D1 row as song-app. One process uploads the whole run, a few
+files at a time, so a song takes a few seconds; a song whose upload fails is left out and named
+at the end, and the others still go up. Only public-domain songs go in `public`
 (every composer, lyricist, translator and arranger died over 70 years ago).
 
 ## The piano
