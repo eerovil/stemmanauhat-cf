@@ -165,13 +165,16 @@ export class Score {
   }
 
   /** The drawn score's width in pixels. */
+  /** Measured with the layout, not on every call: reading it forces the browser to lay the page out. */
+  private size = { width: 0, height: 0 };
+
   get width(): number {
-    return this.drawing()?.getBoundingClientRect().width ?? 0;
+    return this.size.width;
   }
 
   /** The drawn score's height in pixels. */
   get height(): number {
-    return this.drawing()?.getBoundingClientRect().height ?? 0;
+    return this.size.height;
   }
 
   /**
@@ -221,6 +224,7 @@ export class Score {
     const svg = this.drawing();
     const box = this.container.getBoundingClientRect();
     const svgBox = svg?.getBoundingClientRect() ?? box;
+    this.size = svg ? { width: svgBox.width, height: svgBox.height } : { width: 0, height: 0 };
     const dx = svgBox.left - box.left;
     const dy = svgBox.top - box.top;
     const scale = UNIT * this.osmd.Zoom * this.stretch;

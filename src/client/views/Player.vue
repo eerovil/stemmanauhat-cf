@@ -196,7 +196,10 @@ function tick(frameTime: number) {
   if (!mixer || !timing || !score) return;
   const late = mixer.running ? ((performance.now() - frameTime) / 1000) * rate.value : 0;
   const t = drag?.moved ? drag.t : smoothClock.read(mixer.time() - late, mixer.running, rate.value, frameTime);
-  now.value = t;
+  // The time and the progress bar show tenths at most: updating them every frame
+  // re-rendered the controls 60 times a second, which a phone feels.
+  const shown = Math.round(t * 10) / 10;
+  if (shown !== now.value) now.value = shown;
   playing.value = mixer.playing;
   if (mixer.running && frame % 15 === 0) sounding.value = mixer.sounding();
   const position = positionAt(timing, t);
@@ -206,14 +209,19 @@ function tick(frameTime: number) {
   const spot = score.marker(position.measure, position.beat);
   const el = cursor.value;
   if (!spot || !el) return;
-  el.style.transform = `translate(${spot.x0}px, ${spot.top}px)`;
-  el.style.width = `${spot.x1 - spot.x0}px`;
-  el.style.height = `${spot.bottom - spot.top}px`;
-  el.dataset.measure = String(position.measure);
-  el.dataset.lit = String(lit);
+  // Written only when they change: each write makes the browser restyle the page.
+  setStyle(el, "transform", `translate(${spot.x0}px, ${spot.top}px)`);
+  setStyle(el, "width", `${spot.x1 - spot.x0}px`);
+  setStyle(el, "height", `${spot.bottom - spot.top}px`);
+  if (el.dataset.measure !== String(position.measure)) el.dataset.measure = String(position.measure);
+  if (el.dataset.lit !== String(lit)) el.dataset.lit = String(lit);
   if (singleLine.value) scrollTo(t);
   else if (spot.top !== lastTop) keepInView(spot.top, spot.bottom);
   lastTop = spot.top;
+}
+
+function setStyle(el: HTMLElement, name: "transform" | "width" | "height", value: string) {
+  if (el.style[name] !== value) el.style[name] = value;
 }
 
 /** "Oma" view: scroll the page so the line being sung sits in the upper part of the screen. */
