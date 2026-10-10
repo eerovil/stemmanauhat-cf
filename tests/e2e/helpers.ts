@@ -11,10 +11,17 @@ export async function signInAs(page: Page, path: string, email: string) {
   await page.getByRole("button", { name: "Continue" }).click();
 }
 
+/**
+ * The score as shown: the drawing, or on Firefox for Android the moving picture
+ * pieces cut from it (player/slide.ts), with the drawing hidden.
+ */
+export function shownScore(page: Page) {
+  return page.locator("[data-testid=score] svg:not(.highlights), .score-pieces canvas").filter({ visible: true }).first();
+}
+
 /** Plays from the start and checks the time and the cursor both move. */
 export async function playAndSeeCursorMove(page: Page) {
-  const score = page.getByTestId("score");
-  await expect(score.locator("svg").first()).toBeVisible();
+  await expect(shownScore(page)).toBeVisible();
   const cursor = page.getByTestId("cursor");
   await expect(cursor).toHaveAttribute("data-measure", "0");
   const before = await cursor.evaluate((el) => (el as HTMLElement).style.transform);
@@ -26,11 +33,12 @@ export async function playAndSeeCursorMove(page: Page) {
   const after = await cursor.evaluate((el) => (el as HTMLElement).style.transform);
   expect(after).not.toBe(before);
   // The sounding notes light up as in the videos: your part full blue, the other lighter.
-  await expect(score.locator(".lit-focus").first()).toBeAttached();
-  await expect(score.locator(".lit-other").first()).toBeAttached();
-  const colours = await score.evaluate((el) => {
+  // (On Firefox for Android the lit notes move with the line, outside the score element.)
+  await expect(page.locator(".score .lit-focus, .movers .lit-focus").first()).toBeAttached();
+  await expect(page.locator(".score .lit-other, .movers .lit-other").first()).toBeAttached();
+  const colours = await page.evaluate(() => {
     const fill = (selector: string) => {
-      const path = el.querySelector(`${selector} path`);
+      const path = document.querySelector(`.score ${selector} path, .movers ${selector} path`);
       return path ? getComputedStyle(path).fill : null;
     };
     return { focus: fill(".lit-focus"), other: fill(".lit-other") };
@@ -57,7 +65,7 @@ export async function fetchIn(page: Page, url: string, headers: Record<string, s
 /** Answers the first-time "Mikä on sinun stemmasi?" question, if it is asked. */
 export async function choosePartIfAsked(page: Page, part: string) {
   const dialog = page.getByRole("dialog", { name: "Valitse oma stemma" });
-  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await expect(shownScore(page)).toBeVisible();
   if (await dialog.count()) await dialog.getByRole("button", { name: part, exact: true }).click();
 }
 
