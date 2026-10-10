@@ -161,3 +161,13 @@ test("the public demo opens without signing in", async ({ page }) => {
   await page.getByRole("link", { name: "Esittelylaulu" }).click();
   await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
 });
+
+test("a signed-out visitor finds the open songs on the front page", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Vapaat laulut" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Kirjaudu Google-tilillä" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Kokeilulaulu" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Esittelylaulu" }).click();
+  await expect(page).toHaveURL(/\/c\/public\/esittely$/);
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+});

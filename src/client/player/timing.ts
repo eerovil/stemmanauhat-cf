@@ -71,6 +71,18 @@ export function startsOf(timing: Timing, measure: number): number[] {
   return timing.points.flatMap((p, i) => (p[1] === measure && startsPass(timing.points, i) ? [p[0]] : []));
 }
 
+/**
+ * How long each bar the timing names really plays, in quarters: the furthest beat
+ * any point reaches in it, which is where the bar's end point sits. A pickup bar
+ * of 3 beats in 4/4 comes out as 3.
+ */
+export function barLengths(timing: Timing): Map<number, number> {
+  const lengths = new Map<number, number>();
+  for (const [, measure, beat] of timing.points) lengths.set(measure, Math.max(lengths.get(measure) ?? 0, beat));
+  for (const [measure, length] of lengths) if (length <= 0) lengths.delete(measure);
+  return lengths;
+}
+
 export function nearest(times: number[], now: number): number | null {
   let best: number | null = null;
   for (const t of times) if (best === null || Math.abs(t - now) < Math.abs(best - now)) best = t;

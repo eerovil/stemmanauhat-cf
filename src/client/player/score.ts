@@ -1,4 +1,5 @@
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
+import { barAnchors, xOnAnchors, type Anchor } from "./bar";
 
 /** OSMD lays out in units of 10 px at zoom 1. */
 const UNIT = 10;
@@ -19,7 +20,7 @@ interface Bar {
   top: number;
   bottom: number;
   /** [beat in quarters, x], sorted by beat; the last one is the bar's end. */
-  anchors: [number, number][];
+  anchors: Anchor[];
   notes: Sounding[];
 }
 
@@ -67,6 +68,12 @@ export class Score {
   private applyVisible(visible: boolean[]): void {
     this.osmd.Sheet.Instruments.forEach((instrument, i) => { instrument.Visible = visible[i] ?? true; });
   }
+
+  /**
+   * How long each bar really plays, in quarters, from timing.json (`barLengths`).
+   * A bar it does not name falls back to its time signature.
+   */
+  barLengths = new Map<number, number>();
 
   /** The singer's own zoom, times the size that suits the screen. */
   zoom = 1;
@@ -160,13 +167,7 @@ export class Score {
   xAt(measure: number, beat: number): number | null {
     const bar = this.bars[measure];
     if (!bar) return null;
-    const a = bar.anchors;
-    for (let i = 0; i < a.length - 1; i++) {
-      const [b0, x0] = a[i]!;
-      const [b1, x1] = a[i + 1]!;
-      if (beat <= b1) return b1 > b0 ? x0 + ((Math.max(beat, b0) - b0) / (b1 - b0)) * (x1 - x0) : x0;
-    }
-    return a[a.length - 1]![1];
+    return xOnAnchors(bar.anchors, beat);
   }
 
   /**
@@ -212,7 +213,7 @@ export class Score {
     this.spans = new Map();
     const instruments = this.osmd.Sheet.Instruments;
 
-    this.bars = this.osmd.GraphicSheet.MeasureList.map((staves) => {
+    this.bars = this.osmd.GraphicSheet.MeasureList.map((staves, index) => {
       // A hidden part's bars stay in the list, undrawn at position 0: skip them.
       const drawn = staves.filter((m) => m && m.PositionAndShape && m.ParentStaff.ParentInstrument.Visible);
       if (!drawn.length) return undefined;
@@ -220,7 +221,7 @@ export class Score {
       const last = drawn[drawn.length - 1]!.PositionAndShape;
       const x0 = px(first.AbsolutePosition.x, dx);
       const x1 = px(first.AbsolutePosition.x + first.Size.width, dx);
-      const length = (drawn[0]!.parentSourceMeasure?.Duration?.RealValue ?? 1) * 4;
+      const length = this.barLengths.get(index) ?? (drawn[0]!.parentSourceMeasure?.Duration?.RealValue ?? 1) * 4;
 
       const byBeat = new Map<number, number>();
       const notes: Sounding[] = [];
@@ -246,10 +247,7 @@ export class Score {
           }
         }
       }
-      const anchors = [...byBeat.entries()].sort((a, b) => a[0] - b[0]);
-      if (!anchors.length || anchors[0]![0] > 0) anchors.unshift([0, anchors[0]?.[1] ?? x0 + 8]);
-      const lastBeat = anchors[anchors.length - 1]![0];
-      anchors.push([Math.max(length, lastBeat + 0.001), x1 - 2]);
+      const anchors = barAnchors(byBeat, length, x0, x1);
 
       return {
         x0, x1,
