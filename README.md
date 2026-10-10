@@ -25,8 +25,9 @@ Live address (once set up): https://stemmanauhat.eerovil.workers.dev
   sideways under a fixed cursor (drag it to move); "Oma" shows your own staff alone in page lines.
   One bottom bar: back, the song with its bar number (tap to jump to a bar), your part (tap to
   change), play, and Säädöt: how you listen (Oma esillä / Tasan / Ilman omaa / Vain oma), the other
-  parts' level, tempo, score size and staves. Tapping the score plays or pauses. Your part and tempo
-  are remembered per song; how you listen, the staves and the size carry from song to song.
+  parts' level, tempo, score size and staves. Tapping the score plays or pauses. Your part is
+  remembered per song; how you listen, the tempo, the staves and the size carry from song to song.
+  The size is a fixed staff height on the device, whatever the song or the view.
   `score.mid` is played by spessasynth (an AudioWorklet synth) with MuseScore's grand piano: each
   part's MIDI channel has its own gain, then +15 dB and a limiter. `timing.json` (from the same
   MIDI clock) moves the cursor.
