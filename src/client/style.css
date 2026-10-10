@@ -86,7 +86,8 @@ footer { margin-top: 1.5rem; }
 .score-scroll.single-line .score-wrap { max-width: none; width: max-content; margin: 0; will-change: transform; }
 /* While a zoom waits to re-wrap the lines the drawing is just stretched, wider
    than the screen: clip it, or a phone widens the whole page and the sheets with it. */
-.player:not(.one-line) .score-wrap { margin-top: 0.6rem; overflow: hidden; }
+/* White room under the last line, so its stems and lyrics never sit on the sheet's edge. */
+.player:not(.one-line) .score-wrap { margin-top: 0.6rem; padding-bottom: 2rem; overflow: hidden; }
 
 /* ---------- Player: the dock (design A, round 2) ---------- */
 .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; background: var(--surface);

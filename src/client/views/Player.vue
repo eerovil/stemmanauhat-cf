@@ -301,11 +301,15 @@ function leavePieces(wrap: HTMLElement | null) {
   if (wrap && cursor.value && cursor.value.parentElement !== wrap) wrap.appendChild(cursor.value);
 }
 
-/** The line never scrolls up and down: centred when it fits, else centred on your staff. */
+/**
+ * The line never scrolls up and down. When it fits, the spare room goes 40 % above and
+ * 60 % below it, so the lowest notes and lyrics stay clear of the dock; else it is
+ * centred on your staff.
+ */
 function verticalOffset(boxHeight: number): number {
   if (!score) return 0;
   const room = score.height - boxHeight;
-  if (room <= 0) return room / 2;
+  if (room <= 0) return room * 0.4;
   const span = score.partSpan(myPart.value);
   if (!span) return 0;
   return Math.min(room, Math.max(0, (span.top + span.bottom) / 2 - boxHeight / 2));
