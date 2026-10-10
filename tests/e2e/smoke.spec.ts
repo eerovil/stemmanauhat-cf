@@ -18,7 +18,11 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toContainText("Tenori");
 
   // A one-time hint explains tapping and dragging the score.
+  const hint = page.getByRole("note");
+  await expect(hint).toContainText("Napauta nuottia: soita");
+  await expect(hint).toContainText("Vedä nuottia sivulle: siirry");
   await page.getByRole("button", { name: "Selvä" }).click();
+  await expect(hint).toHaveCount(0);
 
   // Your part loud and the others quieter; the four ways of listening.
   await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.160");
