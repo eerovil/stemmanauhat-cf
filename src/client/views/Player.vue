@@ -7,7 +7,7 @@ import {
 import Icon from "../components/Icon.vue";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
-import { CurveSlide } from "../player/slide";
+import { SlidingPieces } from "../player/slide";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
 import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, timeAtX, type ScrollCurve } from "../player/scroll";
@@ -88,8 +88,8 @@ let curve: ScrollCurve | null = null;
 let curveVersion = -1;
 
 let mixer: MidiPlayer | FilePlayer | null = null;
-/** Firefox on Android slides the one-line view as a browser animation (player/slide.ts). */
-let slide: CurveSlide | null = null;
+/** Firefox on Android slides the one-line view as moving picture pieces (player/slide.ts). */
+let pieces: SlidingPieces | null = null;
 let score: Score | null = null;
 let timing: Timing | null = null;
 let frame = 0;
@@ -172,7 +172,7 @@ onBeforeUnmount(() => {
   dockObserver.disconnect();
   window.removeEventListener("resize", onResize);
   mixer?.destroy();
-  slide?.stop();
+  pieces?.destroy();
 });
 
 /** The screen stays on while playing: singers sing along without touching the phone. */
@@ -270,13 +270,30 @@ function scrollTo(t: number) {
   const shift = box.clientWidth * PLAYHEAD;
   const vertical = verticalOffset(box.clientHeight);
   if (wantsFilePlayback() && mixer) {
-    slide ??= new CurveSlide(wrap);
-    slide.follow(curve, `${curveVersion}:${shift}:${vertical}`, shift, vertical, box.clientWidth * JUMP_FRACTION,
-      t, mixer.running && !drag?.moved, rate.value);
-    return;
+    pieces ??= new SlidingPieces(box);
+    pieces.build(score.version, scoreBox.value?.querySelector("svg:not(.highlights)") ?? null, wrap);
+    // Until the pieces are drawn the line moves itself, below.
+    if (pieces.ready(score.version)) {
+      if (cursor.value && cursor.value.parentElement !== pieces.movers) pieces.movers.appendChild(cursor.value);
+      score.highlightInto(pieces.movers);
+      wrap.style.transform = "";
+      wrap.style.willChange = "auto";
+      pieces.follow(curve, `${curveVersion}:${shift}:${vertical}`, shift, vertical, box.clientWidth * JUMP_FRACTION,
+        t, mixer.running && !drag?.moved, rate.value);
+      return;
+    }
   }
   const offset = Math.max(0, curveAt(curve, t) - shift);
   wrap.style.transform = `translate3d(${-offset}px, ${-vertical}px, 0)`;
+}
+
+/** Back from moving pieces to the drawn score (the page view). */
+function leavePieces(wrap: HTMLElement | null) {
+  if (!pieces) return;
+  pieces.stop();
+  score?.highlightInto(null);
+  if (wrap) wrap.style.willChange = "";
+  if (wrap && cursor.value && cursor.value.parentElement !== wrap) wrap.appendChild(cursor.value);
 }
 
 /** The line never scrolls up and down: centred when it fits, else centred on your staff. */
@@ -337,7 +354,7 @@ function setStaffMode(next: StaffMode) {
   carrySettings({ staves: next });
   const wrap = scrollBox.value?.firstElementChild as HTMLElement | null;
   if (wrap) wrap.style.transform = "";
-  slide?.stop();
+  leavePieces(wrap);
   window.scrollTo(0, 0);
   score.singleLine = singleLine.value;
   score.zoom = fitZoom * zoom.value;
