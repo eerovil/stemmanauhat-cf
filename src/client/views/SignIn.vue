@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Icon from "../components/Icon.vue";
 const params = new URLSearchParams(location.search);
 const next = params.get("next") ?? "/";
 const failed = params.get("error") === "failed";
@@ -6,6 +7,7 @@ const failed = params.get("error") === "failed";
 
 <template>
   <main class="page narrow signin">
+    <div class="brand"><Icon name="note" :size="34" /></div>
     <h1>Stemmanauhat</h1>
     <p>Kuorojen harjoitusnauhat: nuotti ja oma stemma.</p>
     <p v-if="failed" class="error">Kirjautuminen ei onnistunut. Yritä uudelleen.</p>

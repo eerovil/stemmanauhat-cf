@@ -83,3 +83,50 @@ export const remembered = {
   setHidden: (choir: string, names: string[]) =>
     localStorage.setItem(`stemmanauhat:${choir}:hidden`, JSON.stringify(names)),
 };
+
+export type MixMode = "focus" | "equal" | "minus" | "solo";
+
+/** What this browser remembers about one song: the singer's part, mix, tempo, staves and last loop. */
+export interface SongMemory {
+  part?: string;
+  mode?: MixMode;
+  others?: number;
+  rate?: number;
+  hidden?: string[];
+  staves?: "all" | "own";
+  loop?: [number, number] | null;
+}
+
+export function songMemory(choir: string, slug: string): SongMemory {
+  try {
+    const value = JSON.parse(localStorage.getItem(`stemmanauhat:song:${choir}/${slug}`) ?? "{}");
+    return typeof value === "object" && value ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+export function rememberSong(choir: string, slug: string, change: Partial<SongMemory>): void {
+  const key = `stemmanauhat:song:${choir}/${slug}`;
+  localStorage.setItem(key, JSON.stringify({ ...songMemory(choir, slug), ...change }));
+}
+
+/** Settings that follow the singer from song to song (on this device). */
+export interface CarriedSettings {
+  mode?: MixMode;
+  others?: number;
+  staves?: "all" | "own";
+}
+
+export function carriedSettings(): CarriedSettings {
+  try {
+    const value = JSON.parse(localStorage.getItem("stemmanauhat:settings") ?? "{}");
+    return typeof value === "object" && value ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+export function carrySettings(change: CarriedSettings): void {
+  localStorage.setItem("stemmanauhat:settings", JSON.stringify({ ...carriedSettings(), ...change }));
+}

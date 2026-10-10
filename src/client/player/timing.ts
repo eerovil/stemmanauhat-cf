@@ -101,3 +101,21 @@ export function loopRange(timing: Timing, startBar: number, endBar: number, now:
 export function loopTarget(range: [number, number] | null, seconds: number): number | null {
   return range && seconds >= range[1] - 0.02 ? range[0] : null;
 }
+
+/** When the play-through of the bar playing at `seconds` started. */
+export function barStart(timing: Timing, seconds: number): number {
+  const { points } = timing;
+  let i = Math.max(lastAtOrBefore(points, seconds), 0);
+  while (i > 0 && !startsPass(points, i)) i--;
+  return points[i]![0];
+}
+
+/**
+ * Where "back" goes: to the start of the bar playing now, or, if that bar only
+ * just began (within `grace` seconds), to the start of the bar before it.
+ */
+export function previousBarStart(timing: Timing, seconds: number, grace = 0.6): number {
+  const start = barStart(timing, seconds);
+  if (seconds - start > grace) return start;
+  return start > 0 ? barStart(timing, start - 1e-6) : 0;
+}

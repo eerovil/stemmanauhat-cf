@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Icon from "../components/Icon.vue";
 import { onMounted, ref } from "vue";
 import { getJson, type Me } from "../api";
 
@@ -8,6 +9,7 @@ onMounted(async () => { me.value = await getJson<Me>("/api/me"); });
 
 <template>
   <main class="page narrow home">
+    <div class="brand"><Icon name="note" :size="34" /></div>
     <h1>Stemmanauhat</h1>
     <template v-if="me">
       <p v-if="me.email" class="hint">Kirjautuneena: {{ me.email }}</p>

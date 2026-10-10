@@ -46,6 +46,7 @@ export class MidiPlayer {
   onEnded: () => void = () => {};
   private master = 0;
   private others = DEFAULT_OTHERS;
+  private own = true;
   private wanted = false;
   /**
    * Where playback is while paused. The sequencer runs in the audio thread and
@@ -117,7 +118,7 @@ export class MidiPlayer {
   }
 
   levels(): number[] {
-    return mixLevels(this.channels.length, this.master, this.others);
+    return mixLevels(this.channels.length, this.master, this.others, this.own);
   }
 
   /** The gain each part's channels actually carry in the synth. */
@@ -128,6 +129,8 @@ export class MidiPlayer {
 
   setMaster(index: number): void { this.master = index; this.applyGains(); }
   setOthers(level: number): void { this.others = level; this.applyGains(); }
+  /** Whether your own part sounds ("Ilman omaa" turns it off). */
+  setOwn(on: boolean): void { this.own = on; this.applyGains(); }
   get playing(): boolean { return this.wanted; }
   get running(): boolean { return this.wanted && !this.seq.paused; }
   time(): number { return this.running ? this.seq.currentHighResolutionTime : this.position; }

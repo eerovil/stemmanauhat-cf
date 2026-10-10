@@ -143,6 +143,11 @@ export class Score {
     return this.spans.get(part) ?? null;
   }
 
+  /** The drawn score's width in pixels. */
+  get width(): number {
+    return this.container.querySelector("svg")?.getBoundingClientRect().width ?? 0;
+  }
+
   /** The drawn score's height in pixels. */
   get height(): number {
     return this.container.querySelector("svg")?.getBoundingClientRect().height ?? 0;

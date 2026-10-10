@@ -16,8 +16,8 @@ export function gainOf(level: number): number {
  * default mix: past that, everything is scaled back to the default's total, so
  * the output stage below never has to work harder than at the default.
  */
-export function mixLevels(count: number, master: number, others: number): number[] {
-  const raw = Array.from({ length: count }, (_, i) => (i === master ? 1 : gainOf(others)));
+export function mixLevels(count: number, master: number, others: number, own = true): number[] {
+  const raw = Array.from({ length: count }, (_, i) => (i === master ? (own ? 1 : 0) : gainOf(others)));
   const sum = raw.reduce((a, b) => a + b, 0);
   const budget = 1 + (count - 1) * gainOf(DEFAULT_OTHERS);
   const scale = sum > budget ? budget / sum : 1;

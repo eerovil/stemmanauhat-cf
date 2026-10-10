@@ -45,7 +45,7 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       <a href="/" class="home-link">Stemmanauhat</a>
       <h1>{{ choirName }}</h1>
     </header>
-    <a v-if="last" class="button primary continue" :href="songUrl(last.slug)">Jatka siitä: {{ last.title }}</a>
+    <a v-if="last" class="button primary continue" :href="songUrl(last.slug)">▶ Jatka siitä: {{ last.title }}</a>
     <input v-model="query" class="search" type="search" placeholder="Hae kappaletta" aria-label="Hae kappaletta" />
     <ul class="songs">
       <li v-for="s in shown" :key="s.slug">
