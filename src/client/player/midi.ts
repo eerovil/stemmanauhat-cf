@@ -54,6 +54,8 @@ export class MidiPlayer {
    * the old one; while paused the position the singer chose is the truth.
    */
   private position = 0;
+  /** Where the current play-through started, so the cursor never goes back before it. */
+  private startedAt = 0;
   private readonly meter: AnalyserNode;
   private readonly samples = new Float32Array(1024);
 
@@ -89,7 +91,11 @@ export class MidiPlayer {
    * resumes it in play()).
    */
   static async create(midiUrl: string, partNames: string[], log: (m: string) => void = () => {}): Promise<MidiPlayer> {
-    const context = new AudioContext();
+    // A larger output buffer than the default "interactive" one: nothing here
+    // needs a quick response to a key, and Firefox on Android crackled when the
+    // synth could not fill the small buffer in time. The cursor makes up for the
+    // longer delay (see heard()).
+    const context = new AudioContext({ latencyHint: "playback" });
     soundfont ??= fetch(SOUNDFONT_URL).then((r) => {
       if (!r.ok) throw new Error(`piano: HTTP ${r.status}`);
       return r.arrayBuffer();
@@ -133,7 +139,16 @@ export class MidiPlayer {
   setOwn(on: boolean): void { this.own = on; this.applyGains(); }
   get playing(): boolean { return this.wanted; }
   get running(): boolean { return this.wanted && !this.seq.paused; }
-  time(): number { return this.running ? this.seq.currentHighResolutionTime : this.position; }
+  time(): number { return this.running ? this.heard() : this.position; }
+
+  /**
+   * The music the singer hears now. The sequencer's clock is where the synth is
+   * rendering, which reaches the speakers only after the output buffer's delay.
+   */
+  private heard(): number {
+    const delay = (this.context.outputLatency || 0) + (this.context.baseLatency || 0);
+    return Math.max(this.startedAt, this.seq.currentHighResolutionTime - delay * this.seq.playbackRate);
+  }
 
   /**
    * Must be called straight from the singer's tap: iPhones let an audio context
@@ -142,19 +157,21 @@ export class MidiPlayer {
   async play(): Promise<void> {
     const resumed = this.context.resume();
     this.wanted = true;
+    this.startedAt = this.position;
     this.seq.currentTime = this.position;
     this.seq.play();
     await resumed;
   }
 
   pause(): void {
-    if (this.running) this.position = this.seq.currentHighResolutionTime;
+    if (this.running) this.position = this.heard();
     this.wanted = false;
     this.seq.pause();
   }
 
   seek(seconds: number): void {
     this.position = Math.max(0, seconds);
+    this.startedAt = this.position;
     this.seq.currentTime = this.position;
   }
 
