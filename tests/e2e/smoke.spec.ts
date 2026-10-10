@@ -171,6 +171,34 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();
 });
 
+test("the song list sorts by name or newest first, and remembers the choice", async ({ page }) => {
+  await page.route("**/api/songs?choir=jm", async (route) => {
+    const data = await (await route.fetch()).json();
+    const song = data.songs[0];
+    data.songs = [
+      { ...song, slug: "b", title: "Bassojen laulu", published_at: "2026-09-01T12:00:00Z" },
+      { ...song, slug: "a", title: "Aamulaulu", published_at: "2026-08-01T12:00:00Z" },
+      { ...song, slug: "c", title: "Iltalaulu", published_at: "2026-10-05T12:00:00Z" },
+    ];
+    await route.fulfill({ json: data });
+  });
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  const titles = page.locator(".songs li a");
+  await expect(titles).toHaveText(["Aamulaulu", "Bassojen laulu", "Iltalaulu"]);
+  await expect(page.locator(".songs .date")).toHaveCount(0);
+
+  const order = page.getByRole("group", { name: "Järjestys" });
+  await order.getByRole("button", { name: "Uusimmat" }).click();
+  await expect(titles).toHaveText(["Iltalaulu", "Bassojen laulu", "Aamulaulu"]);
+  await expect(page.locator(".songs .date")).toHaveText(["5.10.2026", "1.9.2026", "1.8.2026"]);
+
+  await page.reload();
+  await expect(order.getByRole("button", { name: "Uusimmat" })).toHaveAttribute("aria-pressed", "true");
+  await expect(titles).toHaveText(["Iltalaulu", "Bassojen laulu", "Aamulaulu"]);
+  await order.getByRole("button", { name: "Nimi" }).click();
+  await expect(titles).toHaveText(["Aamulaulu", "Bassojen laulu", "Iltalaulu"]);
+});
+
 test("the old passphrase link gets in without a Google account", async ({ page }) => {
   await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
   await expect(page).toHaveURL(/\/c\/jm$/);

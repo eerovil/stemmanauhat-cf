@@ -43,6 +43,24 @@ test("player on a desktop, entered by the old link", async ({ browser }) => {
   await context.close();
 });
 
+test("song list sorted newest first", async ({ page }) => {
+  await page.route("**/api/songs?choir=jm", async (route) => {
+    const data = await (await route.fetch()).json();
+    const song = data.songs[0];
+    data.songs = [
+      ["Aamulaulu", "2026-08-01"], ["Bassojen laulu", "2026-09-01"], ["Iltalaulu", "2026-10-05"],
+      ["Joulun kellot", "2025-12-01"], ["Kotimaani", "2026-10-08"], ["Suvivirsi", "2026-05-20"],
+    ].map(([title, day], i) => ({ ...song, slug: `s${i}`, title, published_at: `${day}T12:00:00Z` }));
+    await route.fulfill({ json: data });
+  });
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await expect(page.locator(".songs li a").first()).toHaveText("Aamulaulu");
+  await page.screenshot({ path: `${dir}/song-list-by-name-phone.png` });
+  await page.getByRole("group", { name: "Järjestys" }).getByRole("button", { name: "Uusimmat" }).click();
+  await expect(page.locator(".songs li a").first()).toHaveText("Kotimaani");
+  await page.screenshot({ path: `${dir}/song-list-newest-phone.png` });
+});
+
 test("front page for a signed-out visitor", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();
