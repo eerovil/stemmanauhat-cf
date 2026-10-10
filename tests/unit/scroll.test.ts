@@ -53,3 +53,21 @@ describe("timeAtX", () => {
     expect(timeAtX(c, 300, 2)).toBeCloseTo(3, 1);
   });
 });
+
+describe("slideKeyframes", () => {
+  it("follows the curve, every other sample, and keeps a repeat's jump sharp", async () => {
+    const { slideKeyframes } = await import("../../src/client/player/slide");
+    const xs = [0, 10, 20, 30, 40, 0, 10, 20, 30];
+    const frames = slideKeyframes({ step: 0.05, xs }, 5, 2, 25);
+    const offsets = frames.map((f) => f.offset as number);
+    expect(offsets[0]).toBe(0);
+    expect(offsets[offsets.length - 1]).toBe(1);
+    expect([...offsets].sort((a, b) => a - b)).toEqual(offsets);
+    // Both sides of the jump between samples 4 and 5 are there, one sample apart.
+    expect(offsets).toContain(4 / 8);
+    expect(offsets).toContain(5 / 8);
+    expect(frames.find((f) => f.offset === 4 / 8)!.transform).toBe("translate3d(-35px, -2px, 0)");
+    // The playhead shift never scrolls before the start.
+    expect(frames[0]!.transform).toBe("translate3d(0px, -2px, 0)");
+  });
+});

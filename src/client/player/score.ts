@@ -38,7 +38,15 @@ export class Score {
    * within one frame, so the sliding line hitched each time the marker stepped.
    */
   private readonly highlights = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  private copies = new Map<Sounding, SVGGElement>();
+  private copies = new Map<Sounding, { el: SVGElement; copy: SVGGElement }>();
+  /**
+   * Firefox on Android: the lit notes as small separate drawings in this
+   * element instead of the full-size layer, so they can move with the line
+   * without making a large element move (see slide.ts).
+   */
+  private loose: HTMLElement | null = null;
+  /** Drawing units to container pixels: x = (u - vbX) * k + dx. */
+  private units = { vbX: 0, vbY: 0, k: 1, dx: 0, dy: 0 };
   /** Each part's staff, top to bottom with room for notes above and lyrics below. */
   private spans = new Map<number, { top: number; bottom: number }>();
   private noteWidth = 0;
@@ -168,13 +176,16 @@ export class Score {
   }
 
   /** The drawn score's width in pixels. */
+  /** Measured with the layout, not on every call: reading it forces the browser to lay the page out. */
+  private size = { width: 0, height: 0 };
+
   get width(): number {
-    return this.drawing()?.getBoundingClientRect().width ?? 0;
+    return this.size.width;
   }
 
   /** The drawn score's height in pixels. */
   get height(): number {
-    return this.drawing()?.getBoundingClientRect().height ?? 0;
+    return this.size.height;
   }
 
   /**
@@ -194,21 +205,51 @@ export class Score {
   light(measure: number | null, beat: number, focusPart: number): number {
     const bar = measure === null ? undefined : this.bars[measure];
     const now = bar ? bar.notes.filter((n) => n.start <= beat + 1e-6 && beat < n.end - 1e-6) : [];
-    for (const [n, copy] of this.copies) {
-      if (!now.includes(n)) { copy.remove(); this.copies.delete(n); }
+    for (const [n, lit] of this.copies) {
+      if (!now.includes(n)) { lit.el.remove(); this.copies.delete(n); }
     }
     for (const n of now) {
-      let copy = this.copies.get(n);
-      if (!copy) {
-        copy = n.el.cloneNode(true) as SVGGElement;
+      let lit = this.copies.get(n);
+      if (!lit) {
+        const copy = n.el.cloneNode(true) as SVGGElement;
         for (const el of [copy, ...copy.querySelectorAll("[id]")]) el.removeAttribute("id");
-        this.highlights.appendChild(copy);
-        this.copies.set(n, copy);
+        lit = { el: copy, copy };
+        if (this.loose) {
+          lit.el = this.looseDrawing(n.el, copy);
+          this.loose.appendChild(lit.el);
+        } else {
+          this.highlights.appendChild(copy);
+        }
+        this.copies.set(n, lit);
       }
-      copy.classList.toggle("lit-focus", n.part === focusPart);
-      copy.classList.toggle("lit-other", n.part !== focusPart);
+      lit.copy.classList.toggle("lit-focus", n.part === focusPart);
+      lit.copy.classList.toggle("lit-other", n.part !== focusPart);
     }
     return now.length;
+  }
+
+  /** Puts the lit notes in `target` as small drawings, or back in the score's own layer (null). */
+  highlightInto(target: HTMLElement | null): void {
+    if (target === this.loose) return;
+    for (const lit of this.copies.values()) lit.el.remove();
+    this.copies = new Map();
+    this.loose = target;
+  }
+
+  /** A small SVG holding just this note, placed over it in container pixels. */
+  private looseDrawing(note: SVGGElement, copy: SVGGElement): SVGSVGElement {
+    const bb = note.getBBox();
+    const pad = 4;
+    const { vbX, vbY, k, dx, dy } = this.units;
+    const box = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    box.classList.add("lit-note");
+    box.setAttribute("viewBox", `${bb.x - pad} ${bb.y - pad} ${bb.width + 2 * pad} ${bb.height + 2 * pad}`);
+    box.style.left = `${(bb.x - pad - vbX) * k + dx}px`;
+    box.style.top = `${(bb.y - pad - vbY) * k + dy}px`;
+    box.style.width = `${(bb.width + 2 * pad) * k}px`;
+    box.style.height = `${(bb.height + 2 * pad) * k}px`;
+    box.appendChild(copy);
+    return box;
   }
 
   /** The bar under a point in container pixels. */
@@ -246,6 +287,7 @@ export class Score {
     const svg = this.drawing();
     const box = this.container.getBoundingClientRect();
     const svgBox = svg?.getBoundingClientRect() ?? box;
+    this.size = svg ? { width: svgBox.width, height: svgBox.height } : { width: 0, height: 0 };
     const dx = svgBox.left - box.left;
     const dy = svgBox.top - box.top;
     const scale = UNIT * this.osmd.Zoom * this.stretch;
@@ -256,12 +298,15 @@ export class Score {
     const layer = this.highlights;
     this.container.appendChild(layer);
     layer.replaceChildren();
+    for (const lit of this.copies.values()) lit.el.remove();
     this.copies = new Map();
     layer.setAttribute("viewBox", svg?.getAttribute("viewBox")
       ?? `0 0 ${svg?.getAttribute("width") ?? 0} ${svg?.getAttribute("height") ?? 0}`);
     layer.style.width = `${svgBox.width}px`;
     layer.style.height = `${svgBox.height}px`;
     layer.style.transform = `translate(${dx}px, ${dy}px)`;
+    const [vbX = 0, vbY = 0, vbW = svgBox.width || 1] = (layer.getAttribute("viewBox") ?? "").split(/\s+/).map(Number);
+    this.units = { vbX, vbY, k: svgBox.width / (vbW || 1), dx, dy };
     this.spans = new Map();
     const instruments = this.osmd.Sheet.Instruments;
 

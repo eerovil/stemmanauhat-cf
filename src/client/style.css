@@ -63,6 +63,14 @@ footer { margin-top: 1.5rem; }
    them never makes the browser repaint the score itself. */
 .score .highlights { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none;
   will-change: transform; }
+/* Firefox on Android: the line as moving picture pieces, the marker and lit notes in a small
+   moving layer over them (player/slide.ts). */
+.score-pieces { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.score-pieces canvas { position: absolute; left: 0; top: 0; }
+.movers { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.movers .lit-note { position: absolute; overflow: visible; }
+.movers .lit-focus, .movers .lit-focus * { fill: #2a5fab !important; stroke: #2a5fab !important; }
+.movers .lit-other, .movers .lit-other * { fill: #9fb7da !important; stroke: #9fb7da !important; }
 .score .lit-focus, .score .lit-focus * { fill: #2a5fab !important; stroke: #2a5fab !important; }
 .score .lit-other, .score .lit-other * { fill: #9fb7da !important; stroke: #9fb7da !important; }
 /* "Kaikki": one line that slides sideways; the page itself never scrolls. */

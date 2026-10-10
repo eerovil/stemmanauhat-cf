@@ -5,7 +5,9 @@ import {
   type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
+import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
+import { SlidingPieces } from "../player/slide";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
 import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, timeAtX, type ScrollCurve } from "../player/scroll";
@@ -85,7 +87,9 @@ const smoothClock = new SmoothClock();
 let curve: ScrollCurve | null = null;
 let curveVersion = -1;
 
-let mixer: MidiPlayer | null = null;
+let mixer: MidiPlayer | FilePlayer | null = null;
+/** Firefox on Android slides the one-line view as moving picture pieces (player/slide.ts). */
+let pieces: SlidingPieces | null = null;
 let score: Score | null = null;
 let timing: Timing | null = null;
 let frame = 0;
@@ -128,7 +132,7 @@ onMounted(async () => {
     ]);
     timing = parseTiming(timingJson);
     barCount.value = timing.measures;
-    mixer = await MidiPlayer.create(s.base + "score.mid", s.parts.map((p) => p.name),
+    mixer = await (wantsFilePlayback() ? FilePlayer : MidiPlayer).create(s.base + "score.mid", s.parts.map((p) => p.name),
       (note) => { loadingNote.value = note; });
     mixer.setMaster(myPart.value);
     mixer.onEnded = () => { playing.value = false; };
@@ -168,6 +172,7 @@ onBeforeUnmount(() => {
   dockObserver.disconnect();
   window.removeEventListener("resize", onResize);
   mixer?.destroy();
+  pieces?.destroy();
 });
 
 /** The screen stays on while playing: singers sing along without touching the phone. */
@@ -208,7 +213,10 @@ function tick(frameTime: number) {
   if (!mixer || !timing || !score) return;
   const late = mixer.running ? ((performance.now() - frameTime) / 1000) * rate.value : 0;
   const t = drag?.moved ? drag.t : smoothClock.read(mixer.time() - late, mixer.running, rate.value, frameTime);
-  now.value = t;
+  // The time and the progress bar show tenths at most: updating them every frame
+  // re-rendered the controls 60 times a second, which a phone feels.
+  const shown = Math.round(t * 10) / 10;
+  if (shown !== now.value) now.value = shown;
   playing.value = mixer.playing;
   if (mixer.running && frame % 15 === 0) sounding.value = mixer.sounding();
   const position = positionAt(timing, t);
@@ -218,14 +226,19 @@ function tick(frameTime: number) {
   const spot = score.marker(position.measure, position.beat);
   const el = cursor.value;
   if (!spot || !el) return;
-  el.style.transform = `translate(${spot.x0}px, ${spot.top}px)`;
-  el.style.width = `${spot.x1 - spot.x0}px`;
-  el.style.height = `${spot.bottom - spot.top}px`;
-  el.dataset.measure = String(position.measure);
-  el.dataset.lit = String(lit);
+  // Written only when they change: each write makes the browser restyle the page.
+  setStyle(el, "transform", `translate(${spot.x0}px, ${spot.top}px)`);
+  setStyle(el, "width", `${spot.x1 - spot.x0}px`);
+  setStyle(el, "height", `${spot.bottom - spot.top}px`);
+  if (el.dataset.measure !== String(position.measure)) el.dataset.measure = String(position.measure);
+  if (el.dataset.lit !== String(lit)) el.dataset.lit = String(lit);
   if (singleLine.value) scrollTo(t);
   else if (spot.top !== lastTop) keepInView(spot.top, spot.bottom);
   lastTop = spot.top;
+}
+
+function setStyle(el: HTMLElement, name: "transform" | "width" | "height", value: string) {
+  if (el.style[name] !== value) el.style[name] = value;
 }
 
 /** "Oma" view: scroll the page so the line being sung sits in the upper part of the screen. */
@@ -254,8 +267,33 @@ function scrollTo(t: number) {
     }, box.clientWidth * JUMP_FRACTION);
     curveVersion = score.version;
   }
-  const offset = Math.max(0, curveAt(curve, t) - box.clientWidth * PLAYHEAD);
-  wrap.style.transform = `translate3d(${-offset}px, ${-verticalOffset(box.clientHeight)}px, 0)`;
+  const shift = box.clientWidth * PLAYHEAD;
+  const vertical = verticalOffset(box.clientHeight);
+  if (wantsFilePlayback() && mixer) {
+    pieces ??= new SlidingPieces(box);
+    pieces.build(score.version, scoreBox.value?.querySelector("svg:not(.highlights)") ?? null, wrap);
+    // Until the pieces are drawn the line moves itself, below.
+    if (pieces.ready(score.version)) {
+      if (cursor.value && cursor.value.parentElement !== pieces.movers) pieces.movers.appendChild(cursor.value);
+      score.highlightInto(pieces.movers);
+      wrap.style.transform = "";
+      wrap.style.willChange = "auto";
+      pieces.follow(curve, `${curveVersion}:${shift}:${vertical}`, shift, vertical, box.clientWidth * JUMP_FRACTION,
+        t, mixer.running && !drag?.moved, rate.value);
+      return;
+    }
+  }
+  const offset = Math.max(0, curveAt(curve, t) - shift);
+  wrap.style.transform = `translate3d(${-offset}px, ${-vertical}px, 0)`;
+}
+
+/** Back from moving pieces to the drawn score (the page view). */
+function leavePieces(wrap: HTMLElement | null) {
+  if (!pieces) return;
+  pieces.stop();
+  score?.highlightInto(null);
+  if (wrap) wrap.style.willChange = "";
+  if (wrap && cursor.value && cursor.value.parentElement !== wrap) wrap.appendChild(cursor.value);
 }
 
 /** The line never scrolls up and down: centred when it fits, else centred on your staff. */
@@ -316,6 +354,7 @@ function setStaffMode(next: StaffMode) {
   carrySettings({ staves: next });
   const wrap = scrollBox.value?.firstElementChild as HTMLElement | null;
   if (wrap) wrap.style.transform = "";
+  leavePieces(wrap);
   window.scrollTo(0, 0);
   score.singleLine = singleLine.value;
   score.zoom = fitZoom * zoom.value;

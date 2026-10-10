@@ -17,7 +17,7 @@ export const SOUNDFONT_URL = "/sound/piano-1.sf3";
  * mix peaks at -18 to -22 dB. +15 dB brings it to about -3 to -7 dB. The limiter
  * after it catches the rare chord that would still go over.
  */
-const OUTPUT_GAIN = 10 ** (15 / 20);
+export const OUTPUT_GAIN = 10 ** (15 / 20);
 
 let soundfont: Promise<ArrayBuffer> | null = null;
 
