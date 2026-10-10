@@ -41,10 +41,14 @@ export function publishPlan(manifest, choir, date) {
   // The manifest in R2 carries the same facts as the row, as song-app writes it.
   const r2Manifest = { slug, title, choir, version, score: "score.musicxml", timing: "timing.json",
     midi: "score.mid", parts: JSON.parse(partsJson), duration };
+  // A song keeps the date it first came out, in any choir, so a fixed score or
+  // a move does not make it new again. The songs from the old YouTube site
+  // carry their upload dates (#18).
+  const firstPublished = `COALESCE((SELECT MIN(published_at) FROM songs WHERE slug = ${quote(slug)}), ${quote(publishedAt)})`;
   const sql = "INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at) VALUES ("
-    + [quote(choir), quote(slug), quote(title), quote(prefix), quote(partsJson), Number(duration), quote(publishedAt)].join(", ")
+    + [quote(choir), quote(slug), quote(title), quote(prefix), quote(partsJson), Number(duration), firstPublished].join(", ")
     + ") ON CONFLICT (choir, slug) DO UPDATE SET title = excluded.title, prefix = excluded.prefix,"
-    + " parts = excluded.parts, duration = excluded.duration, published_at = excluded.published_at;"
+    + " parts = excluded.parts, duration = excluded.duration;"
     // Publishing a song for another choir moves it, as song-app does, except
     // that the public list keeps its copy: a public-domain song may be in a
     // choir's own list too. Publishing to public moves nothing.
