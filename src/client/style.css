@@ -59,6 +59,10 @@ footer { margin-top: 1.5rem; }
    your part's sounding notes full blue and the others' at 0.45. */
 .cursor { position: absolute; left: 0; top: 0; width: 0; height: 0; background: rgba(42, 95, 171, 0.18);
   pointer-events: none; will-change: transform; }
+/* The sounding notes are copies on their own layer over the score, so lighting
+   them never makes the browser repaint the score itself. */
+.score .highlights { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none;
+  will-change: transform; }
 .score .lit-focus, .score .lit-focus * { fill: #2a5fab !important; stroke: #2a5fab !important; }
 .score .lit-other, .score .lit-other * { fill: #9fb7da !important; stroke: #9fb7da !important; }
 /* "Kaikki": one line that slides sideways; the page itself never scrolls. */
