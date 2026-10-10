@@ -9,10 +9,12 @@ import { mixToWav, type RenderedParts } from "./wav";
 
 export type ToWorker =
   | { type: "init"; soundfont: ArrayBuffer; midi: ArrayBuffer; sampleRate: number; partChannels: number[][] }
+  | { type: "render"; rate: number }
   | { type: "make"; id: number; rate: number; gains: number[]; outputGain: number; ceiling: number };
 
 export type FromWorker =
   | { type: "progress"; fraction: number }
+  | { type: "rendered" }
   | { type: "wav"; id: number; wav: ArrayBuffer; rate: number }
   | { type: "error"; message: string };
 
@@ -68,6 +70,7 @@ scope.onmessage = async (event: MessageEvent<ToWorker>) => {
   try {
     if (m.type === "init") { setup = m; return; }
     if (!rendered || rendered.rate !== m.rate) rendered = { rate: m.rate, parts: await render(m.rate) };
+    if (m.type === "render") { post({ type: "rendered" }); return; }
     const wav = mixToWav(rendered.parts, m.gains, m.outputGain, m.ceiling);
     post({ type: "wav", id: m.id, wav, rate: m.rate }, [wav]);
   } catch (error) {

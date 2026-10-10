@@ -49,7 +49,7 @@ export class FilePlayer {
   }
 
   private progress: (fraction: number) => void = () => {};
-  private firstFile: (() => void) | null = null;
+  private onRendered: (() => void) | null = null;
 
   static async create(midiUrl: string, partNames: string[], log: (m: string) => void = () => {}): Promise<FilePlayer> {
     const [soundfont, midi] = await Promise.all([SOUNDFONT_URL, midiUrl].map(async (url) => {
@@ -64,7 +64,15 @@ export class FilePlayer {
     const init: ToWorker = { type: "init", soundfont: soundfont!, midi: midi!, sampleRate: SAMPLE_RATE, partChannels: channels };
     worker.postMessage(init, [soundfont!, midi!]);
     log("Valmistellaan ääntä…");
-    await new Promise<void>((resolve) => { player.firstFile = resolve; player.request(); });
+    // Only render here. The first file is mixed once the player has set the
+    // singer's part and mix (straight after this returns), so playback never
+    // starts on a default mix that is swapped out a moment later.
+    await new Promise<void>((resolve) => {
+      player.onRendered = resolve;
+      const render: ToWorker = { type: "render", rate: 1 };
+      worker.postMessage(render);
+    });
+    player.mixLater();
     return player;
   }
 
@@ -89,8 +97,8 @@ export class FilePlayer {
   /** Must be called straight from the singer's tap, like the Web Audio player's. */
   async play(): Promise<void> {
     this.wanted = true;
-    if (this.swapping) return;
-    this.audio.currentTime = this.position / this.fileRate;
+    if (this.swapping || !this.url) return;
+    this.moveTo(this.position);
     await this.audio.play();
   }
 
@@ -102,7 +110,7 @@ export class FilePlayer {
 
   seek(seconds: number): void {
     this.position = Math.max(0, seconds);
-    if (!this.swapping) this.audio.currentTime = this.position / this.fileRate;
+    if (!this.swapping && this.url) this.moveTo(this.position);
   }
 
   /** Renders the song again at the new tempo, once the tapping stops. */
@@ -110,6 +118,16 @@ export class FilePlayer {
     if (rate === this.rate) return;
     this.rate = rate;
     this.mixLater(400);
+  }
+
+  /**
+   * Moves the file to a song position, but only when it is not there already:
+   * a seek makes the audio element stop and buffer again, which stuttered the
+   * start of playback on Firefox for Android.
+   */
+  private moveTo(seconds: number): void {
+    const target = seconds / this.fileRate;
+    if (Math.abs(this.audio.currentTime - target) > 0.05) this.audio.currentTime = target;
   }
 
   sounding(): boolean {
@@ -138,6 +156,7 @@ export class FilePlayer {
 
   private receive(m: FromWorker): void {
     if (m.type === "progress") { this.progress(m.fraction); return; }
+    if (m.type === "rendered") { this.onRendered?.(); this.onRendered = null; return; }
     if (m.type === "error") throw new Error(m.message);
     // Only the newest request counts; an older file would undo a later change.
     if (m.id !== this.requested) return;
@@ -156,8 +175,6 @@ export class FilePlayer {
     this.audio.currentTime = this.position / rate;
     this.swapping = false;
     if (old) URL.revokeObjectURL(old);
-    this.firstFile?.();
-    this.firstFile = null;
     if (this.wanted) await this.audio.play();
   }
 }
