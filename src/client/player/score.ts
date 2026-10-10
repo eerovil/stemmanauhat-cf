@@ -217,6 +217,28 @@ export class Score {
     return null;
   }
 
+  /**
+   * The note under a tap in the page view, in container pixels: the nearest note
+   * of the bar tapped, or null off the staves. Lyrics just below count as the staff.
+   */
+  noteAt(x: number, y: number): { measure: number; beat: number } | null {
+    let found: { measure: number; bar: Bar; distance: number } | null = null;
+    this.bars.forEach((bar, measure) => {
+      if (!bar || x < bar.x0 || x > bar.x1) return;
+      const distance = y < bar.top ? bar.top - y : y > bar.bottom ? y - bar.bottom : 0;
+      if (distance > bar.bottom - bar.top || (found && found.distance <= distance)) return;
+      found = { measure, bar, distance };
+    });
+    if (!found) return null;
+    const { measure, bar } = found as { measure: number; bar: Bar };
+    let beat = bar.anchors[0]![0];
+    let gap = Infinity;
+    for (const [b, ax] of bar.anchors.slice(0, -1)) {
+      if (Math.abs(ax - x) < gap) { gap = Math.abs(ax - x); beat = b; }
+    }
+    return { measure, beat };
+  }
+
   private measure(): void {
     const svg = this.drawing();
     const box = this.container.getBoundingClientRect();

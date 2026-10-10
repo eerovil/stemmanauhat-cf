@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nearest, parseTiming, positionAt, startsOf, type Timing } from "../../src/client/player/timing";
+import { nearest, parseTiming, positionAt, startsOf, timeOf, type Timing } from "../../src/client/player/timing";
 
 // Bar 0 at 1 s a beat, then bar 1 played twice (a repeat), then bar 2.
 const timing: Timing = parseTiming({
@@ -25,6 +25,21 @@ describe("positionAt", () => {
   it("stays at the ends", () => {
     expect(positionAt(timing, -1)).toEqual({ measure: 0, beat: 0 });
     expect(positionAt(timing, 99)).toEqual({ measure: 2, beat: 2 });
+  });
+});
+
+describe("timeOf", () => {
+  it("finds when a beat of a bar plays", () => {
+    expect(timeOf(timing, 0, 0, 0)).toBe(0);
+    expect(timeOf(timing, 0, 1.5, 0)).toBe(1.5);
+    expect(timeOf(timing, 2, 0.5, 0)).toBe(7);
+  });
+  it("picks the play-through of a repeated bar nearest now", () => {
+    expect(timeOf(timing, 1, 1, 0)).toBe(3);
+    expect(timeOf(timing, 1, 1, 6)).toBe(5);
+  });
+  it("knows no bar the timing does not name", () => {
+    expect(timeOf(timing, 9, 0, 0)).toBeNull();
   });
 });
 
