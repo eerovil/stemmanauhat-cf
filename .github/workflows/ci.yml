@@ -69,7 +69,8 @@ jobs:
         if: steps.ready.outputs.ready == 'true'
         run: |
           set -e
-          curl -fsS https://stemmanauhat.eerovil.workers.dev/health
+          # A brand-new Worker's address can answer 404 for a few seconds after its first deploy.
+          curl -fsS --retry 6 --retry-delay 5 --retry-all-errors https://stemmanauhat.eerovil.workers.dev/health
           code=$(curl -s -o /dev/null -w '%{http_code}' https://stemmanauhat.eerovil.workers.dev/c/jm)
           case "$code" in
             302) ;;

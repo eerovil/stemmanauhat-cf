@@ -41,6 +41,12 @@ test("player on a desktop, entered by the old link", async ({ browser }) => {
   await context.close();
 });
 
+test("front page for a signed-out visitor", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();
+  await page.screenshot({ path: `${dir}/front-page-phone.png` });
+});
+
 test("refused and admin pages", async ({ page, browser }) => {
   await signInAs(page, "/c/jm", "ulkopuolinen@example.com");
   await expect(page.getByText("ei ole pääsyä")).toBeVisible();
