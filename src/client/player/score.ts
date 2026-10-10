@@ -86,6 +86,8 @@ export class Score {
 
   /** The singer's own zoom, times the size that suits the screen. */
   zoom = 1;
+  /** The size the last layout used for this screen width; OSMD's zoom is this times `zoom`. */
+  baseZoom = 1;
   /** The whole score on one line that scrolls sideways, as in the videos. */
   singleLine = false;
 
@@ -127,7 +129,8 @@ export class Score {
     this.stretch = 1;
     this.renderedZoom = this.zoom;
     this.osmd.setOptions({ renderSingleHorizontalStaffline: this.singleLine });
-    this.osmd.Zoom = (window.innerWidth < 600 ? 0.6 : 0.8) * this.zoom;
+    this.baseZoom = window.innerWidth < 600 ? 0.6 : 0.8;
+    this.osmd.Zoom = this.baseZoom * this.zoom;
     this.osmd.render();
     // OSMD may reuse the SVG element: drop any stretch a zoom left on it.
     const svg = this.drawing();

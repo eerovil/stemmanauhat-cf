@@ -118,10 +118,18 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await expect(page.getByTestId("time")).toHaveText("0:05");
   await expect(page.getByTestId("cursor")).toHaveAttribute("data-measure", "2");
   await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
+
+  // Turned sideways in "Oma" (past the 600 px width where the base size changes), then back to "Kaikki".
+  await page.setViewportSize({ width: 839, height: 412 });
+  await page.waitForTimeout(1000);
+  const turnedNote = await noteSize();
   await page.getByRole("button", { name: "Säädöt" }).click();
   await staves.getByRole("button", { name: "Kaikki" }).click();
   await expect.poll(staffNotes).toBe(before);
   await expect(page.locator(".player.one-line")).toHaveCount(1);
+  await expect.poll(async () => Math.abs((await noteSize()) - turnedNote)).toBeLessThan(1);
+  await page.setViewportSize({ width: 412, height: 839 });
+  await page.waitForTimeout(1000);
 
   // Zoom makes the score bigger, and the size is remembered.
   const height = async () => (await page.getByTestId("score").locator("svg").first().boundingBox())!.height;

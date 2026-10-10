@@ -58,7 +58,10 @@ const zoom = ref(remembered.zoom());
  * "Oma" uses it too, so the staves stay the same size when the view changes.
  */
 let fitZoom = 1;
-/** "Kaikki"'s line at zoom 1: its height and a bar's average width, in pixels. */
+/**
+ * "Kaikki"'s line at OSMD zoom 1: its height and a bar's average width. Kept
+ * apart from the screen-width base size, which changes when a phone turns.
+ */
 let lineSize: { height: number; barWidth: number } | null = null;
 
 const sheetOpen = ref(false);
@@ -277,8 +280,8 @@ function fit() {
   if (box && lineSize) {
     // The one-line view fills the screen above the dock; the page view is as wide.
     const height = singleLine.value ? box.clientHeight : window.innerHeight - (dock.value?.offsetHeight ?? 0);
-    const byHeight = (height * 0.92) / lineSize.height;
-    const byWidth = box.clientWidth / (3 * lineSize.barWidth);
+    const byHeight = (height * 0.92) / (lineSize.height * score.baseZoom);
+    const byWidth = box.clientWidth / (3 * lineSize.barWidth * score.baseZoom);
     fitZoom = Math.min(3, Math.max(0.3, Math.min(byHeight, byWidth)));
   }
   score.setZoom(fitZoom * zoom.value);
@@ -288,7 +291,8 @@ function fit() {
 /** Notes "Kaikki"'s size while the score is laid out as it. */
 function measureLine() {
   if (!score || !score.singleLine || !score.height) return;
-  lineSize = { height: score.height / score.zoom, barWidth: score.width / Math.max(1, score.barCount) / score.zoom };
+  const scale = score.zoom * score.baseZoom;
+  lineSize = { height: score.height / scale, barWidth: score.width / Math.max(1, score.barCount) / scale };
 }
 
 function changeZoom(step: number) {
