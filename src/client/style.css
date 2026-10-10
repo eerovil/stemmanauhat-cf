@@ -139,3 +139,6 @@ footer { margin-top: 1.5rem; }
 .ask-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: 0.5rem; margin-top: 1rem; }
 .ask-choice { min-height: 56px; font-size: 1.15rem; font-weight: 600; border-radius: 14px; background: var(--chip); border: none; }
 .ask-choice.mine { background: var(--accent-soft); color: var(--accent); outline: 2px solid var(--accent); }
+.home h2 { font-size: 1.3rem; margin: 1.6rem 0 0.3rem; }
+.open-songs { text-align: left; margin: 1rem 0 0; }
+.members { margin-top: 2rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }
