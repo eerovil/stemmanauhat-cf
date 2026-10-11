@@ -248,3 +248,16 @@ test("one-line view with a crowded bar: its neighbours widened", async ({ browse
   await page.screenshot({ path: `${dir}/one-line-crowded-bar-desktop.png` });
   await context.close();
 });
+
+test("own staff on a phone: a very long bar wraps over several lines (#45)", async ({ page }) => {
+  await page.goto("/c/public/vapaa-rytmi");
+  await choosePartIfAsked(page, "Tenori");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await page.getByRole("group", { name: "Viivastot" }).getByRole("button", { name: "Oma" }).click();
+  await page.locator(".backdrop").click({ position: { x: 100, y: 100 } });
+  await page.locator("input.progress").fill("9.5");
+  await expect(page.locator(".info-meta")).toContainText("Tahti 1 / 3");
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${dir}/long-bar-own-staff-phone.png` });
+});

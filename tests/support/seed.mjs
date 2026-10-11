@@ -1,6 +1,6 @@
 // Fresh local D1 and R2 for the browser tests: the migrations, made-up
 // members, a passphrase link for jm, the synthetic two-part song uploaded for jm
-// (with made-up composer, lyricist and arranger) and for the public demo (a composer only, and once more for jm as Iltalaulu), a synthetic song with one crowded bar for jm, and a stand-in for the piano (spessasynth's own tiny
+// (with made-up composer, lyricist and arranger) and for the public demo (a composer only, and once more for jm as Iltalaulu), a synthetic song with one crowded bar for jm, a public one that opens with a very long bar, and a stand-in for the piano (spessasynth's own tiny
 // saw-wave sound bank; the real piano is MuseScore's and lives only in R2).
 // Run from the repo root.
 import { execFileSync } from "node:child_process";
@@ -38,6 +38,8 @@ const songs = [
   ["jm", "epatasainen", "Epätasainen", "tests/fixtures/uneven", 12.0, [null, null, null]],
   // A third jm song, so a setlist has something to leave out (#34).
   ["jm", "iltalaulu", "Iltalaulu", "tests/fixtures/two-part", 8.0, [null, null, null]],
+  // A free-rhythm verse written as one bar of 32 quarters (#45).
+  ["public", "vapaa-rytmi", "Vapaa rytmi", "tests/fixtures/long-bar", 20.0, [null, null, null]],
 ];
 const value = (text) => (text === null ? "NULL" : `'${text}'`);
 const sql = [
