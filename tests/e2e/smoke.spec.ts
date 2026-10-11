@@ -5,11 +5,13 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await signInAs(page, "/c/jm", "laulaja@example.com");
   await expect(page).toHaveURL(/\/c\/jm$/);
   await expect(page.getByRole("heading", { name: "Joensuun Mieslaulajat" })).toBeVisible();
-  // Who wrote each song, under its title; nothing for a song whose score does not say.
+  // Composer and arranger under each title (the lyricist only in the player); an empty line for a
+  // song whose score does not say, so the rows stay the same height.
   const kokeilu = page.locator(".songs li", { hasText: "Kokeilulaulu" });
-  await expect(kokeilu.locator(".credits"))
-    .toHaveText("säv. Aino Esimerkki · san. Eino Runoniekka · sov. Sulo Sovittaja");
-  await expect(page.locator(".songs li", { hasText: "Epätasainen" }).locator(".credits")).toHaveCount(0);
+  await expect(kokeilu.locator(".credits")).toHaveText("säv. Aino Esimerkki · sov. Sulo Sovittaja");
+  const epatasainen = page.locator(".songs li", { hasText: "Epätasainen" });
+  await expect(epatasainen.locator(".credits")).toHaveText("");
+  expect((await epatasainen.locator("a").boundingBox())!.height).toBe((await kokeilu.locator("a").boundingBox())!.height);
   await page.getByRole("link", { name: "Kokeilulaulu" }).click();
 
   // The first time, the singer is asked for their part rather than given the first one.
@@ -283,6 +285,27 @@ test("a song published without composer, lyricist or arranger shows none", async
   await choosePartIfAsked(page, "Tenori");
   await expect(page.locator(".info-title")).toHaveText("Epätasainen");
   await expect(page.locator(".info-credits")).toHaveCount(0);
+});
+
+test("a song list keeps every row one height, cutting long credits to one line", async ({ page }) => {
+  const long = "Aino Esimerkki-Hyvinpitkänimi ja Eino Toinen Säveltäjä sekä Kolmas Kirjoittaja";
+  await page.route("**/api/songs?choir=jm", async (route) => {
+    const data = await (await route.fetch()).json();
+    data.songs = data.songs.map((s: Record<string, unknown>) =>
+      s.slug === "kokeilu" ? { ...s, composer: long, arranger: long } : s);
+    await route.fulfill({ json: data });
+  });
+  await page.setViewportSize({ width: 360, height: 760 });
+  await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  const kokeilu = page.locator(".songs li", { hasText: "Kokeilulaulu" });
+  const line = kokeilu.locator(".credits");
+  await expect(line).toHaveText(`säv. ${long} · sov. ${long}`);
+  // Cut with an ellipsis rather than wrapped: wider than its box, and as tall as an empty line.
+  expect(await line.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  const epatasainen = page.locator(".songs li", { hasText: "Epätasainen" });
+  expect(await line.evaluate((el) => el.clientHeight))
+    .toBe(await epatasainen.locator(".credits").evaluate((el) => el.clientHeight));
+  expect((await epatasainen.locator("a").boundingBox())!.height).toBe((await kokeilu.locator("a").boundingBox())!.height);
 });
 
 test("a signed-out visitor finds the open songs on the front page", async ({ page }) => {

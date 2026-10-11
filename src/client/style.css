@@ -43,7 +43,9 @@ button.link { border: none; background: none; color: var(--accent); padding: 0.2
 .songs li:last-child { border-bottom: none; }
 .songs a { flex: 1; min-width: 0; padding: 0.95rem 1.1rem; text-decoration: none; color: var(--fg); font-weight: 500;
   display: flex; flex-direction: column; gap: 0.15rem; }
-.songs .credits { color: var(--muted); font-size: 0.85rem; font-weight: 400; }
+/* Always one line, and always there (empty when a song has no credits), so every row is the same height. */
+.songs .credits { color: var(--muted); font-size: 0.85rem; font-weight: 400; line-height: 1.3; height: 1.3em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .badge { font-size: 0.72rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); border-radius: 1rem;
   padding: 0.15rem 0.55rem; margin-right: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .segmented.order { margin: 0 0 0.8rem auto; }

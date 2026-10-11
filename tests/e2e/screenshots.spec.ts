@@ -57,7 +57,10 @@ test("song list sorted newest first", async ({ page }) => {
     data.songs = [
       ["Aamulaulu", "2026-08-01"], ["Bassojen laulu", "2026-09-01"], ["Iltalaulu", "2026-10-05"],
       ["Joulun kellot", "2025-12-01"], ["Kotimaani", "2026-10-08"], ["Suvivirsi", "2026-05-20"],
-    ].map(([title, day], i) => ({ ...song, slug: `s${i}`, title, published_at: `${day}T12:00:00Z` }));
+    ].map(([title, day], i) => ({ ...song, slug: `s${i}`, title, published_at: `${day}T12:00:00Z`,
+      // Rows with no credits and with credits too long for one line, to show they keep one height.
+      ...(i % 3 === 1 ? { composer: null, lyricist: null, arranger: null } : {}),
+      ...(i === 2 ? { composer: "Aino Esimerkki-Hyvinpitkänimi", arranger: "Sulo Sovittaja-Pitkänimi" } : {}) }));
     await route.fulfill({ json: data });
   });
   await signInAs(page, "/c/jm", "laulaja@example.com");
