@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decideAccess, type AccessFacts } from "../../src/worker/access";
 import { parseRange, safeSongPath } from "../../src/worker/files";
 import { readEmail } from "../../src/worker/google";
-import { parseEmails, safeNext, versionOf } from "../../src/worker/index";
+import { parseEmails, parseSetlist, safeNext, versionOf } from "../../src/worker/index";
 import { joinUrl, linkKey } from "../../src/worker/links";
 import { publicOrigin } from "../../src/worker/origin";
 import { newPassphraseRecord, passphraseMatches } from "../../src/worker/passphrase";
@@ -149,5 +149,25 @@ describe("choir links", () => {
   });
   it("use the old site's link shape", () => {
     expect(joinUrl("https://x.example", "jm", "a-b_c")).toBe("https://x.example/?user=jm&passphrase=a-b_c");
+  });
+});
+
+describe("parseSetlist", () => {
+  const slugs = new Set(["kokeilu", "iltalaulu", "epatasainen"]);
+  it("keeps the name trimmed and the songs in the order given", () => {
+    expect(parseSetlist({ name: "  Kevätkonsertti ", songs: ["iltalaulu", "kokeilu"] }, slugs))
+      .toEqual({ name: "Kevätkonsertti", songs: ["iltalaulu", "kokeilu"] });
+    expect(parseSetlist({ name: "Tyhjä", songs: [] }, slugs)).toEqual({ name: "Tyhjä", songs: [] });
+  });
+  it("refuses an empty or long name", () => {
+    expect(parseSetlist({ name: "  ", songs: [] }, slugs)).toHaveProperty("error");
+    expect(parseSetlist({ name: "x".repeat(81), songs: [] }, slugs)).toHaveProperty("error");
+    expect(parseSetlist({ songs: [] }, slugs)).toHaveProperty("error");
+  });
+  it("refuses another choir's song, a song twice, and anything not a list of slugs", () => {
+    expect(parseSetlist({ name: "A", songs: ["muu"] }, slugs)).toHaveProperty("error");
+    expect(parseSetlist({ name: "A", songs: ["kokeilu", "kokeilu"] }, slugs)).toHaveProperty("error");
+    expect(parseSetlist({ name: "A", songs: "kokeilu" }, slugs)).toHaveProperty("error");
+    expect(parseSetlist({ name: "A", songs: [1] }, slugs)).toHaveProperty("error");
   });
 });

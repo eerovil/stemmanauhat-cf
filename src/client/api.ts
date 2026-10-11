@@ -49,6 +49,14 @@ function joinCredits(pairs: [string, string | null | undefined][]): string {
     .join(" · ");
 }
 
+/** A choir's named song list in its own order, such as a concert's program. */
+export interface Setlist {
+  id: number;
+  name: string;
+  /** Song slugs, in order. */
+  songs: string[];
+}
+
 export interface Song extends SongSummary {
   choir: string;
   base: string;
@@ -97,6 +105,15 @@ export const remembered = {
   /** How the song lists are sorted on this device: by name or newest first. */
   order: (): SongOrder => (localStorage.getItem("stemmanauhat:order") === "date" ? "date" : "name"),
   setOrder: (order: SongOrder) => localStorage.setItem("stemmanauhat:order", order),
+  /** The setlist picked for this choir's list, or null for every song. */
+  setlist: (choir: string) => {
+    const value = Number(localStorage.getItem(`stemmanauhat:${choir}:setlist`));
+    return Number.isInteger(value) && value > 0 ? value : null;
+  },
+  setSetlist: (choir: string, id: number | null) => {
+    if (id === null) localStorage.removeItem(`stemmanauhat:${choir}:setlist`);
+    else localStorage.setItem(`stemmanauhat:${choir}:setlist`, String(id));
+  },
 };
 
 export type SongOrder = "name" | "date";

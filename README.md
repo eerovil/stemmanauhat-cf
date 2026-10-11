@@ -20,6 +20,9 @@ Live address (once set up): https://stemmanauhat.eerovil.workers.dev
   passphrases at `/admin`.
 - **Songs:** song-app writes each version to R2 under `songs/<choir>/<slug>/<version>/` and points
   a D1 `songs` row at it. The format is in song-app's `docs/stemmanauhat-site.md`.
+- **Setlists:** a choir's named song lists in their own order, such as a concert's program (D1
+  `setlists`). Singers pick one from the song list's dropdown and see only its songs, numbered;
+  admins make and change them on the same page ("Uusi setlista", "Muokkaa").
 - **Player:** the score is drawn by OpenSheetMusicDisplay with the videos' blue for the notes being
   sung and their translucent cursor band. "Kaikki" shows every staff that fits on one line sliding
   sideways under a fixed cursor (drag it to move); "Oma" shows your own staff alone in page lines.

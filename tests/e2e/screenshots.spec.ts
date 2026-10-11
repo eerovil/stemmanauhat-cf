@@ -71,6 +71,31 @@ test("song list sorted newest first", async ({ page }) => {
   await page.screenshot({ path: `${dir}/song-list-newest-phone.png` });
 });
 
+test("setlists: an admin editing one, and a singer's list with it picked", async ({ page, browser }) => {
+  await signInAs(page, "/c/jm", "yllapito@example.com");
+  await page.getByRole("button", { name: "Uusi setlista" }).click();
+  await page.getByLabel("Setlistan nimi").fill("Kevätkonsertti 2027");
+  const edit = page.locator(".setlist-edit");
+  await edit.getByRole("checkbox", { name: "Kokeilulaulu" }).click();
+  await edit.getByRole("checkbox", { name: "Iltalaulu" }).click();
+  await page.getByRole("button", { name: "Siirrä ylös: Iltalaulu" }).click();
+  await expect(edit.locator(".picked li")).toHaveText([/Iltalaulu/, /Kokeilulaulu/]);
+  await page.screenshot({ path: `${dir}/setlist-edit-phone.png` });
+  await page.getByRole("button", { name: "Tallenna" }).click();
+  await expect(page.locator(".songs li .song-title")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
+
+  const singer = await (await browser.newContext()).newPage();
+  await signInAs(singer, "/c/jm", "laulaja@example.com");
+  await singer.getByLabel("Setlista").selectOption({ label: "Kevätkonsertti 2027" });
+  await expect(singer.locator(".songs li .song-title")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
+  await singer.screenshot({ path: `${dir}/setlist-picked-phone.png` });
+
+  await page.getByRole("button", { name: "Muokkaa" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Poista setlista" }).click();
+  await expect(page.getByLabel("Setlista")).toHaveCount(0);
+});
+
 test("front page for a signed-out visitor", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();
