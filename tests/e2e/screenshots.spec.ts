@@ -57,14 +57,17 @@ test("song list sorted newest first", async ({ page }) => {
     data.songs = [
       ["Aamulaulu", "2026-08-01"], ["Bassojen laulu", "2026-09-01"], ["Iltalaulu", "2026-10-05"],
       ["Joulun kellot", "2025-12-01"], ["Kotimaani", "2026-10-08"], ["Suvivirsi", "2026-05-20"],
-    ].map(([title, day], i) => ({ ...song, slug: `s${i}`, title, published_at: `${day}T12:00:00Z` }));
+    ].map(([title, day], i) => ({ ...song, slug: `s${i}`, title, published_at: `${day}T12:00:00Z`,
+      // Rows with no credits and with credits too long for one line, to show they keep one height.
+      ...(i % 3 === 1 ? { composer: null, lyricist: null, arranger: null } : {}),
+      ...(i === 2 ? { composer: "Aino Esimerkki-Hyvinpitkänimi", arranger: "Sulo Sovittaja-Pitkänimi" } : {}) }));
     await route.fulfill({ json: data });
   });
   await signInAs(page, "/c/jm", "laulaja@example.com");
-  await expect(page.locator(".songs li a").first()).toHaveText("Aamulaulu");
+  await expect(page.locator(".songs .song-title").first()).toHaveText("Aamulaulu");
   await page.screenshot({ path: `${dir}/song-list-by-name-phone.png` });
   await page.getByRole("group", { name: "Järjestys" }).getByRole("button", { name: "Uusimmat" }).click();
-  await expect(page.locator(".songs li a").first()).toHaveText("Kotimaani");
+  await expect(page.locator(".songs .song-title").first()).toHaveText("Kotimaani");
   await page.screenshot({ path: `${dir}/song-list-newest-phone.png` });
 });
 
@@ -79,12 +82,12 @@ test("setlists: an admin editing one, and a singer's list with it picked", async
   await expect(edit.locator(".picked li")).toHaveText([/Iltalaulu/, /Kokeilulaulu/]);
   await page.screenshot({ path: `${dir}/setlist-edit-phone.png` });
   await page.getByRole("button", { name: "Tallenna" }).click();
-  await expect(page.locator(".songs li a")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
+  await expect(page.locator(".songs li .song-title")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
 
   const singer = await (await browser.newContext()).newPage();
   await signInAs(singer, "/c/jm", "laulaja@example.com");
   await singer.getByLabel("Setlista").selectOption({ label: "Kevätkonsertti 2027" });
-  await expect(singer.locator(".songs li a")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
+  await expect(singer.locator(".songs li .song-title")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
   await singer.screenshot({ path: `${dir}/setlist-picked-phone.png` });
 
   await page.getByRole("button", { name: "Muokkaa" }).click();

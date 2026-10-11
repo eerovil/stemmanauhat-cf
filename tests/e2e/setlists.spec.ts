@@ -26,23 +26,23 @@ test("an admin makes a setlist, and a singer sees only its songs in its order", 
 
   await expect(page.getByText("Tallennettu.")).toBeVisible();
   await expect(page.getByLabel("Setlista")).toHaveValue(/\d+/);
-  await expect(page.locator(".songs li a")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
+  await expect(page.locator(".songs li .song-title")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
   await expect(page.locator(".songs .place")).toHaveText(["1.", "2."]);
   await expect(page.getByRole("group", { name: "Järjestys" })).toHaveCount(0);
 
   // A singer picks it from the dropdown; it stays picked after a reload.
   const singer = await (await browser.newContext()).newPage();
   await signInAs(singer, "/c/jm", "laulaja@example.com");
-  await expect(singer.locator(".songs li a")).toHaveText(["Epätasainen", "Iltalaulu", "Kokeilulaulu"]);
+  await expect(singer.locator(".songs li .song-title")).toHaveText(["Epätasainen", "Iltalaulu", "Kokeilulaulu"]);
   await singer.getByLabel("Setlista").selectOption({ label: "Kevätkonsertti" });
-  await expect(singer.locator(".songs li a")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
+  await expect(singer.locator(".songs li .song-title")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
   await expect(singer.getByRole("button", { name: "Muokkaa" })).toHaveCount(0);
   await expect(singer.getByRole("button", { name: "Uusi setlista" })).toHaveCount(0);
   await singer.reload();
-  await expect(singer.locator(".songs li a")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
+  await expect(singer.locator(".songs li .song-title")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
   // Search filters inside the setlist, and each song keeps its place.
   await singer.getByLabel("Hae kappaletta").fill("koke");
-  await expect(singer.locator(".songs li a")).toHaveText(["Kokeilulaulu"]);
+  await expect(singer.locator(".songs li .song-title")).toHaveText(["Kokeilulaulu"]);
   await expect(singer.locator(".songs .place")).toHaveText(["2."]);
   await singer.getByLabel("Hae kappaletta").fill("");
   await singer.getByLabel("Setlista").selectOption({ label: "Kaikki kappaleet" });
@@ -52,7 +52,7 @@ test("an admin makes a setlist, and a singer sees only its songs in its order", 
   await page.getByRole("button", { name: "Muokkaa" }).click();
   await edit.getByRole("checkbox", { name: "Iltalaulu" }).click();
   await page.getByRole("button", { name: "Tallenna" }).click();
-  await expect(page.locator(".songs li a")).toHaveText(["Kokeilulaulu"]);
+  await expect(page.locator(".songs li .song-title")).toHaveText(["Kokeilulaulu"]);
   await page.getByRole("button", { name: "Muokkaa" }).click();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Poista setlista" }).click();

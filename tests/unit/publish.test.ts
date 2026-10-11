@@ -48,6 +48,25 @@ describe("publishPlan", () => {
     expect(db.prepare("SELECT published_at FROM songs WHERE slug = 'toinen'").get()?.published_at)
       .toBe("2026-10-10T12:34:56Z");
   });
+  it("carries composer, lyricist and arranger to R2 and D1, and clears them when a score drops them", () => {
+    const credited = { ...manifest, composer: " Aino Esimerkki ", lyricist: "O'Runoilija", arranger: "" };
+    const plan = publishPlan(credited, "jm", date);
+    expect(plan.r2Manifest).toMatchObject({ composer: "Aino Esimerkki", lyricist: "O'Runoilija" });
+    expect(plan.r2Manifest).not.toHaveProperty("arranger");
+    const db = new DatabaseSync(":memory:");
+    for (const f of readdirSync("migrations").sort()) db.exec(readFileSync(join("migrations", f), "utf8"));
+    const row = () => db.prepare("SELECT composer, lyricist, arranger FROM songs").get();
+    db.exec(plan.sql);
+    expect(row()).toEqual({ composer: "Aino Esimerkki", lyricist: "O'Runoilija", arranger: null });
+    db.exec(publishPlan(manifest, "jm", date).sql);
+    expect(row()).toEqual({ composer: null, lyricist: null, arranger: null });
+  });
+  it("publishes a bundle from before the credits, with none", () => {
+    const plan = publishPlan(manifest, "jm", date);
+    expect(Object.keys(plan.r2Manifest)).not.toEqual(expect.arrayContaining(["composer"]));
+    expect(plan.sql).toContain("NULL, NULL, NULL)");
+    expect(() => publishPlan({ ...manifest, composer: 3 }, "jm", date)).toThrow(/bad manifest for kokeilu: composer/);
+  });
   it("refuses an unknown choir and a broken manifest", () => {
     expect(() => publishPlan(manifest, "kaikki", date)).toThrow(/unknown choir/);
     expect(() => publishPlan({ ...manifest, parts: [] }, "public", date)).toThrow(/bad manifest/);

@@ -24,6 +24,29 @@ export interface SongSummary {
   parts: Part[];
   duration: number;
   published_at: string;
+  /** From the score; null or missing when it does not say. */
+  composer?: string | null;
+  lyricist?: string | null;
+  arranger?: string | null;
+}
+
+type Credited = Pick<SongSummary, "composer" | "lyricist" | "arranger">;
+
+/** "säv. X · san. Y · sov. Z", leaving out what is not known; "" when nothing is. The player's line. */
+export function credits(song: Credited): string {
+  return joinCredits([["säv.", song.composer], ["san.", song.lyricist], ["sov.", song.arranger]]);
+}
+
+/** The song lists' shorter line: "säv. X · sov. Y", never the lyricist (Eero, PR #33 review). */
+export function listCredits(song: Credited): string {
+  return joinCredits([["säv.", song.composer], ["sov.", song.arranger]]);
+}
+
+function joinCredits(pairs: [string, string | null | undefined][]): string {
+  return pairs
+    .filter(([, name]) => typeof name === "string" && name.trim())
+    .map(([label, name]) => `${label} ${name!.trim()}`)
+    .join(" · ");
 }
 
 /** A choir's named song list in its own order, such as a concert's program. */

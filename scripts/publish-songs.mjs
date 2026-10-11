@@ -26,6 +26,20 @@ export function versionFor(date) {
 
 const quote = (text) => `'${String(text).replace(/'/g, "''")}'`;
 
+/** Who wrote the song, from the score's metaTags; each may be missing. */
+export const CREDITS = ["composer", "lyricist", "arranger"];
+
+/** The manifest's credits that are set, trimmed: `{ composer: "X" }`. A bundle from before them has none. */
+export function creditsOf(manifest) {
+  const out = {};
+  for (const name of CREDITS) {
+    const value = manifest[name];
+    if (value != null && typeof value !== "string") throw new Error(`bad manifest for ${manifest.slug ?? "?"}: ${name}`);
+    if (value?.trim()) out[name] = value.trim();
+  }
+  return out;
+}
+
 /** What to upload for one bundle and the D1 statement that publishes it. */
 export function publishPlan(manifest, choir, date) {
   if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
@@ -33,6 +47,7 @@ export function publishPlan(manifest, choir, date) {
   if (!slug || slug.includes("/") || !title || !Array.isArray(parts) || parts.length === 0 || !(duration > 0)) {
     throw new Error(`bad manifest for ${slug ?? "?"}`);
   }
+  const credits = creditsOf(manifest);
   const version = versionFor(date);
   const prefix = `songs/${choir}/${slug}/${version}/`;
   const files = [...BASE_FILES, ...parts.map((p) => p.file)];
@@ -40,15 +55,18 @@ export function publishPlan(manifest, choir, date) {
   const publishedAt = date.toISOString().replace(/\.\d+Z$/, "Z");
   // The manifest in R2 carries the same facts as the row, as song-app writes it.
   const r2Manifest = { slug, title, choir, version, score: "score.musicxml", timing: "timing.json",
-    midi: "score.mid", parts: JSON.parse(partsJson), duration };
+    midi: "score.mid", parts: JSON.parse(partsJson), duration, ...credits };
   // A song keeps the date it first came out, in any choir, so a fixed score or
   // a move does not make it new again. The songs from the old YouTube site
   // carry their upload dates (#18).
   const firstPublished = `COALESCE((SELECT MIN(published_at) FROM songs WHERE slug = ${quote(slug)}), ${quote(publishedAt)})`;
-  const sql = "INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at) VALUES ("
-    + [quote(choir), quote(slug), quote(title), quote(prefix), quote(partsJson), Number(duration), firstPublished].join(", ")
+  // Every publish sets all three, so a name taken off the score goes from the site too.
+  const sql = `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, ${CREDITS.join(", ")}) VALUES (`
+    + [quote(choir), quote(slug), quote(title), quote(prefix), quote(partsJson), Number(duration), firstPublished,
+      ...CREDITS.map((name) => (credits[name] ? quote(credits[name]) : "NULL"))].join(", ")
     + ") ON CONFLICT (choir, slug) DO UPDATE SET title = excluded.title, prefix = excluded.prefix,"
-    + " parts = excluded.parts, duration = excluded.duration;"
+    + " parts = excluded.parts, duration = excluded.duration,"
+    + CREDITS.map((name) => ` ${name} = excluded.${name}`).join(",") + ";"
     // Publishing a song for another choir moves it, as song-app does, except
     // that the public list keeps its copy: a public-domain song may be in a
     // choir's own list too. Publishing to public moves nothing.

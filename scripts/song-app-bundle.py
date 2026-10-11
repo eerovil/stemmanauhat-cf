@@ -7,7 +7,8 @@
 # Each <out-dir>/<slug>/ gets what song-app's publish uploads, plus score.mid:
 # manifest.json, score.musicxml, score.mid, timing.json and parts/<n>-<name>.mp3.
 # The tempo for a score without one is the recording's, as in song-app's publish,
-# and so are the tempo changes set for the recording.
+# and so are the tempo changes set for the recording. The manifest also carries
+# the score's composer, lyricist and arranger (its metaTags) when they are set.
 # Remove once song-app's publish uploads score.mid itself.
 import json
 import os
@@ -15,6 +16,17 @@ import shutil
 import sys
 import tempfile
 import unicodedata
+import xml.etree.ElementTree as ET
+
+CREDITS = ("composer", "lyricist", "arranger")
+
+
+def credits(mscx):
+    """The score's composer, lyricist and arranger metaTags, the ones that are not empty."""
+    score = ET.parse(mscx).getroot().find("Score")
+    tags = {m.get("name"): (m.text or "").strip() for m in (score.findall("metaTag") if score is not None else [])}
+    return {name: tags[name] for name in CREDITS if tags.get(name)}
+
 
 song_app, out_root, slugs = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2]), sys.argv[3:]
 if not slugs:
@@ -51,5 +63,5 @@ for slug in slugs:
             shutil.copy(mp3, os.path.join(out, parts[-1]["file"]))
     with open(os.path.join(out, "manifest.json"), "w") as f:
         json.dump({"slug": slug, "title": song.name, "parts": parts,
-                   "duration": bundle.timing["duration"]}, f, ensure_ascii=False)
+                   "duration": bundle.timing["duration"], **credits(cleaned)}, f, ensure_ascii=False)
     print(f"built {song.name} → {out}")
