@@ -119,7 +119,7 @@ open(f"{OUT}/score.mid", "wb").write(header + tempo + b"".join(tracks))
 manifest = {
     "slug": "epatasainen", "title": "Epätasainen", "choir": "jm", "version": "20261009T120000Z",
     "score": "score.musicxml", "timing": "timing.json",
-    "parts": [{"name": n, "file": f"parts/{i}-{n}.mp3"} for i, n in enumerate(names, 1)],
+    "parts": [{"name": n} for n in names],
     "duration": duration, "midi": "score.mid",
 }
 open(f"{OUT}/manifest.json", "w").write(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n")

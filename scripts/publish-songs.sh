@@ -4,7 +4,7 @@
 #   ./scripts/publish-songs.sh [--local] <choir> <bundle-dir> ...
 #
 # A bundle dir is what scripts/song-app-bundle.py builds: manifest.json,
-# score.musicxml, score.mid, timing.json and parts/. The container sees only
+# score.musicxml, score.mid and timing.json. The container sees only
 # this checkout, so the bundles are copied under .wrangler/publish/ (git-ignored)
 # first. See scripts/publish-songs.mjs.
 set -euo pipefail

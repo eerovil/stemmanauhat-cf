@@ -5,7 +5,8 @@
 #   <song-app>/.venv/bin/python scripts/song-app-bundle.py <song-app> <out-dir> <slug> ...
 #
 # Each <out-dir>/<slug>/ gets what song-app's publish uploads, plus score.mid:
-# manifest.json, score.musicxml, score.mid, timing.json and parts/<n>-<name>.mp3.
+# manifest.json, score.musicxml, score.mid and timing.json. The manifest lists the
+# part names only: the site plays score.mid, so no audio is rendered per part (#36).
 # The tempo for a score without one is the recording's, as in song-app's publish,
 # and so are the tempo changes set for the recording. The manifest also carries
 # the score's composer, lyricist and arranger (its metaTags) when they are set.
@@ -47,7 +48,7 @@ for slug in slugs:
     bpm = None if pipeline.has_opening_tempo(cleaned) else song.data.get("record", {}).get("bpm", 80)
     out = os.path.join(out_root, slug)
     shutil.rmtree(out, ignore_errors=True)
-    os.makedirs(os.path.join(out, "parts"))
+    os.makedirs(out)
     with tempfile.TemporaryDirectory() as tmp:
         # The tempo changes the video was recorded with (song-app #387), so the site plays the same.
         tempo_changes = song.data.get("record", {}).get("tempo_changes") or None
@@ -57,10 +58,7 @@ for slug in slugs:
         shutil.copy(os.path.join(tmp, "score.mid"), os.path.join(out, "score.mid"))
         with open(os.path.join(out, "timing.json"), "w") as f:
             json.dump(bundle.timing, f)
-        parts = []
-        for index, (name, mp3) in enumerate(bundle.parts):
-            parts.append({"name": name, "file": publish.part_file(index, name)})
-            shutil.copy(mp3, os.path.join(out, parts[-1]["file"]))
+        parts = [{"name": name} for name in bundle.parts]
     with open(os.path.join(out, "manifest.json"), "w") as f:
         json.dump({"slug": slug, "title": song.name, "parts": parts,
                    "duration": bundle.timing["duration"], **credits(cleaned)}, f, ensure_ascii=False)

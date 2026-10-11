@@ -15,7 +15,8 @@ export interface Me {
 
 export interface Part {
   name: string;
-  file: string;
+  /** Only on songs published before #36: the part's MP3, which nothing plays any more. */
+  file?: string;
 }
 
 export interface SongSummary {
