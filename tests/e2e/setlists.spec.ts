@@ -44,8 +44,27 @@ test("an admin makes a setlist, and a singer sees only its songs in its order", 
   await singer.getByLabel("Hae kappaletta").fill("koke");
   await expect(singer.locator(".songs li .song-title")).toHaveText(["Kokeilulaulu"]);
   await expect(singer.locator(".songs .place")).toHaveText(["2."]);
+  // A search also finds the songs outside the setlist, under their own heading (#49).
+  await singer.getByLabel("Hae kappaletta").fill("epä");
+  await expect(singer.locator(".others-heading")).toHaveText("Muut kappaleet");
+  await expect(singer.locator(".songs.others .song-title")).toHaveText(["Epätasainen"]);
+  await expect(singer.locator(".songs .place")).toHaveCount(0);
   await singer.getByLabel("Hae kappaletta").fill("");
-  await singer.getByLabel("Setlista").selectOption({ label: "Kaikki kappaleet" });
+  await expect(singer.locator(".songs.others")).toHaveCount(0);
+  // The picked setlist is marked, and says what it leaves out.
+  await expect(singer.getByLabel("Setlista")).toHaveClass(/picked/);
+  await expect(singer.locator(".setlist-note")).toContainText("Setlistassa 2 kappaletta, kaikkiaan 3.");
+  await singer.locator(".setlists").getByRole("button", { name: "Näytä kaikki" }).click();
+  await expect(singer.locator(".songs li a")).toHaveCount(3);
+  await expect(singer.getByLabel("Setlista")).not.toHaveClass(/picked/);
+  await expect(singer.locator(".setlist-note")).toHaveCount(0);
+  await singer.reload();
+  await expect(singer.getByLabel("Setlista")).toHaveValue("");
+  await expect(singer.locator(".songs li a")).toHaveCount(3);
+  // The note's own button does the same.
+  await singer.getByLabel("Setlista").selectOption({ label: "Kevätkonsertti" });
+  await singer.locator(".setlist-note").getByRole("button", { name: "Näytä kaikki" }).click();
+  await expect(singer.getByLabel("Setlista")).toHaveValue("");
   await expect(singer.locator(".songs li a")).toHaveCount(3);
 
   // The admin removes a song, then deletes the setlist.

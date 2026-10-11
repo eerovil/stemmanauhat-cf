@@ -58,6 +58,10 @@ button.link { border: none; background: none; color: var(--accent); padding: 0.2
 .setlists { margin-top: 0.8rem; flex-wrap: wrap; }
 .setlists select { flex: 1; min-width: 10rem; font: inherit; padding: 0.7rem 0.8rem; border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--surface); color: var(--fg); }
+/* A picked setlist hides songs, so it must not look like the default (#49). */
+.setlists select.picked { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.others-heading { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; }
+.setlist-note { margin-top: 0.6rem; }
 .setlist-edit .songs { margin-bottom: 0.6rem; }
 .setlist-edit .songs label { flex: 1; display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; }
 .setlist-edit .songs button { font-size: 1.2rem; padding: 0 0.8rem; }
