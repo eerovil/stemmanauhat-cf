@@ -23,6 +23,11 @@ Live address (once set up): https://stemmanauhat.eerovil.workers.dev
 - **Setlists:** a choir's named song lists in their own order, such as a concert's program (D1
   `setlists`). Singers pick one from the song list's dropdown and see only its songs, numbered;
   admins make and change them on the same page ("Uusi setlista", "Muokkaa").
+- **Requests:** on a choir's song list, anyone in the choir can ask for a new practice track
+  ("Pyydä stemmanauhaa"): a song name or the sheet music as a PDF, or both, and optionally who wrote
+  it and a note. Everyone in the choir sees the open requests, without who sent them. Admins see who
+  sent each one, open its PDF and mark it done or delete it at `/admin`. The rows are in D1
+  `song_requests`; the PDFs are in R2 under `requests/<choir>/` and only admins can get them.
 - **Player:** the score is drawn by OpenSheetMusicDisplay with the videos' blue for the notes being
   sung and their translucent cursor band. "Kaikki" shows every staff that fits on one line sliding
   sideways under a fixed cursor (drag it to move); "Oma" shows your own staff alone in page lines.

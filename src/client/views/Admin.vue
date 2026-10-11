@@ -10,6 +10,20 @@ interface AdminChoir {
   link: boolean;
   /** The join link, or null when the link was set by passphrase and cannot be shown. */
   url: string | null;
+  /** Singers' requests for new practice tracks (#38), newest first. */
+  requests: AdminRequest[];
+}
+
+interface AdminRequest {
+  id: number;
+  title: string | null;
+  credits: string | null;
+  note: string | null;
+  /** Google email, or the name someone who came by link typed; null if neither. */
+  requester: string | null;
+  pdf: boolean;
+  done_at: string | null;
+  created_at: string;
 }
 
 const choirs = ref<AdminChoir[]>([]);
@@ -63,6 +77,18 @@ const linkOff = (choir: string) => run(choir, async () => {
   await postJson("/api/admin/link", { choir, off: true });
   return "Linkillä kirjautuminen on pois päältä.";
 });
+const markDone = (choir: string, r: AdminRequest) => run(choir, async () => {
+  await postJson("/api/admin/requests", { id: r.id, done: true });
+  return `Merkitty tehdyksi: ${r.title ?? "Nuotti (PDF)"}.`;
+});
+const removeRequest = (choir: string, r: AdminRequest) => run(choir, async () => {
+  if (!confirm(`Poistetaanko pyyntö ${r.title ?? "Nuotti (PDF)"}?`)) return "";
+  await postJson("/api/admin/requests", { id: r.id, delete: true });
+  return "Pyyntö poistettu.";
+});
+const day = (at: string) => new Date(at).toLocaleDateString("fi-FI");
+const open = (c: AdminChoir) => c.requests.filter((r) => !r.done_at);
+const done = (c: AdminChoir) => c.requests.filter((r) => r.done_at);
 </script>
 
 <template>
@@ -72,6 +98,24 @@ const linkOff = (choir: string) => run(choir, async () => {
     <section v-for="c in choirs" :key="c.id" class="card" :data-choir="c.id">
       <h2>{{ c.name }}</h2>
       <p v-if="message[c.id]" class="hint">{{ message[c.id] }}</p>
+
+      <h3>Pyynnöt ({{ open(c).length }})</h3>
+      <p v-if="!c.requests.length" class="hint">Ei pyyntöjä.</p>
+      <ul class="request-list">
+        <li v-for="r in [...open(c), ...done(c)]" :key="r.id" :class="{ done: r.done_at }">
+          <strong>{{ r.title ?? "Nuotti (PDF)" }}</strong>
+          <span v-if="r.credits"> · {{ r.credits }}</span>
+          <p v-if="r.note" class="hint">{{ r.note }}</p>
+          <div class="row">
+            <span class="hint">{{ r.requester ?? "Linkillä tullut" }}, {{ day(r.created_at) }}{{ r.done_at ? ` · tehty ${day(r.done_at)}` : "" }}</span>
+            <span class="row">
+              <a v-if="r.pdf" :href="`/api/admin/requests/${r.id}/pdf`" target="_blank" rel="noopener">PDF</a>
+              <button v-if="!r.done_at" type="button" @click="markDone(c.id, r)">Tehty</button>
+              <button type="button" class="link" @click="removeRequest(c.id, r)">Poista</button>
+            </span>
+          </div>
+        </li>
+      </ul>
 
       <h3>Jäsenet ({{ c.members.length }})</h3>
       <textarea v-model="toAdd[c.id]" rows="3" placeholder="Liitä sähköpostiosoitteet, yksi riville"

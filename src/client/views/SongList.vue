@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { getJson, listCredits, postJson, Refused, remembered, type Me, type Setlist, type SongOrder, type SongSummary } from "../api";
+import { getJson, listCredits, postForm, postJson, Refused, remembered, type Me, type Setlist, type SongOrder, type SongRequest,
+  type SongSummary } from "../api";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string }>();
@@ -25,11 +26,12 @@ function pick(id: number | null) {
 const setlist = computed(() => setlists.value.find((l) => l.id === picked.value) ?? null);
 
 async function load() {
-  const data = await getJson<{ choir: { name: string }; songs: SongSummary[]; setlists: Setlist[] }>(
+  const data = await getJson<{ choir: { name: string }; songs: SongSummary[]; setlists: Setlist[]; requests: SongRequest[] }>(
     `/api/songs?choir=${encodeURIComponent(props.choir)}`);
   choirName.value = data.choir.name;
   songs.value = data.songs;
   setlists.value = data.setlists;
+  requests.value = data.requests;
 }
 
 onMounted(async () => {
@@ -113,6 +115,44 @@ async function removeSetlist() {
     editMessage.value = (error as Error).message;
   }
 }
+// A singer asks for a new practice track (#38). Every field is optional, but a
+// request needs a song name or a PDF. The open list takes no requests.
+const requests = ref<SongRequest[]>([]);
+const canRequest = computed(() => me.value?.choirs.some((c) => c.id === props.choir && !c.public) ?? false);
+const requesting = ref<{ title: string; credits: string; note: string; name: string } | null>(null);
+const requestPdf = ref<File | null>(null);
+const requestMessage = ref("");
+const sending = ref(false);
+function startRequest() {
+  requestMessage.value = "";
+  requestPdf.value = null;
+  requesting.value = { title: "", credits: "", note: "", name: "" };
+}
+function pickPdf(event: Event) {
+  requestPdf.value = (event.target as HTMLInputElement).files?.[0] ?? null;
+}
+async function sendRequest() {
+  const r = requesting.value!;
+  if (!r.title.trim() && !requestPdf.value) {
+    requestMessage.value = "Kirjoita kappaleen nimi tai liitä nuotti.";
+    return;
+  }
+  const form = new FormData();
+  form.set("choir", props.choir);
+  for (const [key, value] of Object.entries(r)) form.set(key, value);
+  if (requestPdf.value) form.set("pdf", requestPdf.value);
+  sending.value = true;
+  try {
+    await postForm("/api/requests", form);
+    requesting.value = null;
+    requestMessage.value = "Kiitos! Pyyntö lähetetty.";
+    await load();
+  } catch (error) {
+    requestMessage.value = (error as Error).message;
+  } finally {
+    sending.value = false;
+  }
+}
 const day = (at: string) => new Date(at).toLocaleDateString("fi-FI");
 const last = computed(() => {
   const slug = remembered.last(props.choir);
@@ -158,6 +198,20 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
         <button v-if="editing.id !== null" type="button" class="link" @click="removeSetlist">Poista setlista</button>
       </div>
     </section>
+    <section v-else-if="requesting" class="card request-form">
+      <h2>Pyydä stemmanauhaa</h2>
+      <p class="hint">Kirjoita kappaleen nimi tai liitä nuotti, tai molemmat.</p>
+      <label>Kappaleen nimi<input v-model="requesting.title" type="text" maxlength="200" /></label>
+      <label>Säveltäjä / sovittaja<input v-model="requesting.credits" type="text" maxlength="200" /></label>
+      <label>Lisätietoja<textarea v-model="requesting.note" rows="3" maxlength="1000"></textarea></label>
+      <label v-if="!me?.email">Nimesi<input v-model="requesting.name" type="text" maxlength="100" /></label>
+      <label>Nuotti (PDF, vapaaehtoinen)<input type="file" accept="application/pdf,.pdf" @change="pickPdf" /></label>
+      <p v-if="requestMessage" class="hint">{{ requestMessage }}</p>
+      <div class="row">
+        <button type="button" class="primary" :disabled="sending" @click="sendRequest">Lähetä</button>
+        <button type="button" @click="requesting = null">Peru</button>
+      </div>
+    </section>
     <template v-else>
       <div v-if="setlists.length || me?.admin" class="row setlists">
         <select v-if="setlists.length" :value="setlist?.id ?? ''" aria-label="Setlista"
@@ -185,9 +239,23 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       </ul>
       <p v-if="!songs.length" class="hint">Ei vielä kappaleita.</p>
       <p v-else-if="setlist && !setlist.songs.length" class="hint">Setlistassa ei ole vielä kappaleita.</p>
+      <section v-if="canRequest" class="requests">
+        <h2 v-if="requests.length">Pyydetyt ({{ requests.length }})</h2>
+        <!-- Not .songs: the song list's tests and styles mean the songs alone. -->
+        <ul v-if="requests.length" class="requested">
+          <li v-for="r in requests" :key="r.id">
+            <span class="request"><span class="request-title">{{ r.title ?? "Nuotti (PDF)" }}</span>
+              <span class="request-details">{{ [r.credits, r.note].filter(Boolean).join(" · ") }}</span></span>
+            <span class="request-date">{{ day(r.created_at) }}</span>
+          </li>
+        </ul>
+        <p v-if="requestMessage" class="hint">{{ requestMessage }}</p>
+        <button type="button" @click="startRequest">Pyydä stemmanauhaa</button>
+      </section>
     </template>
     <footer class="row">
       <a v-if="me?.admin" href="/admin">Ylläpito</a>
+      <a v-if="me?.admin && canRequest && requests.length" href="/admin">Pyyntöjä: {{ requests.length }}</a>
       <form v-if="me?.email || me?.linked.length" method="post" action="/auth/logout">
         <button type="submit" class="link">Kirjaudu ulos</button>
       </form>

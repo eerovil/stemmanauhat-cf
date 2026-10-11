@@ -62,6 +62,23 @@ button.link { border: none; background: none; color: var(--accent); padding: 0.2
 .setlist-edit .songs label { flex: 1; display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; }
 .setlist-edit .songs button { font-size: 1.2rem; padding: 0 0.8rem; }
 .setlist-edit .songs button:disabled { opacity: 0.3; }
+.request-form label { display: block; margin: 0.6rem 0; font-size: 0.92rem; color: var(--muted); }
+.request-form label input, .request-form label textarea { display: block; margin-top: 0.25rem; color: var(--fg); }
+.requests { margin-top: 1.5rem; }
+.requests h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+.requested { list-style: none; padding: 0; margin: 0 0 0.8rem; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden; }
+.requested li { display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--line); }
+.requested li:last-child { border-bottom: none; }
+.requested .request { flex: 1; min-width: 0; padding: 0.8rem 1.1rem; display: flex; flex-direction: column; gap: 0.15rem; }
+.requested .request-title { font-weight: 500; }
+.requested .request-details { color: var(--muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.requested .request-date { color: var(--muted); font-size: 0.85rem; margin-right: 1.1rem; white-space: nowrap; }
+.request-list { list-style: none; padding: 0; }
+.request-list li { border-bottom: 1px solid var(--line); padding: 0.5rem 0; }
+.request-list li.done { opacity: 0.55; }
+.request-list .row { justify-content: space-between; }
 footer { margin-top: 1.5rem; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4rem 1rem 1rem; margin: 1rem 0; }
 .card textarea, .card input[type="text"] { width: 100%; font: inherit; padding: 0.5rem; border: 1px solid var(--line);
