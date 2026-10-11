@@ -170,6 +170,16 @@ export const remembered = {
   },
 };
 
+/** The song lists kept for this tab (SongList.vue, #43). */
+export const songListKey = (choir: string) => `stemmanauhat:list:${choir}`;
+
+/** Forgets every kept song list, so a signed-out tab never draws one. */
+export function forgetSongLists() {
+  for (const key of Object.keys(sessionStorage)) {
+    if (key.startsWith("stemmanauhat:list:")) sessionStorage.removeItem(key);
+  }
+}
+
 export type SongOrder = "name" | "date";
 
 export type MixMode = "focus" | "equal" | "minus" | "solo";

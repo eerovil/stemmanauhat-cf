@@ -1,6 +1,13 @@
 import { createApp } from "vue";
 import App from "./App.vue";
+import { forgetSongLists } from "./api";
 import "./style.css";
+
+// Signing out, or landing on sign-in, forgets the song lists this tab kept (#43).
+document.addEventListener("submit", (event) => {
+  if ((event.target as HTMLFormElement).action.endsWith("/auth/logout")) forgetSongLists();
+});
+if (location.pathname.startsWith("/signin")) forgetSongLists();
 
 createApp(App).mount("#app");
 
