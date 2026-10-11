@@ -603,7 +603,7 @@ function onPointerUp(event: PointerEvent) {
           <h2>Mikä on sinun stemmasi?</h2>
           <p>Se soi kovimmin ja sen nuotit näkyvät tummalla sinisellä. Voit vaihtaa sitä myöhemmin napauttamalla Oma-painiketta.</p>
           <div class="picker-grid">
-            <button v-for="(p, i) in song.parts" :key="p.file" type="button"
+            <button v-for="(p, i) in song.parts" :key="i" type="button"
               :class="{ mine: i === myPart && !firstAsk }" @click="pickPart(i)">{{ p.name }}</button>
           </div>
         </div>

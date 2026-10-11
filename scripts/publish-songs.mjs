@@ -1,5 +1,5 @@
 // Publish song bundles built by song-app (manifest.json, score.musicxml,
-// score.mid, timing.json, parts/) to the site's R2 and D1, in the layout of
+// score.mid, timing.json) to the site's R2 and D1, in the layout of
 // song-app's docs/stemmanauhat-site.md. A stand-in until song-app's own publish
 // (eerovil/musescore-choir-plugins#382) uploads score.mid. Run it through
 // scripts/publish-songs.sh, which puts the bundles where the container sees them.
@@ -17,7 +17,7 @@ import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const CHOIRS = ["jm", "naiskuoro", "public"];
-const BASE_FILES = ["score.musicxml", "score.mid", "timing.json", "manifest.json"];
+const FILES = ["score.musicxml", "score.mid", "timing.json", "manifest.json"];
 
 /** `2026-10-10T12:00:00.123Z` → `20261010T120000Z`, song-app's version format. */
 export function versionFor(date) {
@@ -44,14 +44,18 @@ export function creditsOf(manifest) {
 export function publishPlan(manifest, choir, date) {
   if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
   const { slug, title, parts, duration } = manifest;
-  if (!slug || slug.includes("/") || !title || !Array.isArray(parts) || parts.length === 0 || !(duration > 0)) {
+  if (!slug || slug.includes("/") || !title || !Array.isArray(parts) || parts.length === 0 || !(duration > 0)
+    || !parts.every((p) => typeof p?.name === "string" && p.name.trim())) {
     throw new Error(`bad manifest for ${slug ?? "?"}`);
   }
   const credits = creditsOf(manifest);
   const version = versionFor(date);
   const prefix = `songs/${choir}/${slug}/${version}/`;
-  const files = [...BASE_FILES, ...parts.map((p) => p.file)];
-  const partsJson = JSON.stringify(parts.map(({ name, file }) => ({ name, file })));
+  const files = FILES;
+  // The part names only. The player plays score.mid and matches parts to its
+  // tracks by name, so a part's audio file is neither uploaded nor listed, even
+  // from an older bundle that still has one (#36).
+  const partsJson = JSON.stringify(parts.map(({ name }) => ({ name })));
   const publishedAt = date.toISOString().replace(/\.\d+Z$/, "Z");
   // The manifest in R2 carries the same facts as the row, as song-app writes it.
   const r2Manifest = { slug, title, choir, version, score: "score.musicxml", timing: "timing.json",
@@ -78,7 +82,7 @@ export function publishPlan(manifest, choir, date) {
 const BUCKET = "stemmanauhat";
 const DATABASE_ID = "b3d80c7d-0fb7-45a2-b6f6-f7311556b953"; // wrangler.jsonc
 const TYPES = { ".musicxml": "application/vnd.recordare.musicxml+xml", ".mid": "audio/midi",
-  ".json": "application/json", ".mp3": "audio/mpeg" };
+  ".json": "application/json" };
 const UPLOADS_AT_ONCE = 6;
 const TRIES = 4;
 

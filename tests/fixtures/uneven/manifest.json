@@ -7,12 +7,10 @@
  "timing": "timing.json",
  "parts": [
   {
-   "name": "Tenori",
-   "file": "parts/1-Tenori.mp3"
+   "name": "Tenori"
   },
   {
-   "name": "Basso",
-   "file": "parts/2-Basso.mp3"
+   "name": "Basso"
   }
  ],
  "duration": 12.0,

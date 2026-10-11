@@ -11,10 +11,14 @@ import { BasicSoundBank } from "spessasynth_core";
 export const PASSPHRASE = "testilinkki-jm";
 const VERSION = "20261009T120000Z";
 const FILES = ["score.musicxml", "timing.json", "manifest.json", "score.mid"];
-const PARTS = JSON.stringify([
+// Songs published since #36 list part names only; kokeilu and iltalaulu keep the
+// older rows' MP3 file names, which must still read.
+const PARTS = JSON.stringify([{ name: "Tenori" }, { name: "Basso" }]);
+const OLD_PARTS = JSON.stringify([
   { name: "Tenori", file: "parts/1-Tenori.mp3" },
   { name: "Basso", file: "parts/2-Basso.mp3" },
 ]);
+const OLD_ROWS = ["kokeilu", "iltalaulu"];
 
 const wrangler = (...args) => execFileSync("node_modules/.bin/wrangler", args, { stdio: ["ignore", "ignore", "inherit"] });
 
@@ -42,7 +46,7 @@ const sql = [
   "INSERT INTO admins (email) VALUES ('yllapito@example.com');",
   `INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES ('jm', '${salt.toString("base64url")}', '${await hash(PASSPHRASE, salt)}', 10000, 1);`,
   ...songs.map(([choir, slug, title, , duration, credits]) =>
-    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, composer, lyricist, arranger) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${VERSION}/', '${PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z', ${credits.map(value).join(", ")});`),
+    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, composer, lyricist, arranger) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${VERSION}/', '${OLD_ROWS.includes(slug) ? OLD_PARTS : PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z', ${credits.map(value).join(", ")});`),
 ].join("\n");
 writeFileSync("tests/fixtures/seed.generated.sql", sql + "\n");
 wrangler("d1", "execute", "stemmanauhat", "--local", "--file", "tests/fixtures/seed.generated.sql");

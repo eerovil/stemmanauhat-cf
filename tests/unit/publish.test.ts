@@ -9,7 +9,7 @@ import { cloudflareStore, publishAll, publishPlan, versionFor } from "../../scri
 
 const manifest = {
   slug: "kokeilu", title: "Kokeilijan 'laulu'", duration: 8,
-  parts: [{ name: "Tenori", file: "parts/1-Tenori.mp3" }, { name: "Basso", file: "parts/2-Basso.mp3" }],
+  parts: [{ name: "Tenori" }, { name: "Basso" }],
 };
 const date = new Date("2026-10-10T12:34:56.789Z");
 
@@ -18,9 +18,16 @@ describe("publishPlan", () => {
     expect(versionFor(date)).toBe("20261010T123456Z");
     const plan = publishPlan(manifest, "public", date);
     expect(plan.prefix).toBe("songs/public/kokeilu/20261010T123456Z/");
-    expect(plan.files).toEqual(["score.musicxml", "score.mid", "timing.json", "manifest.json",
-      "parts/1-Tenori.mp3", "parts/2-Basso.mp3"]);
-    expect(plan.r2Manifest).toMatchObject({ choir: "public", version: "20261010T123456Z", midi: "score.mid" });
+    expect(plan.files).toEqual(["score.musicxml", "score.mid", "timing.json", "manifest.json"]);
+    expect(plan.r2Manifest).toMatchObject({ choir: "public", version: "20261010T123456Z", midi: "score.mid",
+      parts: [{ name: "Tenori" }, { name: "Basso" }] });
+    expect(plan.sql).toContain(`'[{"name":"Tenori"},{"name":"Basso"}]'`);
+  });
+  it("lists only the part names from an older bundle that still names an MP3 per part (#36)", () => {
+    const old = { ...manifest, parts: [{ name: "Tenori", file: "parts/1-Tenori.mp3" }, { name: "Basso", file: "parts/2-Basso.mp3" }] };
+    const plan = publishPlan(old, "jm", date);
+    expect(plan.files).not.toContain("parts/1-Tenori.mp3");
+    expect(plan.r2Manifest.parts).toEqual([{ name: "Tenori" }, { name: "Basso" }]);
   });
   it("upserts the row with quotes escaped and moves the song from another choir, but not from public", () => {
     const { sql } = publishPlan(manifest, "jm", date);
@@ -70,16 +77,16 @@ describe("publishPlan", () => {
   it("refuses an unknown choir and a broken manifest", () => {
     expect(() => publishPlan(manifest, "kaikki", date)).toThrow(/unknown choir/);
     expect(() => publishPlan({ ...manifest, parts: [] }, "public", date)).toThrow(/bad manifest/);
+    expect(() => publishPlan({ ...manifest, parts: [{ name: " " }] }, "public", date)).toThrow(/bad manifest/);
     expect(() => publishPlan({ ...manifest, slug: "a/b" }, "public", date)).toThrow(/bad manifest/);
   });
 });
 
-function bundle(root: string, slug: string, withParts = true) {
+function bundle(root: string, slug: string, withMidi = true) {
   const dir = join(root, slug);
-  mkdirSync(join(dir, "parts"), { recursive: true });
+  mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "manifest.json"), JSON.stringify({ ...manifest, slug }));
-  for (const f of ["score.musicxml", "score.mid", "timing.json"]) writeFileSync(join(dir, f), f);
-  if (withParts) for (const p of manifest.parts) writeFileSync(join(dir, p.file), p.file);
+  for (const f of ["score.musicxml", "timing.json", ...(withMidi ? ["score.mid"] : [])]) writeFileSync(join(dir, f), f);
   return dir;
 }
 
@@ -97,14 +104,14 @@ describe("publishAll", () => {
       };
       const failed = await publishAll(store, "jm", [bundle(root, "yksi"), bundle(root, "kaksi")], { log: () => {}, now: () => date });
       expect(failed).toBe(0);
-      expect(events.filter((e) => e.startsWith("put"))).toHaveLength(12);
+      expect(events.filter((e) => e.startsWith("put"))).toHaveLength(8);
       for (const slug of ["yksi", "kaksi"]) {
         const row = events.indexOf(`sql ${slug}`);
         const puts = events.flatMap((e, i) => (e.includes(`/${slug}/`) ? [i] : []));
-        expect(puts).toHaveLength(6);
+        expect(puts).toHaveLength(4);
         expect(Math.max(...puts)).toBeLessThan(row);
       }
-      expect(events).toContain("put songs/jm/yksi/20261010T123456Z/parts/1-Tenori.mp3 audio/mpeg");
+      expect(events).toContain("put songs/jm/yksi/20261010T123456Z/score.mid audio/midi");
       expect(events).toContain("put songs/jm/yksi/20261010T123456Z/score.musicxml application/vnd.recordare.musicxml+xml");
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -131,7 +138,7 @@ describe("publishAll", () => {
       let puts = 0;
       const store = { put: async () => { puts++; }, sql: async () => {} };
       await expect(publishAll(store, "jm", [bundle(root, "hyva"), bundle(root, "vajaa", false)], { log: () => {} }))
-        .rejects.toThrow(/missing parts\/1-Tenori.mp3/);
+        .rejects.toThrow(/missing score.mid/);
       expect(puts).toBe(0);
     } finally {
       rmSync(root, { recursive: true, force: true });
