@@ -58,6 +58,17 @@ export interface Setlist {
   songs: string[];
 }
 
+/** A singer's open request for a new practice track (#38), as every singer sees it. */
+export interface SongRequest {
+  id: number;
+  /** Null when only a PDF was sent. */
+  title: string | null;
+  credits: string | null;
+  note: string | null;
+  pdf: boolean;
+  created_at: string;
+}
+
 export interface Song extends SongSummary {
   choir: string;
   base: string;
@@ -85,6 +96,22 @@ export async function postJson<T>(url: string, body: unknown): Promise<T> {
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+  if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+  return data;
+}
+
+/**
+ * A multipart POST (a form with a file). The custom header is the CSRF guard:
+ * a cross-site HTML form cannot set it.
+ */
+export async function postForm<T>(url: string, form: FormData): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "X-Stemmanauhat": "1" },
+    body: form,
   });
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);

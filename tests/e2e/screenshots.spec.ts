@@ -96,6 +96,42 @@ test("setlists: an admin editing one, and a singer's list with it picked", async
   await expect(page.getByLabel("Setlista")).toHaveCount(0);
 });
 
+test("requests: a singer filling in the form, the choir's pending list, and the admin's list", async ({ page, browser }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await page.getByRole("button", { name: "Pyydä stemmanauhaa" }).click();
+  await page.getByLabel("Kappaleen nimi").fill("Kesäillan valssi");
+  await page.getByLabel("Säveltäjä / sovittaja").fill("säv. Aino Esimerkki, sov. Sulo Sovittaja");
+  await page.getByLabel("Lisätietoja").fill("Kevätkonserttiin, tenoreille oma stemma");
+  await page.getByLabel("Nuotti (PDF, vapaaehtoinen)").setInputFiles(
+    { name: "kesaillan-valssi.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") });
+  await page.screenshot({ path: `${dir}/request-form-phone.png` });
+  await page.getByRole("button", { name: "Lähetä" }).click();
+  await expect(page.getByText("Kiitos! Pyyntö lähetetty.")).toBeVisible();
+
+  const linked = await (await browser.newContext()).newPage();
+  await linked.goto("/?user=jm&passphrase=testilinkki-jm");
+  await linked.getByRole("button", { name: "Pyydä stemmanauhaa" }).click();
+  await linked.getByLabel("Kappaleen nimi").fill("Iltatähti");
+  await linked.getByLabel("Nimesi").fill("Matti M.");
+  await linked.getByRole("button", { name: "Lähetä" }).click();
+  await expect(linked.getByRole("heading", { name: "Pyydetyt (2)" })).toBeVisible();
+  await linked.locator(".requests").scrollIntoViewIfNeeded();
+  await linked.screenshot({ path: `${dir}/request-pending-phone.png`, fullPage: true });
+
+  const admin = await (await browser.newContext({ viewport: { width: 1000, height: 900 } })).newPage();
+  await signInAs(admin, "/admin", "yllapito@example.com");
+  const jm = admin.locator('[data-choir="jm"]');
+  await expect(jm.getByRole("heading", { name: "Pyynnöt (2)" })).toBeVisible();
+  await jm.locator(".request-list li", { hasText: "Iltatähti" }).getByRole("button", { name: "Tehty" }).click();
+  await expect(jm.getByRole("heading", { name: "Pyynnöt (1)" })).toBeVisible();
+  await jm.screenshot({ path: `${dir}/request-admin.png` });
+  for (const title of ["Kesäillan valssi", "Iltatähti"]) {
+    admin.once("dialog", (dialog) => dialog.accept());
+    await jm.locator(".request-list li", { hasText: title }).getByRole("button", { name: "Poista" }).click();
+    await expect(jm.locator(".request-list li", { hasText: title })).toHaveCount(0);
+  }
+});
+
 test("front page for a signed-out visitor", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();

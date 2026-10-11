@@ -4,6 +4,7 @@ import { serveObject, safeSongPath } from "./files";
 import { AUTHORIZE_URL, TOKEN_URL, authorizeUrl, exchangeCode, normalizeEmail, readEmail } from "./google";
 import { joinUrl, linkKey } from "./links";
 import { publicOrigin } from "./origin";
+import { isPdf, parseRequest, PDF_MAX_BYTES, requestPdfKey } from "./requests";
 import { newPassphraseRecord, passphraseMatches } from "./passphrase";
 import { clearSessionCookie, readSession, sessionCookie, type Session } from "./session";
 import { base64UrlEncode, cookieValue, readValue, signValue } from "./signing";
@@ -70,11 +71,14 @@ async function route(ctx: Ctx): Promise<Response> {
   if ((m = /^\/c\/([^/]+)(?:\/[^/]+)?\/?$/.exec(path)) && method === "GET") {
     return choirPage(ctx, decodeURIComponent(m[1]!));
   }
+  if (path === "/api/requests" && method === "POST") return sendRequest(ctx);
   if (path === "/admin" && method === "GET") return adminPage(ctx);
   if (path === "/api/admin" && method === "GET") return adminState(ctx);
   if (path === "/api/admin/members" && method === "POST") return adminMembers(ctx);
   if (path === "/api/admin/link" && method === "POST") return adminLink(ctx);
   if (path === "/api/admin/setlists" && method === "POST") return adminSetlists(ctx);
+  if (path === "/api/admin/requests" && method === "POST") return adminRequests(ctx);
+  if ((m = /^\/api\/admin\/requests\/(\d+)\/pdf$/.exec(path)) && method === "GET") return requestPdf(ctx, Number(m[1]));
   if (path.startsWith("/api/") || path.startsWith("/auth/") || path.startsWith("/files/") || path.startsWith("/sound/")) {
     return json({ error: "not found" }, 404);
   }
@@ -272,6 +276,13 @@ async function songList(ctx: Ctx, choir: string): Promise<Response> {
   const lists = await ctx.env.DB.prepare(
     "SELECT id, name, songs FROM setlists WHERE choir = ? ORDER BY updated_at DESC, id DESC",
   ).bind(choir).all<{ id: number; name: string; songs: string }>();
+  // The choir's open requests, for every singer to see (Eero, #38); who sent
+  // them and their PDFs are for admins only.
+  const requests = await ctx.env.DB.prepare(
+    `SELECT id, title, credits, note, pdf, created_at FROM song_requests
+      WHERE choir = ? AND done_at IS NULL ORDER BY created_at DESC, id DESC`,
+  ).bind(choir).all<{ id: number; title: string | null; credits: string | null; note: string | null; pdf: number;
+    created_at: string }>();
   // A song that has left the choir is skipped; the next save drops it for good.
   const slugs = new Set(results.map((r) => r.slug));
   return json({
@@ -280,6 +291,7 @@ async function songList(ctx: Ctx, choir: string): Promise<Response> {
     setlists: lists.results.map((l) => ({
       id: l.id, name: l.name, songs: (JSON.parse(l.songs) as string[]).filter((slug) => slugs.has(slug)),
     })),
+    requests: requests.results.map((r) => ({ ...r, pdf: r.pdf === 1 })),
   });
 }
 
@@ -324,14 +336,18 @@ async function file(ctx: Ctx, choir: string, slug: string, version: string, path
 async function adminState(ctx: Ctx): Promise<Response> {
   if (!(await isAdmin(ctx.env.DB, ctx.session))) return json({ error: "refused" }, 403);
   const db = ctx.env.DB;
-  const [choirs, members, links, admins] = await db.batch([
+  const [choirs, members, links, admins, requests] = await db.batch([
     db.prepare("SELECT id, name, public FROM choirs ORDER BY name"),
     db.prepare("SELECT choir, email, added_at FROM members ORDER BY email"),
     db.prepare("SELECT choir, salt, hash, iterations, generation FROM choir_links WHERE hash IS NOT NULL"),
     db.prepare("SELECT email FROM admins ORDER BY email"),
+    db.prepare(`SELECT id, choir, title, credits, note, requester, pdf, done_at, created_at FROM song_requests
+                ORDER BY created_at DESC, id DESC`),
   ]);
   type Member = { choir: string; email: string; added_at: string };
   type Link = { choir: string; salt: string; hash: string; iterations: number; generation: number };
+  type Request = { id: number; choir: string; title: string | null; credits: string | null; note: string | null;
+    requester: string | null; pdf: number; done_at: string | null; created_at: string };
   const origin = publicOrigin(ctx.url, ctx.request.headers);
   const out = [];
   for (const c of (choirs!.results as { id: string; name: string; public: number }[]).filter((c) => c.public !== 1)) {
@@ -347,6 +363,8 @@ async function adminState(ctx: Ctx): Promise<Response> {
         .map((m) => ({ email: m.email, added_at: m.added_at })),
       link: link !== undefined,
       url,
+      requests: (requests!.results as Request[]).filter((r) => r.choir === c.id)
+        .map(({ choir: _, ...r }) => ({ ...r, pdf: r.pdf === 1 })),
     });
   }
   return json({
@@ -490,6 +508,91 @@ async function adminSetlists(ctx: Ctx): Promise<Response> {
   await db.prepare("UPDATE setlists SET name = ?, songs = ?, updated_at = ? WHERE id = ?")
     .bind(setlist.name, JSON.stringify(setlist.songs), at, id).run();
   return json({ id });
+}
+
+// ---------------------------------------------------------------- requests
+
+/**
+ * A singer asks for a new practice track (#38): a multipart form with an
+ * optional PDF. A cross-site HTML form can send multipart without a preflight,
+ * so the custom header (which it cannot set) plus the SameSite cookie is the
+ * CSRF guard here.
+ */
+async function sendRequest(ctx: Ctx): Promise<Response> {
+  if (ctx.request.headers.get("X-Stemmanauhat") !== "1") return json({ error: "refused" }, 403);
+  let form: FormData;
+  try {
+    form = await ctx.request.formData();
+  } catch {
+    return json({ error: "bad form" }, 400);
+  }
+  const choir = String(form.get("choir") ?? "");
+  const access = await accessTo(ctx, choir);
+  if (access !== "ok") return json({ error: access }, statusOf(access));
+  // The open list is for everyone, so it takes no requests.
+  if (!(await privateChoir(ctx, choir))) return json({ error: "refused" }, 403);
+
+  const file = form.get("pdf");
+  let pdf: Uint8Array | null = null;
+  if (file instanceof File && file.size > 0) {
+    if (file.size > PDF_MAX_BYTES) return json({ error: "PDF on liian suuri (yli 20 Mt)." }, 400);
+    pdf = new Uint8Array(await file.arrayBuffer());
+    if (!isPdf(pdf)) return json({ error: "Liite ei ole PDF." }, 400);
+  }
+  const fields = Object.fromEntries([...form.entries()].filter(([, v]) => typeof v === "string"));
+  const request = parseRequest(fields, pdf !== null);
+  if ("error" in request) return json(request, 400);
+
+  const db = ctx.env.DB;
+  const at = new Date(ctx.now * 1000).toISOString();
+  const row = await db.prepare(
+    `INSERT INTO song_requests (choir, title, credits, note, requester, pdf, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  ).bind(choir, request.title, request.credits, request.note, ctx.session?.email ?? request.name,
+    pdf ? 1 : 0, at).first<{ id: number }>();
+  const id = row!.id;
+  if (pdf) {
+    try {
+      await ctx.env.SONGS.put(requestPdfKey(choir, id), pdf, { httpMetadata: { contentType: "application/pdf" } });
+    } catch (error) {
+      await db.prepare("DELETE FROM song_requests WHERE id = ?").bind(id).run();
+      throw error;
+    }
+  }
+  return json({ id });
+}
+
+async function requestPdf(ctx: Ctx, id: number): Promise<Response> {
+  if (!(await isAdmin(ctx.env.DB, ctx.session))) return json({ error: "refused" }, 403);
+  const row = await ctx.env.DB.prepare("SELECT choir, title FROM song_requests WHERE id = ? AND pdf = 1").bind(id)
+    .first<{ choir: string; title: string | null }>();
+  if (!row) return json({ error: "not found" }, 404);
+  const response = await serveObject(ctx.env.SONGS, requestPdfKey(row.choir, id), ctx.request, "private, no-store");
+  const name = `${(row.title ?? `pyynto-${id}`).replace(/[\u0000-\u001f"\\/]/g, "")}.pdf`;
+  response.headers.set("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(name)}`);
+  return response;
+}
+
+async function adminRequests(ctx: Ctx): Promise<Response> {
+  const body = await adminBody(ctx);
+  if (body instanceof Response) return body;
+  const db = ctx.env.DB;
+  const row = typeof body.id === "number"
+    ? await db.prepare("SELECT id, choir, pdf FROM song_requests WHERE id = ?").bind(body.id)
+      .first<{ id: number; choir: string; pdf: number }>()
+    : null;
+  if (!row) return json({ error: "unknown request" }, 400);
+  if (body.delete === true) {
+    if (row.pdf === 1) await ctx.env.SONGS.delete(requestPdfKey(row.choir, row.id));
+    await db.prepare("DELETE FROM song_requests WHERE id = ?").bind(row.id).run();
+    return json({ deleted: row.id });
+  }
+  if (body.done === true) {
+    await db.prepare("UPDATE song_requests SET done_at = ? WHERE id = ?")
+      .bind(new Date(ctx.now * 1000).toISOString(), row.id).run();
+    return json({ done: row.id });
+  }
+  return json({ error: "nothing to do" }, 400);
 }
 
 // ---------------------------------------------------------------- helpers

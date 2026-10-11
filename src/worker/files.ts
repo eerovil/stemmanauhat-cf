@@ -25,6 +25,7 @@ export function safeSongPath(path: string): boolean {
 
 const TYPES: Record<string, string> = {
   mid: "audio/midi",
+  pdf: "application/pdf",
   sf3: "application/octet-stream",
   mp3: "audio/mpeg",
   json: "application/json",
