@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
-  carriedSettings, carrySettings, credits, getJson, Refused, remembered, rememberSong, songMemory, validRate,
-  type Me, type MixMode, type Song,
+  carriedSettings, carrySettings, credits, FLAG_PROBLEMS, getJson, postJson, problemLabels, Refused, remembered,
+  rememberSong, songMemory, validRate, type FlagProblem, type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
@@ -418,6 +418,60 @@ function seekTo(event: Event) {
   mixer?.seek(Number((event.target as HTMLInputElement).value));
 }
 
+/**
+ * Flagging the score (#41): a singer in a private choir says what is wrong and
+ * where, and it waits for Eero on /admin. The open list takes no flags.
+ */
+const canFlag = computed(() => me.value?.choirs.some((c) => c.id === props.choir && !c.public) ?? false);
+/** `bar` turns into a number once typed in: Vue reads a number field as one. */
+const flagging = ref<{ problems: FlagProblem[]; bar: string | number; note: string; name: string } | null>(null);
+const flagError = ref("");
+const flagSending = ref(false);
+const flagThanks = ref(false);
+let flagThanksTimer: number | undefined;
+
+function startFlag() {
+  sheetOpen.value = false;
+  if (mixer?.playing) {
+    mixer.pause();
+    playing.value = false;
+  }
+  flagError.value = "";
+  flagging.value = { problems: [], bar: String(bar.value), note: "", name: "" };
+}
+
+async function sendFlag() {
+  const f = flagging.value!;
+  if (!f.problems.length && !f.note.trim()) {
+    flagError.value = "Valitse mikä on vialla tai kirjoita lisätietoja.";
+    return;
+  }
+  const typed = String(f.bar).trim();
+  const barNumber = typed ? Number(typed) : null;
+  flagSending.value = true;
+  flagError.value = "";
+  try {
+    const { id } = await postJson<{ id: number }>(
+      `/api/songs/${encodeURIComponent(props.choir)}/${encodeURIComponent(props.slug)}/flags`,
+      { problems: f.problems, bar: barNumber, note: f.note, name: f.name, part: song.value!.parts[myPart.value]?.name });
+    song.value!.flags.unshift({ id, bar: barNumber, problems: [...f.problems], note: f.note.trim() || null,
+      created_at: new Date().toISOString() });
+    flagging.value = null;
+    flagThanks.value = true;
+    window.clearTimeout(flagThanksTimer);
+    flagThanksTimer = window.setTimeout(() => { flagThanks.value = false; }, 4000);
+  } catch (error) {
+    flagError.value = (error as Error).message;
+  } finally {
+    flagSending.value = false;
+  }
+}
+
+/** "Tahti 12 · Väärä nuotti · the note": one open flag on the settings sheet. */
+function flagLine(f: Song["flags"][number]): string {
+  return [f.bar ? `Tahti ${f.bar}` : "", problemLabels(f.problems), f.note ?? ""].filter(Boolean).join(" · ");
+}
+
 function dismissHint() {
   showHint.value = false;
   localStorage.setItem("stemmanauhat:hint-seen", "1");
@@ -515,7 +569,7 @@ function onPointerUp(event: PointerEvent) {
       </div>
 
       <!-- A one-time hint: a small card above the dock, like the other sheets. -->
-      <div v-if="showHint && !askPart && !sheetOpen" class="hint-card" role="note" :style="{ bottom: `${dockHeight + 12}px` }">
+      <div v-if="showHint && !askPart && !sheetOpen && !flagging" class="hint-card" role="note" :style="{ bottom: `${dockHeight + 12}px` }">
         <ul>
           <li v-if="singleLine"><Icon name="tap" :size="20" /><span><b>Napauta</b> nuottia: soita tai pysäytä</span></li>
           <li v-else><Icon name="tap" :size="20" /><span><b>Napauta</b> nuottia: siirry siihen</span></li>
@@ -528,6 +582,9 @@ function onPointerUp(event: PointerEvent) {
       <div v-if="sheetOpen" class="backdrop" @click="closePanels"></div>
       <div v-if="sheetOpen" class="sheet" :style="{ bottom: `${dockHeight - 1}px` }">
         <div class="handle" aria-hidden="true"></div>
+        <ul v-if="song.flags.length" class="flags" aria-label="Ilmoitetut virheet">
+          <li v-for="f in song.flags" :key="f.id">Ilmoitettu virhe: {{ flagLine(f) }}</li>
+        </ul>
         <div class="section-label">Kuuntelu</div>
         <div class="segmented modes" role="group" aria-label="Miten kuuntelet">
           <button v-for="m in MODES" :key="m.id" type="button" :class="{ on: mode === m.id }"
@@ -569,6 +626,15 @@ function onPointerUp(event: PointerEvent) {
               @click="changeZoom(1)">+</button>
           </div>
         </div>
+        <template v-if="canFlag">
+          <div class="divider"></div>
+          <button type="button" class="flag-open" @click="startFlag">Ilmoita virheestä</button>
+        </template>
+      </div>
+
+      <div v-if="flagThanks" class="hint-card" role="status" :style="{ bottom: `${dockHeight + 12}px` }">
+        <span class="flag-thanks">Kiitos! Ilmoitus lähetetty.</span>
+        <button type="button" @click="flagThanks = false">Selvä</button>
       </div>
 
       <!-- The dock: the position line on its top edge, then one row. -->
@@ -594,6 +660,31 @@ function onPointerUp(event: PointerEvent) {
             <Icon :name="sheetOpen ? 'close' : 'more'" :size="22" /></button>
         </div>
       </section>
+
+      <!-- Ilmoita virheestä (#41): a sheet from the bottom, over everything, like the part picker. -->
+      <template v-if="flagging">
+        <div class="picker-backdrop" @click="flagging = null"></div>
+        <form class="picker flag-form" role="dialog" aria-label="Ilmoita virheestä" @submit.prevent="sendFlag">
+          <div class="handle" aria-hidden="true"></div>
+          <h2>Ilmoita virheestä</h2>
+          <p>Mikä on vialla? Ilmoitus menee ylläpitäjälle, joka korjaa nuotin.</p>
+          <div class="flag-problems" role="group" aria-label="Mikä on vialla">
+            <label v-for="(label, key) in FLAG_PROBLEMS" :key="key" :class="{ on: flagging.problems.includes(key) }">
+              <input v-model="flagging.problems" type="checkbox" :value="key" />{{ label }}</label>
+          </div>
+          <label class="flag-field flag-bar">Tahti
+            <input v-model="flagging.bar" type="number" inputmode="numeric" min="1" :max="barCount" /></label>
+          <label class="flag-field">Lisätietoja
+            <textarea v-model="flagging.note" rows="2" maxlength="1000"></textarea></label>
+          <label v-if="!me?.email" class="flag-field">Nimesi
+            <input v-model="flagging.name" type="text" maxlength="100" /></label>
+          <p v-if="flagError" class="error" role="alert">{{ flagError }}</p>
+          <div class="flag-actions">
+            <button type="submit" class="send" :disabled="flagSending">Lähetä</button>
+            <button type="button" @click="flagging = null">Peru</button>
+          </div>
+        </form>
+      </template>
 
       <!-- Oma stemma: a sheet from the bottom, over everything. On the first visit a part must be picked. -->
       <template v-if="askPart">

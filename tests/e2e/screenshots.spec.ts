@@ -132,6 +132,44 @@ test("requests: a singer filling in the form, the choir's pending list, and the 
   }
 });
 
+test("flags: a singer filling in the form, the flag in the player, and the admin's list", async ({ page, browser }) => {
+  await signInAs(page, "/c/jm/kokeilu", "laulaja@example.com");
+  await choosePartIfAsked(page, "Tenori");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.getByRole("button", { name: "Soita" }).click();
+  await expect(page.getByTestId("cursor")).toHaveAttribute("data-measure", "2", { timeout: 10_000 });
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.getByRole("button", { name: "Ilmoita virheestä" })).toBeVisible();
+  await page.screenshot({ path: `${dir}/flag-button-phone.png` });
+  await page.getByRole("button", { name: "Ilmoita virheestä" }).click();
+  const form = page.getByRole("dialog", { name: "Ilmoita virheestä" });
+  await form.getByText("Väärä nuotti").click();
+  await form.getByLabel("Lisätietoja").fill("Tenorin toinen nuotti kuulostaa väärältä");
+  await page.screenshot({ path: `${dir}/flag-form-phone.png` });
+  await form.getByRole("button", { name: "Lähetä" }).click();
+  await expect(page.getByText("Kiitos! Ilmoitus lähetetty.")).toBeVisible();
+  await page.screenshot({ path: `${dir}/flag-sent-phone.png` });
+
+  const linked = await (await browser.newContext()).newPage();
+  await linked.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  await linked.getByRole("link", { name: "Kokeilulaulu" }).click();
+  await choosePartIfAsked(linked, "Basso");
+  await linked.getByRole("button", { name: "Selvä" }).click();
+  await linked.getByRole("button", { name: "Säädöt" }).click();
+  await expect(linked.getByRole("list", { name: "Ilmoitetut virheet" })).toContainText("Väärä nuotti");
+  await linked.screenshot({ path: `${dir}/flag-shown-phone.png` });
+
+  const admin = await (await browser.newContext({ viewport: { width: 1000, height: 900 } })).newPage();
+  await signInAs(admin, "/admin", "yllapito@example.com");
+  const jm = admin.locator('[data-choir="jm"]');
+  const row = jm.locator(".request-list li", { hasText: "Kokeilulaulu" });
+  await expect(row).toContainText("Väärä nuotti");
+  await jm.screenshot({ path: `${dir}/flag-admin.png` });
+  admin.once("dialog", (dialog) => dialog.accept());
+  await row.getByRole("button", { name: "Poista" }).click();
+  await expect(row).toHaveCount(0);
+});
+
 test("front page for a signed-out visitor", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();

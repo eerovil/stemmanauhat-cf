@@ -4,7 +4,7 @@ import { serveObject, safeSongPath } from "./files";
 import { AUTHORIZE_URL, TOKEN_URL, authorizeUrl, exchangeCode, normalizeEmail, readEmail } from "./google";
 import { joinUrl, linkKey } from "./links";
 import { publicOrigin } from "./origin";
-import { isPdf, parseRequest, PDF_MAX_BYTES, requestPdfKey } from "./requests";
+import { isPdf, parseFlag, parseRequest, PDF_MAX_BYTES, requestPdfKey } from "./requests";
 import { newPassphraseRecord, passphraseMatches } from "./passphrase";
 import { clearSessionCookie, readSession, sessionCookie, type Session } from "./session";
 import { base64UrlEncode, cookieValue, readValue, signValue } from "./signing";
@@ -58,6 +58,9 @@ async function route(ctx: Ctx): Promise<Response> {
   if (path === "/api/songs" && method === "GET") return songList(ctx, url.searchParams.get("choir") ?? "");
   if ((m = /^\/api\/songs\/([^/]+)\/([^/]+)$/.exec(path)) && method === "GET") {
     return song(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!));
+  }
+  if ((m = /^\/api\/songs\/([^/]+)\/([^/]+)\/flags$/.exec(path)) && method === "POST") {
+    return sendFlag(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!));
   }
   if ((m = /^\/files\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/.exec(path)) && method === "GET") {
     return file(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!), decodeURIComponent(m[3]!),
@@ -277,12 +280,16 @@ async function songList(ctx: Ctx, choir: string): Promise<Response> {
     "SELECT id, name, songs FROM setlists WHERE choir = ? ORDER BY updated_at DESC, id DESC",
   ).bind(choir).all<{ id: number; name: string; songs: string }>();
   // The choir's open requests, for every singer to see (Eero, #38); who sent
-  // them and their PDFs are for admins only.
+  // them and their PDFs are for admins only. A song's flags (#41) show in its
+  // player, not here; the list only counts them for the admin's link.
   const requests = await ctx.env.DB.prepare(
     `SELECT id, title, credits, note, pdf, created_at FROM song_requests
-      WHERE choir = ? AND done_at IS NULL ORDER BY created_at DESC, id DESC`,
+      WHERE choir = ? AND done_at IS NULL AND song IS NULL ORDER BY created_at DESC, id DESC`,
   ).bind(choir).all<{ id: number; title: string | null; credits: string | null; note: string | null; pdf: number;
     created_at: string }>();
+  const flags = await ctx.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM song_requests WHERE choir = ? AND done_at IS NULL AND song IS NOT NULL",
+  ).bind(choir).first<{ n: number }>();
   // A song that has left the choir is skipped; the next save drops it for good.
   const slugs = new Set(results.map((r) => r.slug));
   return json({
@@ -292,6 +299,7 @@ async function songList(ctx: Ctx, choir: string): Promise<Response> {
       id: l.id, name: l.name, songs: (JSON.parse(l.songs) as string[]).filter((slug) => slugs.has(slug)),
     })),
     requests: requests.results.map((r) => ({ ...r, pdf: r.pdf === 1 })),
+    openFlags: flags?.n ?? 0,
   });
 }
 
@@ -306,7 +314,16 @@ async function song(ctx: Ctx, choir: string, slug: string): Promise<Response> {
   // The version is in the address, so a republished song is a new URL and the
   // year-long cache on /files never serves the old one.
   const base = `/files/${encodeURIComponent(choir)}/${encodeURIComponent(slug)}/${encodeURIComponent(versionOf(prefix))}/`;
-  return json({ ...song, parts: JSON.parse(row.parts), choir, base });
+  // Open flags (#41), for every singer to see; who sent them is for admins only.
+  const flags = await ctx.env.DB.prepare(
+    `SELECT id, bar, problems, note, created_at FROM song_requests
+      WHERE choir = ? AND song = ? AND done_at IS NULL ORDER BY created_at DESC, id DESC`,
+  ).bind(choir, slug).all<{ id: number; bar: number | null; problems: string | null; note: string | null;
+    created_at: string }>();
+  return json({
+    ...song, parts: JSON.parse(row.parts), choir, base,
+    flags: flags.results.map((f) => ({ ...f, problems: problemList(f.problems) })),
+  });
 }
 
 /** The last folder of a song's R2 prefix: `songs/jm/x/20261009T120000Z/` → `20261009T120000Z`. */
@@ -341,13 +358,14 @@ async function adminState(ctx: Ctx): Promise<Response> {
     db.prepare("SELECT choir, email, added_at FROM members ORDER BY email"),
     db.prepare("SELECT choir, salt, hash, iterations, generation FROM choir_links WHERE hash IS NOT NULL"),
     db.prepare("SELECT email FROM admins ORDER BY email"),
-    db.prepare(`SELECT id, choir, title, credits, note, requester, pdf, done_at, created_at FROM song_requests
-                ORDER BY created_at DESC, id DESC`),
+    db.prepare(`SELECT id, choir, title, credits, note, requester, pdf, done_at, created_at, song, bar, problems, part
+                FROM song_requests ORDER BY created_at DESC, id DESC`),
   ]);
   type Member = { choir: string; email: string; added_at: string };
   type Link = { choir: string; salt: string; hash: string; iterations: number; generation: number };
   type Request = { id: number; choir: string; title: string | null; credits: string | null; note: string | null;
-    requester: string | null; pdf: number; done_at: string | null; created_at: string };
+    requester: string | null; pdf: number; done_at: string | null; created_at: string; song: string | null;
+    bar: number | null; problems: string | null; part: string | null };
   const origin = publicOrigin(ctx.url, ctx.request.headers);
   const out = [];
   for (const c of (choirs!.results as { id: string; name: string; public: number }[]).filter((c) => c.public !== 1)) {
@@ -364,7 +382,7 @@ async function adminState(ctx: Ctx): Promise<Response> {
       link: link !== undefined,
       url,
       requests: (requests!.results as Request[]).filter((r) => r.choir === c.id)
-        .map(({ choir: _, ...r }) => ({ ...r, pdf: r.pdf === 1 })),
+        .map(({ choir: _, ...r }) => ({ ...r, pdf: r.pdf === 1, problems: problemList(r.problems) })),
     });
   }
   return json({
@@ -560,6 +578,44 @@ async function sendRequest(ctx: Ctx): Promise<Response> {
     }
   }
   return json({ id });
+}
+
+/**
+ * A singer flags a published song's score as having issues (#41). JSON only:
+ * a cross-site form cannot send it without a preflight, so this plus the
+ * SameSite cookie is the CSRF guard, as for the admin calls.
+ */
+async function sendFlag(ctx: Ctx, choir: string, slug: string): Promise<Response> {
+  if (!(ctx.request.headers.get("Content-Type") ?? "").startsWith("application/json")) {
+    return json({ error: "send JSON" }, 415);
+  }
+  const access = await accessTo(ctx, choir);
+  if (access !== "ok") return json({ error: access }, statusOf(access));
+  // The open list is for everyone, so it takes no flags (spec D3).
+  if (!(await privateChoir(ctx, choir))) return json({ error: "refused" }, 403);
+  const db = ctx.env.DB;
+  const song = await db.prepare("SELECT title FROM songs WHERE choir = ? AND slug = ?").bind(choir, slug)
+    .first<{ title: string }>();
+  if (!song) return json({ error: "unknown" }, 404);
+  let body: unknown;
+  try {
+    body = await ctx.request.json();
+  } catch {
+    return json({ error: "bad JSON" }, 400);
+  }
+  if (typeof body !== "object" || body === null) return json({ error: "bad JSON" }, 400);
+  const flag = parseFlag(body as Record<string, unknown>);
+  if ("error" in flag) return json(flag, 400);
+  const row = await db.prepare(
+    `INSERT INTO song_requests (choir, title, note, requester, created_at, song, bar, problems, part)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  ).bind(choir, song.title, flag.note, ctx.session?.email ?? flag.name, new Date(ctx.now * 1000).toISOString(),
+    slug, flag.bar, flag.problems.join(",") || null, flag.part).first<{ id: number }>();
+  return json({ id: row!.id });
+}
+
+function problemList(problems: string | null): string[] {
+  return problems ? problems.split(",") : [];
 }
 
 async function requestPdf(ctx: Ctx, id: number): Promise<Response> {

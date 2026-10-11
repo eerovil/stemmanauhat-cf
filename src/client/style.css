@@ -79,6 +79,8 @@ button.link { border: none; background: none; color: var(--accent); padding: 0.2
 .request-list li { border-bottom: 1px solid var(--line); padding: 0.5rem 0; }
 .request-list li.done { opacity: 0.55; }
 .request-list .row { justify-content: space-between; }
+.request-list .flag-tag { color: #a3470a; font-weight: 600; margin-right: 0.3rem; }
+.request-list .flag-what { display: block; color: var(--muted); font-size: 0.9rem; }
 footer { margin-top: 1.5rem; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4rem 1rem 1rem; margin: 1rem 0; }
 .card textarea, .card input[type="text"] { width: 100%; font: inherit; padding: 0.5rem; border: 1px solid var(--line);
@@ -197,6 +199,27 @@ footer { margin-top: 1.5rem; }
 .picker-grid button { height: 56px; border-radius: 14px; background: var(--chip); font-size: 18px; font-weight: 600; }
 .picker-grid button:hover { background: var(--accent-soft); }
 .picker-grid button.mine { background: var(--accent); color: #fff; font-weight: 700; }
+
+/* ---------- Player: Ilmoita virheestä (#41) ---------- */
+.sheet .flags { list-style: none; margin: 0 0 10px; padding: 8px 12px; border-radius: 12px; background: #fdf1e7;
+  color: #7a3a0e; font-size: 13.5px; display: grid; gap: 4px; }
+.sheet .flag-open { display: block; width: 100%; min-height: 46px; text-align: left; font-size: 15px; color: var(--accent); }
+.flag-form { max-height: 90vh; overflow-y: auto; }
+.flag-problems { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.flag-problems label { display: flex; align-items: center; height: 40px; padding: 0 14px; border-radius: 999px;
+  background: var(--chip); font-size: 14.5px; cursor: pointer; }
+.flag-problems label.on { background: var(--accent); color: #fff; font-weight: 600; }
+.flag-problems input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.flag-problems label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.flag-field { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+.flag-field input, .flag-field textarea { font: inherit; font-size: 16px; color: var(--fg); padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.flag-bar input { width: 7rem; }
+.flag-form .error { margin: 0; }
+.flag-actions { display: flex; gap: 10px; margin-top: 6px; }
+.flag-actions button { height: 46px; padding: 0 22px; border-radius: 999px; background: var(--chip); font-weight: 600; }
+.flag-actions .send { background: var(--accent); color: #fff; }
+.flag-thanks { flex: 1; font-size: 15px; }
 
 /* ---------- Player: the one-time hint ---------- */
 .hint-card { position: fixed; left: 12px; right: 12px; z-index: 3; max-width: 26rem; margin: 0 auto;
