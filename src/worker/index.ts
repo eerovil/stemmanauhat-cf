@@ -157,7 +157,7 @@ async function login(ctx: Ctx): Promise<Response> {
   const next = safeNext(ctx.url.searchParams.get("next"));
   const cookie = await signValue(ctx.secret, { state, nonce, next, exp: ctx.now + OAUTH_SECONDS });
   const location = authorizeUrl(env.GOOGLE_AUTH_URL ?? AUTHORIZE_URL, env.GOOGLE_CLIENT_ID,
-    `${publicOrigin(ctx.url, ctx.request.headers)}/auth/callback`, state, nonce);
+    `${publicOrigin(ctx.url, ctx.request.headers, ctx.env)}/auth/callback`, state, nonce);
   return redirect(location, {
     "Set-Cookie": `${OAUTH_COOKIE}=${cookie}; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=${OAUTH_SECONDS}`,
   });
@@ -175,7 +175,7 @@ async function callback(ctx: Ctx): Promise<Response> {
     return redirect(signinUrl("/", "failed"));
   }
   const idToken = await exchangeCode(env.GOOGLE_TOKEN_URL ?? TOKEN_URL, env.GOOGLE_CLIENT_ID,
-    env.GOOGLE_CLIENT_SECRET, `${publicOrigin(url, ctx.request.headers)}/auth/callback`, code);
+    env.GOOGLE_CLIENT_SECRET, `${publicOrigin(url, ctx.request.headers, ctx.env)}/auth/callback`, code);
   const email = idToken && readEmail(idToken, env.GOOGLE_CLIENT_ID, pending.nonce, ctx.now);
   if (!email) return redirect(signinUrl(safeNext(pending.next ?? "/"), "failed"));
 
@@ -366,7 +366,7 @@ async function adminState(ctx: Ctx): Promise<Response> {
   type Request = { id: number; choir: string; title: string | null; credits: string | null; note: string | null;
     requester: string | null; pdf: number; done_at: string | null; created_at: string; song: string | null;
     bar: number | null; problems: string | null; part: string | null };
-  const origin = publicOrigin(ctx.url, ctx.request.headers);
+  const origin = publicOrigin(ctx.url, ctx.request.headers, ctx.env);
   const out = [];
   for (const c of (choirs!.results as { id: string; name: string; public: number }[]).filter((c) => c.public !== 1)) {
     const link = (links!.results as Link[]).find((l) => l.choir === c.id);
@@ -461,7 +461,7 @@ async function adminLink(ctx: Ctx): Promise<Response> {
       `INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES (?1, ?2, ?3, ?4, ?5)
        ON CONFLICT (choir) DO UPDATE SET salt = ?2, hash = ?3, iterations = ?4, generation = ?5`,
     ).bind(choir, record.salt, record.hash, record.iterations, generation).run();
-    return json({ link: true, url: joinUrl(publicOrigin(ctx.url, ctx.request.headers), choir, key) });
+    return json({ link: true, url: joinUrl(publicOrigin(ctx.url, ctx.request.headers, ctx.env), choir, key) });
   }
   const passphrase = typeof body.passphrase === "string" ? body.passphrase.trim() : "";
   if (passphrase.length < 6) return json({ error: "Salasanan pitää olla vähintään 6 merkkiä." }, 400);

@@ -5,8 +5,10 @@
 # The admin page (/admin) does the same thing from a browser.
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-choir="${1:?usage: set-passphrase.sh <jm|naiskuoro>}"
-case "$choir" in jm|naiskuoro) ;; *) echo "unknown choir: $choir" >&2; exit 2 ;; esac
+# shellcheck source=scripts/lib-cloudflare.sh
+. ./scripts/lib-cloudflare.sh
+choir="${1:?usage: set-passphrase.sh <choir id>}"
+[[ "$choir" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "not a choir id: $choir" >&2; exit 2; }
 read -r -s -p "Passphrase for $choir: " passphrase; echo
 [ "${#passphrase}" -ge 6 ] || { echo "at least 6 characters" >&2; exit 2; }
 record=$(printf '%s' "$passphrase" | python3 -c '
@@ -16,6 +18,6 @@ h = hashlib.pbkdf2_hmac("sha256", p, salt, 10000, 32)
 b = lambda x: base64.urlsafe_b64encode(x).decode().rstrip("=")
 print(b(salt), b(h))')
 read -r salt hash <<<"$record"
-./scripts/run.sh --cloudflare corepack pnpm exec wrangler d1 execute stemmanauhat --remote --command \
+wrangler d1 execute stemmanauhat --remote --command \
   "INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES ('$choir', '$salt', '$hash', 10000, 1)
    ON CONFLICT (choir) DO UPDATE SET salt = excluded.salt, hash = excluded.hash, iterations = 10000, generation = generation + 1"

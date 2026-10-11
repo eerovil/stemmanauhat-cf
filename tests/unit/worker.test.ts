@@ -123,18 +123,26 @@ describe("versionOf", () => {
 });
 
 describe("publicOrigin", () => {
-  const worker = new URL("https://stemmanauhat.eerovil.workers.dev/auth/login");
-  const proxied = { "X-Forwarded-Host": "stemmanauhat.vilpponen.fi", "X-Forwarded-Proto": "https" };
-  it("uses the public name behind the VPS proxy", () => {
-    expect(publicOrigin(worker, new Headers(proxied))).toBe("https://stemmanauhat.vilpponen.fi");
+  const hosts = { WORKER_HOST: "stemmanauhat.example.workers.dev", PUBLIC_HOST: "laulu.example.com" };
+  const worker = new URL("https://stemmanauhat.example.workers.dev/auth/login");
+  const proxied = { "X-Forwarded-Host": "laulu.example.com", "X-Forwarded-Proto": "https" };
+  it("uses the public name behind the proxy", () => {
+    expect(publicOrigin(worker, new Headers(proxied), hosts)).toBe("https://laulu.example.com");
   });
   it("keeps the request origin otherwise", () => {
-    expect(publicOrigin(worker, new Headers())).toBe("https://stemmanauhat.eerovil.workers.dev");
-    expect(publicOrigin(worker, new Headers({ ...proxied, "X-Forwarded-Host": "evil.example" })))
-      .toBe("https://stemmanauhat.eerovil.workers.dev");
-    expect(publicOrigin(worker, new Headers({ ...proxied, "X-Forwarded-Proto": "http" })))
-      .toBe("https://stemmanauhat.eerovil.workers.dev");
-    expect(publicOrigin(new URL("http://127.0.0.1:8787/"), new Headers(proxied))).toBe("http://127.0.0.1:8787");
+    expect(publicOrigin(worker, new Headers(), hosts)).toBe("https://stemmanauhat.example.workers.dev");
+    expect(publicOrigin(worker, new Headers({ ...proxied, "X-Forwarded-Host": "evil.example" }), hosts))
+      .toBe("https://stemmanauhat.example.workers.dev");
+    expect(publicOrigin(worker, new Headers({ ...proxied, "X-Forwarded-Proto": "http" }), hosts))
+      .toBe("https://stemmanauhat.example.workers.dev");
+    expect(publicOrigin(new URL("http://127.0.0.1:8787/"), new Headers(proxied), hosts)).toBe("http://127.0.0.1:8787");
+  });
+  it("trusts no forwarded name when the vars are not set", () => {
+    expect(publicOrigin(worker, new Headers(proxied), {})).toBe("https://stemmanauhat.example.workers.dev");
+    expect(publicOrigin(worker, new Headers(proxied), { WORKER_HOST: hosts.WORKER_HOST }))
+      .toBe("https://stemmanauhat.example.workers.dev");
+    expect(publicOrigin(worker, new Headers(proxied), { PUBLIC_HOST: hosts.PUBLIC_HOST }))
+      .toBe("https://stemmanauhat.example.workers.dev");
   });
 });
 

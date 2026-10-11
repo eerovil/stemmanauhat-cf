@@ -69,12 +69,16 @@ jobs:
         if: steps.ready.outputs.ready == 'true'
         run: |
           set -e
+          # The address is WORKER_HOST under vars in wrangler.jsonc, so a fork checks its own.
+          host=$(sed -nE 's/^[[:space:]]*"WORKER_HOST"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' wrangler.jsonc | head -n 1)
+          [ -n "$host" ] || { echo "set WORKER_HOST under vars in wrangler.jsonc"; exit 1; }
           # A brand-new Worker's address can answer 404 for a few seconds after its first deploy.
-          curl -fsS --retry 6 --retry-delay 5 --retry-all-errors https://stemmanauhat.eerovil.workers.dev/health
-          code=$(curl -s -o /dev/null -w '%{http_code}' https://stemmanauhat.eerovil.workers.dev/c/jm)
+          curl -fsS --retry 6 --retry-delay 5 --retry-all-errors "https://$host/health"
+          # /admin sends a signed-out visitor to sign in on every copy, whatever its choirs.
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://$host/admin")
           case "$code" in
             302) ;;
             # The first deploy runs before scripts/set-worker-secrets.sh: closed, not open.
             503) echo "::warning::The Worker has no secrets yet: run scripts/set-worker-secrets.sh." ;;
-            *) echo "choir pages are not gated: $code"; exit 1 ;;
+            *) echo "sign-in is not required: $code"; exit 1 ;;
           esac

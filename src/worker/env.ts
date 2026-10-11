@@ -1,4 +1,6 @@
-export interface Env {
+import type { Hosts } from "./origin";
+
+export interface Env extends Hosts {
   DB: D1Database;
   SONGS: R2Bucket;
   ASSETS: Fetcher;
