@@ -26,12 +26,13 @@ function pick(id: number | null) {
 const setlist = computed(() => setlists.value.find((l) => l.id === picked.value) ?? null);
 
 async function load() {
-  const data = await getJson<{ choir: { name: string }; songs: SongSummary[]; setlists: Setlist[]; requests: SongRequest[] }>(
-    `/api/songs?choir=${encodeURIComponent(props.choir)}`);
+  const data = await getJson<{ choir: { name: string }; songs: SongSummary[]; setlists: Setlist[]; requests: SongRequest[];
+    openFlags: number }>(`/api/songs?choir=${encodeURIComponent(props.choir)}`);
   choirName.value = data.choir.name;
   songs.value = data.songs;
   setlists.value = data.setlists;
   requests.value = data.requests;
+  openFlags.value = data.openFlags;
 }
 
 onMounted(async () => {
@@ -118,6 +119,8 @@ async function removeSetlist() {
 // A singer asks for a new practice track (#38). Every field is optional, but a
 // request needs a song name or a PDF. The open list takes no requests.
 const requests = ref<SongRequest[]>([]);
+/** Open flags on this choir's songs (#41): only counted here, for the admin's link. */
+const openFlags = ref(0);
 const canRequest = computed(() => me.value?.choirs.some((c) => c.id === props.choir && !c.public) ?? false);
 const requesting = ref<{ title: string; credits: string; note: string; name: string } | null>(null);
 const requestPdf = ref<File | null>(null);
@@ -255,7 +258,7 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
     </template>
     <footer class="row">
       <a v-if="me?.admin" href="/admin">Ylläpito</a>
-      <a v-if="me?.admin && canRequest && requests.length" href="/admin">Pyyntöjä: {{ requests.length }}</a>
+      <a v-if="me?.admin && canRequest && requests.length + openFlags" href="/admin">Pyyntöjä: {{ requests.length + openFlags }}</a>
       <form v-if="me?.email || me?.linked.length" method="post" action="/auth/logout">
         <button type="submit" class="link">Kirjaudu ulos</button>
       </form>

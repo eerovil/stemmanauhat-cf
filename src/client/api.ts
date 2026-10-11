@@ -69,9 +69,35 @@ export interface SongRequest {
   created_at: string;
 }
 
+/** What a singer can say is wrong with a published song (#41), in the order the form shows them. */
+export const FLAG_PROBLEMS = {
+  notes: "Väärä nuotti",
+  part: "Väärä stemma",
+  lyrics: "Sanat",
+  timing: "Rytmi / ajoitus",
+  sound: "Ääni",
+  other: "Muu",
+} as const;
+export type FlagProblem = keyof typeof FLAG_PROBLEMS;
+
+/** "Väärä nuotti, Sanat": the problems ticked, as the singer saw them. */
+export function problemLabels(problems: string[]): string {
+  return problems.map((p) => FLAG_PROBLEMS[p as FlagProblem] ?? p).join(", ");
+}
+
+/** An open flag on a song (#41), as every singer sees it: without who sent it. */
+export interface SongFlag {
+  id: number;
+  bar: number | null;
+  problems: string[];
+  note: string | null;
+  created_at: string;
+}
+
 export interface Song extends SongSummary {
   choir: string;
   base: string;
+  flags: SongFlag[];
 }
 
 /** A refusal the page should show rather than an error: 401, 403 or 404. */

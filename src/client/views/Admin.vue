@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { getJson, postJson, Refused } from "../api";
+import { getJson, postJson, problemLabels, Refused } from "../api";
 import RefusedView from "./Refused.vue";
 
 interface AdminChoir {
@@ -24,6 +24,12 @@ interface AdminRequest {
   pdf: boolean;
   done_at: string | null;
   created_at: string;
+  /** Set when this is a flag on a published song (#41): its slug. */
+  song: string | null;
+  bar: number | null;
+  problems: string[];
+  /** The flagger's own part. */
+  part: string | null;
 }
 
 const choirs = ref<AdminChoir[]>([]);
@@ -82,9 +88,10 @@ const markDone = (choir: string, r: AdminRequest) => run(choir, async () => {
   return `Merkitty tehdyksi: ${r.title ?? "Nuotti (PDF)"}.`;
 });
 const removeRequest = (choir: string, r: AdminRequest) => run(choir, async () => {
-  if (!confirm(`Poistetaanko pyyntö ${r.title ?? "Nuotti (PDF)"}?`)) return "";
+  const what = r.song ? "virheilmoitus" : "pyyntö";
+  if (!confirm(`Poistetaanko ${what} ${r.title ?? "Nuotti (PDF)"}?`)) return "";
   await postJson("/api/admin/requests", { id: r.id, delete: true });
-  return "Pyyntö poistettu.";
+  return r.song ? "Virheilmoitus poistettu." : "Pyyntö poistettu.";
 });
 const day = (at: string) => new Date(at).toLocaleDateString("fi-FI");
 const open = (c: AdminChoir) => c.requests.filter((r) => !r.done_at);
@@ -103,8 +110,16 @@ const done = (c: AdminChoir) => c.requests.filter((r) => r.done_at);
       <p v-if="!c.requests.length" class="hint">Ei pyyntöjä.</p>
       <ul class="request-list">
         <li v-for="r in [...open(c), ...done(c)]" :key="r.id" :class="{ done: r.done_at }">
-          <strong>{{ r.title ?? "Nuotti (PDF)" }}</strong>
-          <span v-if="r.credits"> · {{ r.credits }}</span>
+          <template v-if="r.song">
+            <span class="flag-tag">Virhe:</span>
+            <a :href="`/c/${encodeURIComponent(c.id)}/${encodeURIComponent(r.song)}`"><strong>{{ r.title }}</strong></a>
+            <span class="flag-what">{{ [r.bar ? `tahti ${r.bar}` : "", problemLabels(r.problems),
+              r.part ? `stemma ${r.part}` : ""].filter(Boolean).join(" · ") }}</span>
+          </template>
+          <template v-else>
+            <strong>{{ r.title ?? "Nuotti (PDF)" }}</strong>
+            <span v-if="r.credits"> · {{ r.credits }}</span>
+          </template>
           <p v-if="r.note" class="hint">{{ r.note }}</p>
           <div class="row">
             <span class="hint">{{ r.requester ?? "Linkillä tullut" }}, {{ day(r.created_at) }}{{ r.done_at ? ` · tehty ${day(r.done_at)}` : "" }}</span>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPdf, parseRequest, requestPdfKey } from "../../src/worker/requests";
+import { isPdf, parseFlag, parseRequest, requestPdfKey } from "../../src/worker/requests";
 
 describe("parseRequest", () => {
   it("takes a song name alone, or a PDF alone, with every other field optional", () => {
@@ -28,4 +28,23 @@ describe("isPdf", () => {
 
 it("keeps a request's PDF under requests/<choir>/", () => {
   expect(requestPdfKey("jm", 7)).toBe("requests/jm/7.pdf");
+});
+
+describe("parseFlag", () => {
+  it("takes problems ticked, or a note alone, with the bar optional", () => {
+    expect(parseFlag({ problems: ["lyrics", "notes"], bar: 12, part: "Tenori" }))
+      .toEqual({ problems: ["notes", "lyrics"], bar: 12, note: null, name: null, part: "Tenori" });
+    expect(parseFlag({ note: "  tahdissa 3 kummallinen sointu ", bar: null }))
+      .toEqual({ problems: [], bar: null, note: "tahdissa 3 kummallinen sointu", name: null, part: null });
+  });
+  it("refuses a flag with neither a problem nor a note", () => {
+    expect(parseFlag({ problems: [], bar: 4, note: "  " }))
+      .toEqual({ error: "Valitse mikä on vialla tai kirjoita lisätietoja." });
+  });
+  it("refuses unknown problems, a bad bar, and too long text", () => {
+    expect(parseFlag({ problems: ["volume"] })).toHaveProperty("error");
+    expect(parseFlag({ problems: "notes" })).toHaveProperty("error");
+    for (const bar of [0, 1.5, 1000, "3"]) expect(parseFlag({ problems: ["notes"], bar })).toHaveProperty("error");
+    expect(parseFlag({ note: "x".repeat(1001) })).toHaveProperty("error");
+  });
 });

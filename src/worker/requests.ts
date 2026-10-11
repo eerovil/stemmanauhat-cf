@@ -34,3 +34,43 @@ export function parseRequest(fields: Record<string, unknown>, hasPdf: boolean): 
 export function requestPdfKey(choir: string, id: number): string {
   return `requests/${choir}/${id}.pdf`;
 }
+
+/** What a singer can say is wrong with a published song (#41); the player shows them in Finnish. */
+export const FLAG_PROBLEMS = ["notes", "part", "lyrics", "timing", "sound", "other"] as const;
+export const FLAG_MAX = { note: 1000, name: 100, part: 50, bar: 999 } as const;
+
+export interface SongFlag {
+  problems: string[];
+  bar: number | null;
+  note: string | null;
+  name: string | null;
+  part: string | null;
+}
+
+/**
+ * A flag as the player sent it (JSON). It needs at least one problem ticked or
+ * a note (spec D2). Returns the error to show instead when it is not a flag.
+ */
+export function parseFlag(body: Record<string, unknown>): SongFlag | { error: string } {
+  const problems = body.problems ?? [];
+  if (!Array.isArray(problems) || !problems.every((p) => (FLAG_PROBLEMS as readonly unknown[]).includes(p))) {
+    return { error: "Tuntematon virheen laji." };
+  }
+  let bar: number | null = null;
+  if (body.bar !== undefined && body.bar !== null && body.bar !== "") {
+    if (typeof body.bar !== "number" || !Number.isInteger(body.bar) || body.bar < 1 || body.bar > FLAG_MAX.bar) {
+      return { error: "Tahdin numero ei kelpaa." };
+    }
+    bar = body.bar;
+  }
+  const text: Record<string, string | null> = {};
+  for (const key of ["note", "name", "part"] as const) {
+    const value = typeof body[key] === "string" ? (body[key] as string).trim() : "";
+    if (value.length > FLAG_MAX[key]) return { error: `Liian pitkä teksti (yli ${FLAG_MAX[key]} merkkiä).` };
+    text[key] = value || null;
+  }
+  // In the fixed order, once each, whatever order they were ticked in.
+  const ticked = FLAG_PROBLEMS.filter((p) => problems.includes(p));
+  if (!ticked.length && !text.note) return { error: "Valitse mikä on vialla tai kirjoita lisätietoja." };
+  return { problems: ticked, bar, note: text.note!, name: text.name!, part: text.part! };
+}

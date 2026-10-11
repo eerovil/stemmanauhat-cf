@@ -28,6 +28,10 @@ Live address (once set up): https://stemmanauhat.eerovil.workers.dev
   it and a note. Everyone in the choir sees the open requests, without who sent them. Admins see who
   sent each one, open its PDF and mark it done or delete it at `/admin`. The rows are in D1
   `song_requests`; the PDFs are in R2 under `requests/<choir>/` and only admins can get them.
+- **Flags:** in a private choir's player, Säädöt → "Ilmoita virheestä" lets a singer say what is
+  wrong with the score (wrong note or part, lyrics, timing, sound), at which bar, with a note. A flag
+  is a `song_requests` row with `song` set: it shows in that song's Säädöt for every singer, without
+  who sent it, and in the admin's "Pyynnöt" list, where it is marked done or deleted like a request.
 - **Player:** the score is drawn by OpenSheetMusicDisplay with the videos' blue for the notes being
   sung and their translucent cursor band. "Kaikki" shows every staff that fits on one line sliding
   sideways under a fixed cursor (drag it to move); "Oma" shows your own staff alone in page lines.
