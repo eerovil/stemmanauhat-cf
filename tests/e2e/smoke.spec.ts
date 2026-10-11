@@ -318,3 +318,43 @@ test("a signed-out visitor finds the open songs on the front page", async ({ pag
   await expect(page).toHaveURL(/\/c\/public\/esittely$/);
   await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
 });
+
+test("the song list appears whole at once, also coming back from a song (#43)", async ({ page }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await expect(page.locator(".songs li a")).toHaveCount(3);
+  // Every state the list page is drawn in, from the first one with anything in it.
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as unknown as { seen: string[] }).seen = seen;
+    new MutationObserver(() => {
+      const main = document.querySelector("main.songlist");
+      if (!main?.children.length) return;
+      const state = `${main.querySelector("h1")?.textContent}|${main.querySelectorAll(".songs li").length}`
+        + `|${!!main.querySelector(".continue")}`;
+      if (seen.at(-1) !== state) seen.push(state);
+    }).observe(document, { childList: true, subtree: true, characterData: true });
+  });
+  // The answers come slowly, as on a phone; the user's own one first.
+  await page.route("**/api/songs?choir=jm", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    await route.continue();
+  });
+  const seen = () => page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+
+  // A fresh tab has nothing kept: the page stays empty until it can show everything.
+  await page.evaluate(() => sessionStorage.clear());
+  await page.reload();
+  await expect(page.locator(".songs li a")).toHaveCount(3);
+  expect(await seen()).toEqual(["Joensuun Mieslaulajat|3|false"]);
+
+  await page.getByRole("link", { name: /Kokeilulaulu/ }).click();
+  await choosePartIfAsked(page, "Tenori");
+  const refreshed = page.waitForResponse("**/api/songs?choir=jm");
+  await page.getByRole("link", { name: "Takaisin lauluihin" }).click();
+  await expect(page).toHaveURL(/\/c\/jm$/);
+  // Back on the list: drawn whole from the first frame, and the refresh changes nothing.
+  await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();
+  await refreshed;
+  await page.evaluate(() => new Promise(requestAnimationFrame));
+  expect(await seen()).toEqual(["Joensuun Mieslaulajat|3|true"]);
+});

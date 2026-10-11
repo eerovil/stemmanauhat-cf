@@ -25,23 +25,52 @@ function pick(id: number | null) {
 /** The picked setlist, or null for every song (also when the remembered one is gone). */
 const setlist = computed(() => setlists.value.find((l) => l.id === picked.value) ?? null);
 
-async function load() {
-  const data = await getJson<{ choir: { name: string }; songs: SongSummary[]; setlists: Setlist[]; requests: SongRequest[];
-    openFlags: number }>(`/api/songs?choir=${encodeURIComponent(props.choir)}`);
+type ListData = { choir: { name: string }; songs: SongSummary[]; setlists: Setlist[]; requests: SongRequest[];
+  openFlags: number };
+// The page shows nothing until it has both answers, then all of it at once. Coming
+// back from a song, the last answers (kept for this tab) show at once and are then
+// refreshed, so the list does not pop in piece by piece or lose its scroll (#43).
+const cacheKey = `stemmanauhat:list:${props.choir}`;
+const listUrl = `/api/songs?choir=${encodeURIComponent(props.choir)}`;
+const ready = ref(false);
+function show(data: ListData) {
   choirName.value = data.choir.name;
   songs.value = data.songs;
   setlists.value = data.setlists;
   requests.value = data.requests;
   openFlags.value = data.openFlags;
 }
+async function load() {
+  const data = await getJson<ListData>(listUrl);
+  show(data);
+  if (me.value) sessionStorage.setItem(cacheKey, JSON.stringify({ me: me.value, data }));
+}
+
+try {
+  const cached = JSON.parse(sessionStorage.getItem(cacheKey) ?? "null") as { me: Me; data: ListData } | null;
+  if (cached?.me && cached.data) {
+    me.value = cached.me;
+    show(cached.data);
+    ready.value = true;
+  }
+} catch {
+  sessionStorage.removeItem(cacheKey);
+}
 
 onMounted(async () => {
-  me.value = await getJson<Me>("/api/me");
+  const fresh = getJson<Me>("/api/me");
+  const songsData = getJson<ListData>(listUrl);
+  songsData.catch(() => {}); // Awaited below; this only keeps an early failure from going unhandled.
   try {
-    await load();
+    me.value = await fresh;
+    show(await songsData);
+    sessionStorage.setItem(cacheKey, JSON.stringify({ me: me.value, data: await songsData }));
   } catch (error) {
+    sessionStorage.removeItem(cacheKey);
     if (error instanceof Refused) refused.value = error.status;
     else throw error;
+  } finally {
+    ready.value = true;
   }
 });
 
@@ -167,6 +196,7 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
 
 <template>
   <RefusedView v-if="refused" :status="refused" :email="me?.email" />
+  <main v-else-if="!ready" class="page songlist"></main>
   <main v-else class="page songlist">
     <header class="bar">
       <a href="/" class="home-link">Stemmanauhat</a>

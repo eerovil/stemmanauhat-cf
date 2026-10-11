@@ -237,3 +237,18 @@ test("one-line view with a crowded bar: its neighbours widened", async ({ browse
   await page.screenshot({ path: `${dir}/one-line-crowded-bar-desktop.png` });
   await context.close();
 });
+
+test("song list, back from a song while the server is still answering (#43)", async ({ page }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await page.getByRole("link", { name: "Kokeilulaulu" }).click();
+  await choosePartIfAsked(page, "Basso");
+  await page.screenshot({ path: `${dir}/back-1-in-song-phone.png` });
+  await page.route("**/api/songs?choir=jm", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await route.continue();
+  });
+  await page.getByRole("link", { name: "Takaisin lauluihin" }).click();
+  await expect(page.getByRole("link", { name: "Jatka siitä: Kokeilulaulu" })).toBeVisible();
+  await expect(page.locator(".songs li a")).toHaveCount(3);
+  await page.screenshot({ path: `${dir}/back-2-list-before-answer-phone.png` });
+});
