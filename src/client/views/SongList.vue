@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { getJson, Refused, remembered, type Me, type SongOrder, type SongSummary } from "../api";
+import { credits, getJson, Refused, remembered, type Me, type SongOrder, type SongSummary } from "../api";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string }>();
@@ -65,7 +65,8 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
     </div>
     <ul class="songs">
       <li v-for="s in shown" :key="s.slug">
-        <a :href="songUrl(s.slug)">{{ s.title }}</a>
+        <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}</span>
+          <span v-if="credits(s)" class="credits">{{ credits(s) }}</span></a>
         <span v-if="newest.has(s.slug)" class="badge">Uusi</span>
         <span v-if="order === 'date'" class="date">{{ day(s.published_at) }}</span>
       </li>

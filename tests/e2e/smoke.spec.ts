@@ -5,6 +5,11 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await signInAs(page, "/c/jm", "laulaja@example.com");
   await expect(page).toHaveURL(/\/c\/jm$/);
   await expect(page.getByRole("heading", { name: "Joensuun Mieslaulajat" })).toBeVisible();
+  // Who wrote each song, under its title; nothing for a song whose score does not say.
+  const kokeilu = page.locator(".songs li", { hasText: "Kokeilulaulu" });
+  await expect(kokeilu.locator(".credits"))
+    .toHaveText("säv. Aino Esimerkki · san. Eino Runoniekka · sov. Sulo Sovittaja");
+  await expect(page.locator(".songs li", { hasText: "Epätasainen" }).locator(".credits")).toHaveCount(0);
   await page.getByRole("link", { name: "Kokeilulaulu" }).click();
 
   // The first time, the singer is asked for their part rather than given the first one.
@@ -15,6 +20,8 @@ test("a member signs in with Google, plays a song, and the cursor follows", asyn
   await dialog.getByRole("button", { name: "Tenori", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.locator(".info-title")).toHaveText("Kokeilulaulu");
+  await expect(page.locator(".info-credits"))
+    .toHaveText("säv. Aino Esimerkki · san. Eino Runoniekka · sov. Sulo Sovittaja");
   await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toContainText("Tenori");
 
   // A one-time hint explains tapping and dragging the score.
@@ -221,7 +228,7 @@ test("the song list sorts by name or newest first, and remembers the choice", as
     await route.fulfill({ json: data });
   });
   await signInAs(page, "/c/jm", "laulaja@example.com");
-  const titles = page.locator(".songs li a");
+  const titles = page.locator(".songs .song-title");
   await expect(titles).toHaveText(["Aamulaulu", "Bassojen laulu", "Iltalaulu"]);
   await expect(page.locator(".songs .date")).toHaveCount(0);
 
@@ -265,11 +272,23 @@ test("the public demo opens without signing in", async ({ page }) => {
   await page.goto("/c/public");
   await page.getByRole("link", { name: "Esittelylaulu" }).click();
   await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await expect(page.locator(".info-credits")).toHaveText("säv. Aino Esimerkki");
+});
+
+test("a song published without composer, lyricist or arranger shows none", async ({ page }) => {
+  await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  expect(await page.evaluate(async () => (await (await fetch("/api/songs/jm/epatasainen")).json())))
+    .toMatchObject({ title: "Epätasainen", composer: null, lyricist: null, arranger: null });
+  await page.getByRole("link", { name: "Epätasainen" }).click();
+  await choosePartIfAsked(page, "Tenori");
+  await expect(page.locator(".info-title")).toHaveText("Epätasainen");
+  await expect(page.locator(".info-credits")).toHaveCount(0);
 });
 
 test("a signed-out visitor finds the open songs on the front page", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Vapaat laulut" })).toBeVisible();
+  await expect(page.locator(".songs li", { hasText: "Esittelylaulu" }).locator(".credits")).toHaveText("säv. Aino Esimerkki");
   await expect(page.getByRole("link", { name: "Kirjaudu Google-tilillä" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Kokeilulaulu" })).toHaveCount(0);
   await page.getByRole("link", { name: "Esittelylaulu" }).click();

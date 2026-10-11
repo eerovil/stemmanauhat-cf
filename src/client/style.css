@@ -41,7 +41,9 @@ button.link { border: none; background: none; color: var(--accent); padding: 0.2
   border-radius: var(--radius); overflow: hidden; }
 .songs li { display: flex; align-items: center; gap: 0.5rem; border-bottom: 1px solid var(--line); }
 .songs li:last-child { border-bottom: none; }
-.songs a { flex: 1; padding: 0.95rem 1.1rem; text-decoration: none; color: var(--fg); font-weight: 500; }
+.songs a { flex: 1; min-width: 0; padding: 0.95rem 1.1rem; text-decoration: none; color: var(--fg); font-weight: 500;
+  display: flex; flex-direction: column; gap: 0.15rem; }
+.songs .credits { color: var(--muted); font-size: 0.85rem; font-weight: 400; }
 .badge { font-size: 0.72rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); border-radius: 1rem;
   padding: 0.15rem 0.55rem; margin-right: 0.9rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .segmented.order { margin: 0 0 0.8rem auto; }
@@ -112,6 +114,8 @@ footer { margin-top: 1.5rem; }
   color: var(--muted); text-decoration: none; }
 .dock .info { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 0 4px; }
 .info-title { font-size: 15px; font-weight: 600; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info-credits { font-size: 12.5px; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
 .info-meta { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .dock .own { height: 44px; flex: none; border-radius: 12px; background: var(--accent-soft); color: var(--accent);
   display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 12px; line-height: 1.05; }

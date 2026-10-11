@@ -24,6 +24,18 @@ export interface SongSummary {
   parts: Part[];
   duration: number;
   published_at: string;
+  /** From the score; null or missing when it does not say. */
+  composer?: string | null;
+  lyricist?: string | null;
+  arranger?: string | null;
+}
+
+/** "säv. X · san. Y · sov. Z", leaving out what is not known; "" when nothing is. */
+export function credits(song: Pick<SongSummary, "composer" | "lyricist" | "arranger">): string {
+  return ([["säv.", song.composer], ["san.", song.lyricist], ["sov.", song.arranger]] as const)
+    .filter(([, name]) => typeof name === "string" && name.trim())
+    .map(([label, name]) => `${label} ${name!.trim()}`)
+    .join(" · ");
 }
 
 export interface Song extends SongSummary {

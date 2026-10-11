@@ -77,7 +77,9 @@ song's bundle with song-app's own code, on the host where song-app and MuseScore
 ```
 
 Each `/tmp/bundles/<slug>/` then holds `manifest.json`, `score.musicxml`, `score.mid`,
-`timing.json` and `parts/`. Then upload them:
+`timing.json` and `parts/`. The manifest also names the song's composer, lyricist and arranger
+when the cleaned score's metaTags say them; the song list and the player show them, and a bundle
+without them publishes as before. Then upload them:
 
 ```sh
 ./scripts/publish-songs.sh public /tmp/bundles/<slug> ...          # the live site

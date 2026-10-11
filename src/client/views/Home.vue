@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Icon from "../components/Icon.vue";
 import { computed, onMounted, ref } from "vue";
-import { getJson, type Me, type SongSummary } from "../api";
+import { credits, getJson, type Me, type SongSummary } from "../api";
 
 const me = ref<Me | null>(null);
 const openSongs = ref<SongSummary[]>([]);
@@ -28,7 +28,8 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(openChoir.value!.id)}
         <h2>{{ openChoir.name }}</h2>
         <p class="hint">Tekijänoikeusvapaita kuorolauluja kaikille. Valitse laulu ja harjoittele omaa stemmaasi.</p>
         <ul class="songs open-songs">
-          <li v-for="s in openSongs" :key="s.slug"><a :href="songUrl(s.slug)">{{ s.title }}</a></li>
+          <li v-for="s in openSongs" :key="s.slug"><a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}</span>
+            <span v-if="credits(s)" class="credits">{{ credits(s) }}</span></a></li>
         </ul>
       </template>
       <section class="members">

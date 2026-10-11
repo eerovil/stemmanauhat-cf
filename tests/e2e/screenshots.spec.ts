@@ -61,10 +61,10 @@ test("song list sorted newest first", async ({ page }) => {
     await route.fulfill({ json: data });
   });
   await signInAs(page, "/c/jm", "laulaja@example.com");
-  await expect(page.locator(".songs li a").first()).toHaveText("Aamulaulu");
+  await expect(page.locator(".songs .song-title").first()).toHaveText("Aamulaulu");
   await page.screenshot({ path: `${dir}/song-list-by-name-phone.png` });
   await page.getByRole("group", { name: "Järjestys" }).getByRole("button", { name: "Uusimmat" }).click();
-  await expect(page.locator(".songs li a").first()).toHaveText("Kotimaani");
+  await expect(page.locator(".songs .song-title").first()).toHaveText("Kotimaani");
   await page.screenshot({ path: `${dir}/song-list-newest-phone.png` });
 });
 

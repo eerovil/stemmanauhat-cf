@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
-  carriedSettings, carrySettings, getJson, Refused, remembered, rememberSong, songMemory, validRate,
+  carriedSettings, carrySettings, credits, getJson, Refused, remembered, rememberSong, songMemory, validRate,
   type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
@@ -581,6 +581,7 @@ function onPointerUp(event: PointerEvent) {
             <Icon name="chevronLeft" :size="24" /></a>
           <div class="info">
             <span class="info-title">{{ song.title }}</span>
+            <span v-if="credits(song)" class="info-credits">{{ credits(song) }}</span>
             <span class="info-meta">Tahti {{ bar }} / {{ barCount }} ·
               <span data-testid="time">{{ clock(now) }}</span> / {{ clock(duration) }}</span>
           </div>

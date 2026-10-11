@@ -253,14 +253,21 @@ async function visibleChoirs(ctx: Ctx): Promise<{ id: string; name: string; publ
   return out;
 }
 
+/** Who wrote the song (migrations/0003); NULL when the score does not say. */
+const CREDITS = "composer, lyricist, arranger";
+interface SongRow {
+  slug: string; title: string; parts: string; duration: number; published_at: string;
+  composer: string | null; lyricist: string | null; arranger: string | null;
+}
+
 async function songList(ctx: Ctx, choir: string): Promise<Response> {
   const access = await accessTo(ctx, choir);
   if (access !== "ok") return json({ error: access }, statusOf(access));
   const choirRow = await ctx.env.DB.prepare("SELECT name FROM choirs WHERE id = ?").bind(choir)
     .first<{ name: string }>();
   const { results } = await ctx.env.DB.prepare(
-    "SELECT slug, title, parts, duration, published_at FROM songs WHERE choir = ?",
-  ).bind(choir).all<{ slug: string; title: string; parts: string; duration: number; published_at: string }>();
+    `SELECT slug, title, parts, duration, published_at, ${CREDITS} FROM songs WHERE choir = ?`,
+  ).bind(choir).all<SongRow>();
   return json({
     choir: { id: choir, name: choirRow?.name ?? choir },
     songs: results.map((r) => ({ ...r, parts: JSON.parse(r.parts) })),
@@ -271,9 +278,8 @@ async function song(ctx: Ctx, choir: string, slug: string): Promise<Response> {
   const access = await accessTo(ctx, choir);
   if (access !== "ok") return json({ error: access }, statusOf(access));
   const row = await ctx.env.DB.prepare(
-    "SELECT slug, title, parts, duration, published_at, prefix FROM songs WHERE choir = ? AND slug = ?",
-  ).bind(choir, slug).first<{ slug: string; title: string; parts: string; duration: number; published_at: string;
-    prefix: string }>();
+    `SELECT slug, title, parts, duration, published_at, ${CREDITS}, prefix FROM songs WHERE choir = ? AND slug = ?`,
+  ).bind(choir, slug).first<SongRow & { prefix: string }>();
   if (row === null) return json({ error: "unknown" }, 404);
   const { prefix, ...song } = row;
   // The version is in the address, so a republished song is a new URL and the
