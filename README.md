@@ -10,7 +10,8 @@ The choirs' practice-track player, hosted on Cloudflare. It replaces
 
 **No data in this repository.** Songs (MusicXML, MIDI, timing files) live in Cloudflare R2. The email allow-lists live in Cloudflare D1. Secrets are Cloudflare secrets. This repo is public and holds code only.
 
-Live address (once set up): https://stemmanauhat.eerovil.workers.dev
+This copy: https://stemmanauhat.vilpponen.fi (also https://stemmanauhat.eerovil.workers.dev). To run
+a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
 
 ## How it works
 
@@ -53,57 +54,97 @@ Live address (once set up): https://stemmanauhat.eerovil.workers.dev
 
 ## Running it
 
-There is no node on the host, so everything runs in the Playwright container:
+With Node 22 or newer:
+
+```sh
+corepack pnpm install
+corepack pnpm test        # typecheck, unit tests, browser tests (after: corepack pnpm exec playwright install)
+corepack pnpm dev         # http://127.0.0.1:8787; needs .dev.vars with SESSION_SECRET etc.
+```
+
+This copy's host has no node, so there everything runs in the Playwright container:
 
 ```sh
 ./scripts/run.sh corepack pnpm install
-./scripts/run.sh corepack pnpm test        # typecheck, unit tests, browser tests
-./scripts/run.sh --serve corepack pnpm dev # needs .dev.vars with SESSION_SECRET etc.
+./scripts/run.sh corepack pnpm test
+./scripts/run.sh --serve corepack pnpm dev
 ```
 
-## Setting up Cloudflare (once)
+The scripts that talk to Cloudflare (`cloudflare-setup.sh`, `set-worker-secrets.sh`,
+`add-choir.sh`, `add-admin.sh`, `set-passphrase.sh`, `upload-piano.sh`) run wrangler with node
+when there is one, and through `run.sh` when there is not. They read the account's
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from `~/.local/share/stemmanauhat/cloudflare.env`,
+or from the file `STEMMANAUHAT_CLOUDFLARE_ENV=<file>` names. Keep that file outside the repo.
 
-Done already: the D1 database `stemmanauhat` and the R2 bucket `stemmanauhat` exist in the
-ruokalista Cloudflare account, with the migrations applied (`scripts/cloudflare-setup.sh`, which is
-safe to run again). The credentials are in `~/.local/share/stemmanauhat/cloudflare.env`.
+## Run your own copy
 
-Still to do:
+The site runs on a free Cloudflare account. You need Node 22 or newer (or podman), a GitHub
+account and a Google account. The choir app (song-app, in
+[eerovil/musescore-choir-plugins](https://github.com/eerovil/musescore-choir-plugins)) publishes
+the songs into your copy once step 9 is done.
 
-1. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets (the same
-   values as in that file). Until then the deploy job skips itself.
-2. Merge to `main`: CI tests, migrates and deploys.
-3. Create a Google OAuth client (web app) with the redirect URI
-   `https://stemmanauhat.eerovil.workers.dev/auth/callback`, then run
-   `./scripts/set-worker-secrets.sh`, which also creates `SESSION_SECRET`.
-4. `./scripts/add-admin.sh <your Google email>`, sign in, and make each choir's link at `/admin`.
-   To keep the old site's links working instead, set the old passphrase with
-   `./scripts/set-passphrase.sh jm`; `/admin` cannot show that link, and "Tee uusi linkki" replaces it.
-   Anyone who opens a choir's link gets its songs at once, and signing in with Google from the
-   offer on the song list makes their Google account a member.
+1. **Fork** this repository on GitHub and clone your fork. In the fork's Actions tab, turn
+   workflows on. Run `corepack pnpm install`.
+2. **A Cloudflare API token.** In the Cloudflare dashboard, My Profile → API Tokens → Create
+   Token, with *Account → Workers Scripts: Edit*, *D1: Edit* and *Workers R2 Storage: Edit* (R2
+   must be turned on for the account once, under R2). Put it and the account id in a file outside
+   the repo:
 
-## Publishing songs by hand
+   ```sh
+   CLOUDFLARE_API_TOKEN=...
+   CLOUDFLARE_ACCOUNT_ID=...
+   ```
 
-Until song-app's own publish uploads `score.mid`, songs go up in two steps. First build each
-song's bundle with song-app's own code, on the host where song-app and MuseScore live:
+   at `~/.local/share/stemmanauhat/cloudflare.env`, or anywhere with
+   `export STEMMANAUHAT_CLOUDFLARE_ENV=<file>`.
+3. **`./scripts/cloudflare-setup.sh`.** It creates the D1 database and the R2 bucket, writes the
+   database id into `wrangler.jsonc`, applies the migrations and asks for your choirs: an id
+   (small letters, digits and dashes, used in `/c/<id>`) and a name for each. It is safe to run
+   again. Then edit `vars` in `wrangler.jsonc`: `WORKER_HOST` is
+   `stemmanauhat.<your subdomain>.workers.dev` (the subdomain is under Workers & Pages in the
+   dashboard), and remove `PUBLIC_HOST` unless a proxy of your own serves the site under another
+   name. Commit `wrangler.jsonc`.
 
-```sh
-<song-app>/.venv/bin/python scripts/song-app-bundle.py <song-app> /tmp/bundles <slug> ...
-```
+   The first migration also made this copy's sample choirs `jm` and `naiskuoro`. Delete them on
+   yours (`corepack pnpm exec wrangler` instead of `wrangler` below, or `./scripts/run.sh
+   --cloudflare corepack pnpm exec wrangler` without node):
 
-Each `/tmp/bundles/<slug>/` then holds `manifest.json`, `score.musicxml`, `score.mid`,
-`timing.json` and `parts/`. The manifest also names the song's composer, lyricist and arranger
-when the cleaned score's metaTags say them; the song list and the player show them, and a bundle
-without them publishes as before. Then upload them:
+   ```sh
+   wrangler d1 execute stemmanauhat --remote --command "DELETE FROM choirs WHERE id IN ('jm', 'naiskuoro')"
+   ```
 
-```sh
-./scripts/publish-songs.sh public /tmp/bundles/<slug> ...          # the live site
-./scripts/publish-songs.sh --local public /tmp/bundles/<slug> ...  # the local one
-```
+   Keep `public`: it is the list open to everyone, and song-app treats it as that. Give it your
+   own name with `UPDATE choirs SET name = '...' WHERE id = 'public'`. More choirs later:
+   `./scripts/add-choir.sh <id> "<name>"`.
+4. **GitHub Actions secrets.** In the fork's Settings → Secrets and variables → Actions, add
+   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (the same values as in the file). Until then
+   the deploy job skips itself.
+5. **The first deploy:** push or merge the `wrangler.jsonc` change to `main`. CI tests, migrates,
+   deploys and checks `https://<WORKER_HOST>/health`. It warns that the Worker has no secrets yet.
+6. **A Google OAuth client.** In the Google Cloud console, APIs & Services → Credentials → Create
+   credentials → OAuth client ID, type *Web application*, with the authorized redirect URI
+   `https://<WORKER_HOST>/auth/callback` (and `https://<PUBLIC_HOST>/auth/callback` if you set one).
+7. **`./scripts/set-worker-secrets.sh`.** It makes `SESSION_SECRET` and asks for the client id and
+   secret from step 6.
+8. **`./scripts/add-admin.sh <your Google email>`.** Sign in at `https://<WORKER_HOST>/admin`, add
+   each choir's members or make its link there.
+9. **The choir app.** song-app's `.env` needs three values for your copy:
+   - `CLOUDFLARE_ACCOUNT_ID`: the same account id;
+   - `CLOUDFLARE_API_TOKEN`: a token with *D1: Edit* and *Workers R2 Storage: Edit* (the one from
+     step 2 works; a separate one without Workers is safer);
+   - `STEMMANAUHAT_D1_DATABASE_ID`: the `database_id` in your `wrangler.jsonc`.
 
-It writes the same R2 layout and D1 row as song-app. One process uploads the whole run, a few
-files at a time, so a song takes a few seconds; a song whose upload fails is left out and named
-at the end, and the others still go up. Only public-domain songs go in `public`
-(every composer, lyricist, translator and arranger died over 70 years ago).
+   Its Publish panel then lists your choirs, read from D1.
+
+## This copy
+
+eerovil's copy runs in the ruokalista Cloudflare account. The D1 database `stemmanauhat` and the
+R2 bucket `stemmanauhat` are there, the credentials are in `~/.local/share/stemmanauhat/cloudflare.env`
+on the host, and the GitHub Actions secrets are set. The VPS proxies `stemmanauhat.vilpponen.fi`
+to the Worker (`PUBLIC_HOST`), so the Google client needs both names'
+`/auth/callback`. Its choirs are `jm` and `naiskuoro`, and old-site links keep working with the
+passphrase set by `./scripts/set-passphrase.sh jm`; `/admin` cannot show that link, and "Tee uusi
+linkki" replaces it.
 
 ## The piano
 
