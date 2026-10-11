@@ -20,10 +20,23 @@ describe("mixToWav", () => {
     expect(samples(mixToWav({ sampleRate: 44100, parts, effects }, [1, 0.5], 1, 1))).toEqual([1060, 2130]);
   });
 
-  it("scales the whole down when the boost would pass the ceiling", () => {
+  it("keeps every sample under the ceiling", () => {
     const out = samples(mixToWav({ sampleRate: 44100, parts: [Int16Array.from([20000, 10000])], effects: new Int16Array(2) }, [1], 4, 0.5));
-    expect(Math.max(...out)).toBe(16384);
-    expect(out[1]).toBe(8192);
+    expect(Math.max(...out.map(Math.abs))).toBeLessThanOrEqual(16384);
+  });
+
+  it("turns down only around a loud burst, not the whole song", () => {
+    // Two seconds of a quiet tone with a short burst 16 times louder in the middle.
+    const rate = 22050;
+    const tone = Int16Array.from({ length: 2 * rate }, (_, i) => Math.round(Math.sin(i / 10) * (i >= 11000 && i < 11100 ? 16000 : 1000)));
+    const out = samples(mixToWav({ sampleRate: rate, parts: [tone], effects: new Int16Array(2 * rate) }, [1], 8, 0.5));
+    expect(Math.max(...out.map(Math.abs))).toBeLessThanOrEqual(16384);
+    // Away from the burst (150 ms release) the quiet tone keeps the whole boost (8 × 1000).
+    const quiet = (from: number, to: number) => Math.max(...out.slice(from, to).map(Math.abs));
+    expect(quiet(0, 10000)).toBeGreaterThan(7900);
+    expect(quiet(rate, 2 * rate)).toBeGreaterThan(7900);
+    // It is already turned down just before the burst (no click at its start).
+    expect(quiet(10990, 11000)).toBeLessThan(6000);
   });
 });
 

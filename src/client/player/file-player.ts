@@ -1,5 +1,5 @@
 import { BasicMIDI } from "spessasynth_core";
-import { OUTPUT_GAIN, partChannels, SOUNDFONT_URL } from "./midi";
+import { CEILING_DB, OUTPUT_GAIN, partChannels, SOUNDFONT_URL } from "./midi";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import type { FromWorker, ToWorker } from "./render-worker";
 
@@ -19,8 +19,8 @@ export function wantsFilePlayback(userAgent = navigator.userAgent): boolean {
 
 /** Low enough for Firefox to keep up while the page animates (see wav.ts); Eero heard no difference from 32 kHz. */
 const SAMPLE_RATE = 22050;
-/** The Web Audio player's limiter sits at -3 dB. */
-const CEILING = 10 ** (-3 / 20);
+/** Where the Web Audio player's limiter sits. */
+const CEILING = 10 ** (CEILING_DB / 20);
 
 export class FilePlayer {
   onEnded: () => void = () => {};

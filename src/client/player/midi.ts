@@ -14,10 +14,15 @@ export const SOUNDFONT_URL = "/sound/piano-1.sf3";
 
 /**
  * Measured on seven real songs rendered with this synth and piano: the default
- * mix peaks at -18 to -22 dB. +15 dB brings it to about -3 to -7 dB. The limiter
- * after it catches the rare chord that would still go over.
+ * mix peaks at -18 to -22 dB. +15 dB brought it to about -3 to -7 dB, which was
+ * too quiet on a phone at full volume; Eero tried +15 to +27 dB on his phone
+ * (eerovil/stemmanauhat-cf#53) and chose +27. The limiter after it holds the
+ * loud chords under CEILING_DB.
  */
-export const OUTPUT_GAIN = 10 ** (15 / 20);
+export const OUTPUT_GAIN = 10 ** (27 / 20);
+
+/** The loudest the output may go, in dB below full scale. */
+export const CEILING_DB = -1;
 
 let soundfont: Promise<ArrayBuffer> | null = null;
 
@@ -71,7 +76,7 @@ export class MidiPlayer {
     const gain = context.createGain();
     gain.gain.value = OUTPUT_GAIN;
     const limiter = context.createDynamicsCompressor();
-    limiter.threshold.value = -3;
+    limiter.threshold.value = CEILING_DB;
     limiter.knee.value = 0;
     limiter.ratio.value = 20;
     limiter.attack.value = 0.002;

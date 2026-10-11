@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { BasicMIDI } from "spessasynth_core";
 import { describe, expect, it } from "vitest";
-import { partChannels } from "../../src/client/player/midi";
+import { CEILING_DB, OUTPUT_GAIN, partChannels } from "../../src/client/player/midi";
 
 const file = readFileSync("tests/fixtures/two-part/score.mid");
 const midi = () => BasicMIDI.fromArrayBuffer(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength));
@@ -20,5 +20,12 @@ describe("partChannels", () => {
   });
   it("leaves a part silent when there are more parts than tracks", () => {
     expect(partChannels(midi(), ["Tenori", "Basso", "Extra"])).toEqual([[0], [1], []]);
+  });
+});
+
+describe("output level", () => {
+  it("is +27 dB with peaks held at -1 dB (Eero's choice on #53)", () => {
+    expect(20 * Math.log10(OUTPUT_GAIN)).toBeCloseTo(27);
+    expect(CEILING_DB).toBe(-1);
   });
 });
