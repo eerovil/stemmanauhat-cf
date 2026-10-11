@@ -91,6 +91,17 @@ const shown = computed((): (SongSummary & { place?: number })[] => {
     .sort((a, b) => (order.value === "date" ? b.published_at.localeCompare(a.published_at) : 0)
       || a.title.localeCompare(b.title, "fi"));
 });
+/** With a setlist picked, a search also finds the songs outside it, so a remembered
+ * setlist cannot quietly hide a song (#49). */
+const others = computed((): SongSummary[] => {
+  const q = query.value.trim().toLowerCase();
+  if (!setlist.value || !q) return [];
+  const inList = new Set(setlist.value.songs);
+  return songs.value.filter((s) => !inList.has(s.slug) && s.title.toLowerCase().includes(q))
+    .sort((a, b) => a.title.localeCompare(b.title, "fi"));
+});
+/** How many of the choir's songs the picked setlist leaves out of the list. */
+const inSetlist = computed(() => setlist.value?.songs.filter((slug) => bySlug.value.has(slug)).length ?? 0);
 
 // Admins make and change setlists here, where the songs to choose from are.
 const editing = ref<{ id: number | null; name: string; songs: string[] } | null>(null);
@@ -247,11 +258,12 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
     </section>
     <template v-else>
       <div v-if="setlists.length || me?.admin" class="row setlists">
-        <select v-if="setlists.length" :value="setlist?.id ?? ''" aria-label="Setlista"
+        <select v-if="setlists.length" :value="setlist?.id ?? ''" aria-label="Setlista" :class="{ picked: setlist }"
           @change="pick(Number(($event.target as HTMLSelectElement).value) || null)">
           <option value="">Kaikki kappaleet</option>
           <option v-for="l in setlists" :key="l.id" :value="l.id">{{ l.name }}</option>
         </select>
+        <button v-if="setlist" type="button" @click="pick(null)">Näytä kaikki</button>
         <button v-if="me?.admin && setlist" type="button" @click="startEdit(setlist)">Muokkaa</button>
         <button v-if="me?.admin" type="button" @click="startNew">Uusi setlista</button>
       </div>
@@ -261,7 +273,7 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
         <button type="button" :class="{ on: order === 'name' }" :aria-pressed="order === 'name'" @click="sortBy('name')">Nimi</button>
         <button type="button" :class="{ on: order === 'date' }" :aria-pressed="order === 'date'" @click="sortBy('date')">Uusimmat</button>
       </div>
-      <ul class="songs">
+      <ul v-if="shown.length || !others.length" class="songs">
         <li v-for="s in shown" :key="s.slug">
           <span v-if="s.place" class="place">{{ s.place }}.</span>
           <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}</span>
@@ -270,8 +282,22 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
           <span v-if="order === 'date' && !setlist" class="date">{{ day(s.published_at) }}</span>
         </li>
       </ul>
+      <template v-if="others.length">
+        <h2 class="others-heading">Muut kappaleet</h2>
+        <ul class="songs others">
+          <li v-for="s in others" :key="s.slug">
+            <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}</span>
+              <span class="credits">{{ listCredits(s) }}</span></a>
+            <span v-if="newest.has(s.slug)" class="badge">Uusi</span>
+          </li>
+        </ul>
+      </template>
       <p v-if="!songs.length" class="hint">Ei vielä kappaleita.</p>
       <p v-else-if="setlist && !setlist.songs.length" class="hint">Setlistassa ei ole vielä kappaleita.</p>
+      <p v-if="setlist && !query.trim() && inSetlist < songs.length" class="hint setlist-note">
+        Setlistassa {{ inSetlist }} kappaletta, kaikkiaan {{ songs.length }}.
+        <button type="button" class="link" @click="pick(null)">Näytä kaikki</button>
+      </p>
       <section v-if="canRequest" class="requests">
         <h2 v-if="requests.length">Pyydetyt ({{ requests.length }})</h2>
         <!-- Not .songs: the song list's tests and styles mean the songs alone. -->

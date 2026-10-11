@@ -100,6 +100,10 @@ test("setlists: an admin editing one, and a singer's list with it picked", async
   await singer.getByLabel("Setlista").selectOption({ label: "Kevätkonsertti 2027" });
   await expect(singer.locator(".songs li .song-title")).toHaveText(["Iltalaulu", "Kokeilulaulu"]);
   await singer.screenshot({ path: `${dir}/setlist-picked-phone.png` });
+  // A search with the setlist picked also lists the songs outside it (#49).
+  await singer.getByLabel("Hae kappaletta").fill("i");
+  await expect(singer.locator(".songs.others .song-title")).toHaveText(["Epätasainen"]);
+  await singer.screenshot({ path: `${dir}/setlist-search-others-phone.png` });
 
   await page.getByRole("button", { name: "Muokkaa" }).click();
   page.once("dialog", (dialog) => dialog.accept());
