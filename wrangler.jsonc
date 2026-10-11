@@ -5,6 +5,15 @@
   "compatibility_date": "2026-09-01",
   "observability": { "enabled": true },
 
+  // The site's addresses. WORKER_HOST is "<name>.<your subdomain>.workers.dev";
+  // CI's live check and scripts/set-worker-secrets.sh read it from here.
+  // PUBLIC_HOST is optional: a name of your own that a proxy forwards to
+  // WORKER_HOST (this copy's VPS). Leave it out if there is none.
+  "vars": {
+    "WORKER_HOST": "stemmanauhat.eerovil.workers.dev",
+    "PUBLIC_HOST": "stemmanauhat.vilpponen.fi"
+  },
+
   // The Vue front end, built by `vite build`. The Worker runs first on every
   // request so that pages, files and the old ?user= links all pass its access
   // check; it hands everything else to the assets.
