@@ -74,6 +74,7 @@ async function route(ctx: Ctx): Promise<Response> {
   if (path === "/api/admin" && method === "GET") return adminState(ctx);
   if (path === "/api/admin/members" && method === "POST") return adminMembers(ctx);
   if (path === "/api/admin/link" && method === "POST") return adminLink(ctx);
+  if (path === "/api/admin/setlists" && method === "POST") return adminSetlists(ctx);
   if (path.startsWith("/api/") || path.startsWith("/auth/") || path.startsWith("/files/") || path.startsWith("/sound/")) {
     return json({ error: "not found" }, 404);
   }
@@ -261,9 +262,17 @@ async function songList(ctx: Ctx, choir: string): Promise<Response> {
   const { results } = await ctx.env.DB.prepare(
     "SELECT slug, title, parts, duration, published_at FROM songs WHERE choir = ?",
   ).bind(choir).all<{ slug: string; title: string; parts: string; duration: number; published_at: string }>();
+  const lists = await ctx.env.DB.prepare(
+    "SELECT id, name, songs FROM setlists WHERE choir = ? ORDER BY updated_at DESC, id DESC",
+  ).bind(choir).all<{ id: number; name: string; songs: string }>();
+  // A song that has left the choir is skipped; the next save drops it for good.
+  const slugs = new Set(results.map((r) => r.slug));
   return json({
     choir: { id: choir, name: choirRow?.name ?? choir },
     songs: results.map((r) => ({ ...r, parts: JSON.parse(r.parts) })),
+    setlists: lists.results.map((l) => ({
+      id: l.id, name: l.name, songs: (JSON.parse(l.songs) as string[]).filter((slug) => slugs.has(slug)),
+    })),
   });
 }
 
@@ -420,6 +429,61 @@ async function adminLink(ctx: Ctx): Promise<Response> {
      ON CONFLICT (choir) DO UPDATE SET salt = ?2, hash = ?3, iterations = ?4, generation = generation + 1`,
   ).bind(choir, record.salt, record.hash, record.iterations).run();
   return json({ link: true });
+}
+
+const SETLIST_NAME_MAX = 80;
+const SETLIST_SONGS_MAX = 200;
+
+/**
+ * A setlist as an admin sent it: a name and the choir's songs in order.
+ * Returns the error to show instead when it is not one.
+ */
+export function parseSetlist(body: Record<string, unknown>, choirSlugs: Set<string>):
+  { name: string; songs: string[] } | { error: string } {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name || name.length > SETLIST_NAME_MAX) return { error: `Nimen pitää olla 1–${SETLIST_NAME_MAX} merkkiä.` };
+  const songs = body.songs;
+  if (!Array.isArray(songs) || songs.length > SETLIST_SONGS_MAX
+    || !songs.every((slug) => typeof slug === "string" && choirSlugs.has(slug))
+    || new Set(songs).size !== songs.length) {
+    return { error: "Kappalelista ei kelpaa." };
+  }
+  return { name, songs };
+}
+
+async function adminSetlists(ctx: Ctx): Promise<Response> {
+  const body = await adminBody(ctx);
+  if (body instanceof Response) return body;
+  const db = ctx.env.DB;
+  const choir = typeof body.choir === "string" ? body.choir : "";
+  const exists = await db.prepare("SELECT 1 AS yes FROM choirs WHERE id = ?").bind(choir).first();
+  if (!exists) return json({ error: "unknown choir" }, 400);
+  let id: number | null = null;
+  if (body.id !== undefined) {
+    if (typeof body.id !== "number") return json({ error: "unknown setlist" }, 400);
+    const row = await db.prepare("SELECT id FROM setlists WHERE id = ? AND choir = ?").bind(body.id, choir)
+      .first<{ id: number }>();
+    if (!row) return json({ error: "unknown setlist" }, 400);
+    id = row.id;
+  }
+  if (body.delete === true) {
+    if (id === null) return json({ error: "unknown setlist" }, 400);
+    await db.prepare("DELETE FROM setlists WHERE id = ?").bind(id).run();
+    return json({ deleted: id });
+  }
+  const { results } = await db.prepare("SELECT slug FROM songs WHERE choir = ?").bind(choir).all<{ slug: string }>();
+  const setlist = parseSetlist(body, new Set(results.map((r) => r.slug)));
+  if ("error" in setlist) return json(setlist, 400);
+  const at = new Date(ctx.now * 1000).toISOString();
+  if (id === null) {
+    const row = await db.prepare(
+      "INSERT INTO setlists (choir, name, songs, updated_at) VALUES (?, ?, ?, ?) RETURNING id",
+    ).bind(choir, setlist.name, JSON.stringify(setlist.songs), at).first<{ id: number }>();
+    return json({ id: row!.id });
+  }
+  await db.prepare("UPDATE setlists SET name = ?, songs = ?, updated_at = ? WHERE id = ?")
+    .bind(setlist.name, JSON.stringify(setlist.songs), at, id).run();
+  return json({ id });
 }
 
 // ---------------------------------------------------------------- helpers
