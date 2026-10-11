@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { getJson, listCredits, postForm, postJson, Refused, remembered, type Me, type Setlist, type SongOrder, type SongRequest,
-  type SongSummary } from "../api";
+  songListKey, type SongSummary } from "../api";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string }>();
@@ -30,7 +30,7 @@ type ListData = { choir: { name: string }; songs: SongSummary[]; setlists: Setli
 // The page shows nothing until it has both answers, then all of it at once. Coming
 // back from a song, the last answers (kept for this tab) show at once and are then
 // refreshed, so the list does not pop in piece by piece or lose its scroll (#43).
-const cacheKey = `stemmanauhat:list:${props.choir}`;
+const cacheKey = songListKey(props.choir);
 const listUrl = `/api/songs?choir=${encodeURIComponent(props.choir)}`;
 const ready = ref(false);
 function show(data: ListData) {

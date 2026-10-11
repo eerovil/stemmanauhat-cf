@@ -357,4 +357,12 @@ test("the song list appears whole at once, also coming back from a song (#43)", 
   await refreshed;
   await page.evaluate(() => new Promise(requestAnimationFrame));
   expect(await seen()).toEqual(["Joensuun Mieslaulajat|3|true"]);
+
+  // Signing out forgets the kept list: the tab never draws it again.
+  await page.getByRole("button", { name: "Kirjaudu ulos" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter((k) => k.includes(":list:")))).toEqual([]);
+  await page.goto("/c/jm");
+  await expect(page).toHaveURL(/\/signin\?/);
+  expect(await seen()).toEqual([]);
 });
