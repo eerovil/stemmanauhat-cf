@@ -270,6 +270,31 @@ test("a Google account not on the list is refused", async ({ page }) => {
   expect((await fetchIn(page, "/files/jm/kokeilu/20261009T120000Z/score.musicxml")).status).toBe(403);
 });
 
+test("a singer whose choir part is split (Tenorib) starts on Tenori in a song without it", async ({ page }) => {
+  await page.goto("/c/public");
+  await page.evaluate(() => localStorage.setItem("stemmanauhat:public:part", "Tenorib"));
+  await page.goto("/c/public/esittely");
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Valitse oma stemma" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toContainText("Tenori");
+  await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.160");
+  // The fallback is not remembered: the choir part stays Tenorib, and no part is saved for the song.
+  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:public:part"))).toBe("Tenorib");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("stemmanauhat:song:public/esittely") ?? "{}").part))
+    .toBeUndefined();
+
+  // The next song that has Tenorib starts on it.
+  await page.route("**/api/songs/public/esittely", async (route) => {
+    const data = await (await route.fetch()).json();
+    data.parts = [{ name: "Tenori" }, { name: "Tenorib" }];
+    await route.fulfill({ json: data });
+  });
+  await page.reload();
+  await expect(page.getByRole("dialog", { name: "Valitse oma stemma" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toContainText("Tenorib");
+  await expect(gains(page)).toHaveAttribute("data-gains", "0.160 1.000");
+});
+
 test("the public demo opens without signing in", async ({ page }) => {
   await page.goto("/c/public");
   await page.getByRole("link", { name: "Esittelylaulu" }).click();

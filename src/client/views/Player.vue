@@ -7,6 +7,7 @@ import {
 import Icon from "../components/Icon.vue";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
+import { startingPart } from "../player/part";
 import { SlidingPieces } from "../player/slide";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
@@ -107,12 +108,10 @@ onMounted(async () => {
   document.title = `${s.title} – Stemmanauhat`;
   remembered.setLast(props.choir, props.slug);
 
-  // The part: this song's, else the one usually sung in this choir, else ask.
-  // Part names and divisi change from song to song, so never guess.
+  // The part: this song's, else the one usually sung in this choir (S1b falling back to S1), else
+  // ask. A fallback is not remembered, so the next song with S1b starts on S1b again.
   const memory = songMemory(props.choir, props.slug);
-  const indexOf = (name: string | null | undefined) => (name ? s.parts.findIndex((p) => p.name === name) : -1);
-  let part = indexOf(memory.part);
-  if (part < 0) part = indexOf(remembered.part(props.choir));
+  const part = startingPart(s.parts.map((p) => p.name), memory.part, remembered.part(props.choir));
   myPart.value = Math.max(0, part);
   askPart.value = firstAsk.value = part < 0;
   showHint.value = !localStorage.getItem("stemmanauhat:hint-seen");

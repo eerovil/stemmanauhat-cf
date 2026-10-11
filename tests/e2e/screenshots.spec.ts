@@ -50,6 +50,17 @@ test("player on a desktop, entered by the old link", async ({ browser }) => {
   await context.close();
 });
 
+test("a split-part singer (Tenorib) starts on Tenori without being asked", async ({ page }) => {
+  await page.goto("/c/public");
+  await page.evaluate(() => localStorage.setItem("stemmanauhat:public:part", "Tenorib"));
+  await page.goto("/c/public/esittely");
+  await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toContainText("Tenori");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${dir}/split-part-fallback-phone.png` });
+});
+
 test("song list sorted newest first", async ({ page }) => {
   await page.route("**/api/songs?choir=jm", async (route) => {
     const data = await (await route.fetch()).json();
