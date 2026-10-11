@@ -40,6 +40,8 @@ Live address (once set up): https://stemmanauhat.eerovil.workers.dev
   parts' level, tempo, score size and staves. Tapping the score plays or pauses. Your part is
   remembered per song; how you listen, the tempo, the staves and the size carry from song to song.
   The size is a fixed staff height on the device, whatever the song or the view.
+  A very long bar (a free-rhythm verse written as one bar) is drawn cut into pieces of about a
+  4/4 bar with invisible bar lines, so it wraps over lines (`player/split.ts`).
   `score.mid` is played by spessasynth (an AudioWorklet synth) with MuseScore's grand piano: each
   part's MIDI channel has its own gain, then +15 dB and a limiter. `timing.json` (from the same
   MIDI clock) moves the cursor.

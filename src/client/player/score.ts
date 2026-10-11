@@ -1,6 +1,7 @@
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import { barAnchors, joinBars, xOnAnchors, type Anchor } from "./bar";
 import { biggestStep, cappedTargets, needsWidening, nextFactors } from "./spacing";
+import { BarMap, splitLongBars } from "./split";
 
 /** OSMD lays out in units of 10 px at zoom 1. */
 const UNIT = 10;
@@ -30,10 +31,14 @@ interface Bar {
 /**
  * The score drawn by OpenSheetMusicDisplay, and where each bar ended up on the
  * page, in pixels relative to the container, so a cursor can be drawn over it.
+ * Outside this class a bar is the song's own (timing.json's); a long bar may be
+ * drawn as several pieces (split.ts), which `pieces` translates to and from.
  */
 export class Score {
   private readonly osmd: OpenSheetMusicDisplay;
+  /** One per drawn piece. */
   private bars: (Bar | undefined)[] = [];
+  private pieces = new BarMap([]);
   /**
    * The sounding notes, copied in their highlight colour onto a layer of their
    * own over the score. Colouring the notes in the score itself made the browser
@@ -72,7 +77,10 @@ export class Score {
   }
 
   async load(musicXml: string, visible?: boolean[]): Promise<void> {
-    await this.osmd.load(musicXml);
+    const { xml, starts } = splitLongBars(musicXml);
+    this.pieces = new BarMap(starts);
+    this.container.dataset.pieces = String(this.pieces.pieces);
+    await this.osmd.load(xml);
     if (visible) this.applyVisible(visible);
     this.render();
   }
@@ -199,16 +207,13 @@ export class Score {
     return this.container.querySelector("svg:not(.highlights)");
   }
 
-  get barCount(): number {
-    return this.bars.length;
-  }
-
   /**
    * The video's beat marker: a translucent band two noteheads wide that steps to
    * each new note as it starts, rather than sliding between them.
    */
-  marker(measure: number, beat: number): { x0: number; x1: number; top: number; bottom: number } | null {
-    const bar = this.bars[measure];
+  marker(songMeasure: number, songBeat: number): { x0: number; x1: number; top: number; bottom: number } | null {
+    const { piece, beat } = this.pieces.toPiece(songMeasure, songBeat);
+    const bar = this.bars[piece];
     if (!bar) return null;
     const onsets = bar.anchors.slice(0, -1);
     let x = onsets[0]![1];
@@ -240,8 +245,9 @@ export class Score {
    * Where the music is, sliding smoothly between notes: what the one-line view
    * scrolls by, so the page moves evenly while the marker steps from note to note.
    */
-  xAt(measure: number, beat: number): number | null {
-    const bar = this.bars[measure];
+  xAt(songMeasure: number, songBeat: number): number | null {
+    const { piece, beat } = this.pieces.toPiece(songMeasure, songBeat);
+    const bar = this.bars[piece];
     if (!bar) return null;
     return xOnAnchors(bar.anchors, beat);
   }
@@ -250,8 +256,10 @@ export class Score {
    * Colours the notes sounding at this bar and beat, as the videos do: your part's
    * notes full blue, everyone else's a lighter blue. Returns how many are lit.
    */
-  light(measure: number | null, beat: number, focusPart: number): number {
-    const bar = measure === null ? undefined : this.bars[measure];
+  light(songMeasure: number | null, songBeat: number, focusPart: number): number {
+    const at = songMeasure === null ? null : this.pieces.toPiece(songMeasure, songBeat);
+    const bar = at ? this.bars[at.piece] : undefined;
+    const beat = at?.beat ?? songBeat;
     const now = bar ? bar.notes.filter((n) => n.start <= beat + 1e-6 && beat < n.end - 1e-6) : [];
     for (const [n, lit] of this.copies) {
       if (!now.includes(n)) { lit.el.remove(); this.copies.delete(n); }
@@ -304,7 +312,7 @@ export class Score {
   barAt(x: number, y: number): number | null {
     for (let i = 0; i < this.bars.length; i++) {
       const bar = this.bars[i];
-      if (bar && x >= bar.x0 && x <= bar.x1 && y >= bar.top && y <= bar.bottom) return i;
+      if (bar && x >= bar.x0 && x <= bar.x1 && y >= bar.top && y <= bar.bottom) return this.pieces.fromPiece(i, 0).measure;
     }
     return null;
   }
@@ -328,7 +336,7 @@ export class Score {
     for (const [b, ax] of bar.anchors.slice(0, -1)) {
       if (Math.abs(ax - x) < gap) { gap = Math.abs(ax - x); beat = b; }
     }
-    return { measure, beat };
+    return this.pieces.fromPiece(measure, beat);
   }
 
   private measure(): void {
@@ -366,7 +374,9 @@ export class Score {
       const last = drawn[drawn.length - 1]!.PositionAndShape;
       const x0 = px(first.AbsolutePosition.x, dx);
       const x1 = px(first.AbsolutePosition.x + first.Size.width, dx);
-      const length = this.barLengths.get(index) ?? (drawn[0]!.parentSourceMeasure?.Duration?.RealValue ?? 1) * 4;
+      const song = this.pieces.fromPiece(index, 0).measure;
+      const length = this.pieces.pieceLength(index, this.barLengths.get(song) ?? null)
+        ?? (drawn[0]!.parentSourceMeasure?.Duration?.RealValue ?? 1) * 4;
 
       const byBeat = new Map<number, number>();
       const notes: Sounding[] = [];
