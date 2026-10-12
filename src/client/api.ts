@@ -15,7 +15,7 @@ export interface Me {
 
 export interface Part {
   name: string;
-  /** Only on songs published before #36: the part's MP3, which nothing plays any more. */
+  /** The part's sung MP3 under the song's base, when it has one: the player plays those instead of score.mid. */
   file?: string;
 }
 

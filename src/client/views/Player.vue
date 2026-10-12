@@ -7,6 +7,7 @@ import {
 import Icon from "../components/Icon.vue";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
+import { SungPlayer } from "../player/sung";
 import { startingPart } from "../player/part";
 import { SlidingPieces } from "../player/slide";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
@@ -82,7 +83,9 @@ const smoothClock = new SmoothClock();
 let curve: ScrollCurve | null = null;
 let curveVersion = -1;
 
-let mixer: MidiPlayer | FilePlayer | null = null;
+let mixer: MidiPlayer | FilePlayer | SungPlayer | null = null;
+/** Which player has the song (shown to tests on the dock). */
+const playerKind = ref<"midi" | "file" | "sung" | "">("");
 /** Firefox on Android slides the one-line view as moving picture pieces (player/slide.ts). */
 let pieces: SlidingPieces | null = null;
 let score: Score | null = null;
@@ -126,8 +129,7 @@ onMounted(async () => {
     ]);
     timing = parseTiming(timingJson);
     barCount.value = timing.measures;
-    mixer = await (wantsFilePlayback() ? FilePlayer : MidiPlayer).create(s.base + "score.mid", s.parts.map((p) => p.name),
-      (note) => { loadingNote.value = note; });
+    mixer = await createMixer(s);
     mixer.setMaster(myPart.value);
     mixer.onEnded = () => { playing.value = false; };
     setMode(carried.mode ?? "focus", false);
@@ -157,6 +159,28 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+/**
+ * A song whose every part has a sung MP3 (a local test, 2026-10-12) plays those,
+ * all on one clock; a file listed but missing (the rows from before #36) falls
+ * back to the piano, as does Firefox on Android, which plays a rendered file.
+ */
+async function createMixer(s: Song): Promise<MidiPlayer | FilePlayer | SungPlayer> {
+  const log = (note: string) => { loadingNote.value = note; };
+  const names = s.parts.map((p) => p.name);
+  const files = s.parts.map((p) => p.file ?? "");
+  if (!wantsFilePlayback() && files.length > 0 && files.every((f) => f.endsWith(".mp3"))) {
+    try {
+      const sung = await SungPlayer.create(files.map((f) => s.base + f), log);
+      playerKind.value = "sung";
+      return sung;
+    } catch (error) {
+      console.warn(`sung parts not played: ${String(error)}`);
+    }
+  }
+  playerKind.value = wantsFilePlayback() ? "file" : "midi";
+  return (wantsFilePlayback() ? FilePlayer : MidiPlayer).create(s.base + "score.mid", names, log);
+}
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame);
@@ -637,7 +661,7 @@ function onPointerUp(event: PointerEvent) {
       </div>
 
       <!-- The dock: the position line on its top edge, then one row. -->
-      <section ref="dock" class="dock" :data-gains="levels.map((g) => g.toFixed(3)).join(' ')">
+      <section ref="dock" class="dock" :data-gains="levels.map((g) => g.toFixed(3)).join(' ')" :data-player="playerKind">
         <input class="progress" type="range" min="0" :max="duration" step="0.1" :value="now"
           :style="{ '--fill': `${duration ? (now / duration) * 100 : 0}%` }" aria-label="Kohta kappaleessa"
           @input="seekTo" />
