@@ -1,20 +1,19 @@
 import { CEILING_DB } from "./midi";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
+import type { FromWorklet, ToWorklet } from "./sung-worklet";
+import workletUrl from "./sung-worklet?worker&url";
 
 /**
  * A song whose parts are sung recordings, one MP3 per part (a local test Eero
  * asked for on 2026-10-12; the live site plays score.mid). The per-part MP3s
  * were dropped on 2026-10-09 because <audio> elements drifted apart and the mix
- * clipped. Here neither can happen by design: every part is decoded into memory
- * on one AudioContext, and on play every part's source node is started at the
- * same context time, so one sample clock drives them all; and the parts' gains
- * never add up to more than 1, so the mix is never louder than one part at full
- * scale (the limiter after it is only a guard).
+ * clipped. Here neither can happen by design: every part is decoded on one
+ * AudioContext and handed to one audio worklet (sung-worklet.ts), which reads
+ * all of them at a single position, so one sample clock drives them all at any
+ * tempo (stretched without changing the pitch, as the piano's tempo is); and
+ * the parts' gains never add up to more than 1, so the mix is never louder
+ * than one part at full scale (the limiter after it is only a guard).
  */
-
-/** Started this far ahead, so every part is scheduled before the first one is due. */
-const LEAD = 0.03;
-
 export class SungPlayer {
   onEnded: () => void = () => {};
   private master = 0;
@@ -22,20 +21,20 @@ export class SungPlayer {
   private own = true;
   private wanted = false;
   private rate = 1;
-  /** The song position while paused, and the one play started from. */
+  /** The song position while paused. */
   private position = 0;
-  /** Context time the current sources were scheduled to start at. */
-  private startedAt = 0;
-  private sources: AudioBufferSourceNode[] = [];
-  private readonly gains: GainNode[];
-  private readonly sum: GainNode;
+  /** The worklet's last reported position (song seconds) and the context time it was read at. */
+  private reported = 0;
+  private reportedAt = 0;
+  private applied: number[] = [];
+  private readonly count: number;
   private readonly meter: AnalyserNode;
   private readonly samples = new Float32Array(1024);
   readonly duration: number;
 
-  private constructor(private readonly context: AudioContext, private readonly buffers: AudioBuffer[]) {
+  private constructor(private readonly context: AudioContext, private readonly node: AudioWorkletNode, buffers: AudioBuffer[]) {
     this.duration = Math.max(0, ...buffers.map((b) => b.duration));
-    this.sum = context.createGain();
+    this.count = buffers.length;
     const limiter = context.createDynamicsCompressor();
     limiter.threshold.value = CEILING_DB;
     limiter.knee.value = 0;
@@ -44,12 +43,12 @@ export class SungPlayer {
     limiter.release.value = 0.15;
     this.meter = context.createAnalyser();
     this.meter.fftSize = this.samples.length;
-    this.gains = buffers.map(() => {
-      const gain = context.createGain();
-      gain.connect(this.sum);
-      return gain;
-    });
-    this.sum.connect(limiter).connect(this.meter).connect(context.destination);
+    node.connect(limiter).connect(this.meter).connect(context.destination);
+    node.port.onmessage = (event: MessageEvent<FromWorklet>) => this.receive(event.data);
+    // The worklet gets each part's samples once (the decoded buffers are only
+    // read here, so their channel data can be given away).
+    const parts = buffers.map((b) => b.getChannelData(0));
+    this.send({ type: "load", parts }, parts.map((p) => p.buffer));
     this.applyGains();
   }
 
@@ -60,65 +59,68 @@ export class SungPlayer {
    */
   static async create(urls: string[], log: (m: string) => void = () => {}, context: AudioContext = new AudioContext()): Promise<SungPlayer> {
     log("Ladataan stemmoja…");
-    const buffers = await Promise.all(urls.map(async (url) => {
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
-      return context.decodeAudioData(await r.arrayBuffer());
-    }));
-    return new SungPlayer(context, buffers);
+    const [buffers] = await Promise.all([
+      Promise.all(urls.map(async (url) => {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+        return context.decodeAudioData(await r.arrayBuffer());
+      })),
+      context.audioWorklet.addModule(workletUrl),
+    ]);
+    const node = new AudioWorkletNode(context, "sung-parts", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+    return new SungPlayer(context, node, buffers);
   }
 
   levels(): number[] {
-    return mixLevels(this.buffers.length, this.master, this.others, this.own);
+    return mixLevels(this.count, this.master, this.others, this.own);
   }
 
-  /** The gain each part actually carries: its own node times the common scale. */
+  /** The gain each part actually carries in the worklet. */
   effectiveLevels(): number[] {
-    return this.gains.map((g) => g.gain.value * this.sum.gain.value);
+    return [...this.applied];
   }
 
   setMaster(index: number): void { this.master = index; this.applyGains(); }
   setOthers(level: number): void { this.others = level; this.applyGains(); }
   setOwn(on: boolean): void { this.own = on; this.applyGains(); }
   get playing(): boolean { return this.wanted; }
-  get running(): boolean { return this.wanted && this.sources.length > 0 && this.context.state === "running"; }
+  get running(): boolean { return this.wanted && this.context.state === "running"; }
 
-  /** Song seconds: the position play started from plus the context time since, at the tempo. */
+  /** Song seconds: the worklet's last word plus the context time since, at the tempo. */
   time(): number {
     if (!this.running) return this.position;
-    return Math.min(this.duration, this.position + Math.max(0, this.context.currentTime - this.startedAt) * this.rate);
+    return Math.min(this.duration, this.reported + Math.max(0, this.context.currentTime - this.reportedAt) * this.rate);
   }
 
   /** Must be called straight from the singer's tap, like the other players' play(). */
   async play(): Promise<void> {
     const resumed = this.context.resume();
     this.wanted = true;
-    this.start(this.position);
+    this.assume(this.position);
+    this.send({ type: "play", frames: this.frames(this.position) });
     await resumed;
   }
 
   pause(): void {
     this.position = this.time();
     this.wanted = false;
-    this.stop();
+    this.send({ type: "pause" });
   }
 
-  /** Every part stops and starts again together at the new place: no part can seek on its own. */
+  /** Every part moves together: the worklet has only one position. */
   seek(seconds: number): void {
-    const t = Math.max(0, seconds);
-    this.stop();
-    this.position = t;
-    if (this.wanted) this.start(t);
+    this.position = Math.max(0, Math.min(this.duration, seconds));
+    this.assume(this.position);
+    this.send({ type: "seek", frames: this.frames(this.position) });
   }
 
-  /** Speed and pitch together (a buffer's playbackRate does not keep the pitch). */
+  /** Speed without the pitch, as the piano's tempo (stretch.ts). */
   setRate(rate: number): void {
     if (rate === this.rate) return;
     // Fold the time played so far into the position: the clock's slope changes here.
-    this.position = this.time();
-    this.startedAt = this.context.currentTime;
+    this.assume(this.time());
     this.rate = rate;
-    for (const source of this.sources) source.playbackRate.value = rate;
+    this.send({ type: "rate", rate });
   }
 
   /** Whether sound is reaching the speakers right now (for tests and diagnostics). */
@@ -130,42 +132,37 @@ export class SungPlayer {
   }
 
   destroy(): void {
-    this.stop();
+    this.send({ type: "pause" });
+    this.node.disconnect();
     void this.context.close();
   }
 
-  /** One source per part, all told to start at the same context time. */
-  private start(offset: number): void {
-    const when = this.context.currentTime + LEAD;
-    this.startedAt = when;
-    this.position = offset;
-    this.sources = this.buffers.map((buffer, i) => {
-      const source = this.context.createBufferSource();
-      source.buffer = buffer;
-      source.playbackRate.value = this.rate;
-      source.connect(this.gains[i]!);
-      source.start(when, Math.min(offset, buffer.duration));
-      return source;
-    });
-    // The longest part says when the song is over. A source stopped by us has
-    // its handler taken off first, so only the end of the music reaches here.
-    const longest = this.sources[this.buffers.findIndex((b) => b.duration === this.duration)];
-    if (longest) longest.onended = () => {
-      if (!this.sources.includes(longest)) return;
-      this.sources = [];
+  private frames(seconds: number): number {
+    return Math.round(seconds * this.context.sampleRate);
+  }
+
+  /** Until the worklet reports, the clock runs from here. */
+  private assume(seconds: number): void {
+    this.reported = seconds;
+    this.reportedAt = this.context.currentTime;
+  }
+
+  private send(m: ToWorklet, transfer: Transferable[] = []): void {
+    this.node.port.postMessage(m, transfer);
+  }
+
+  private receive(m: FromWorklet): void {
+    if (m.type === "position") {
+      // Only while running: a report from before a pause or a seek must not move the clock.
+      if (!this.wanted || m.at < this.reportedAt) return;
+      this.reported = m.frames / this.context.sampleRate;
+      this.reportedAt = m.at;
+    } else if (m.type === "ended") {
+      if (!this.wanted) return;
       this.wanted = false;
       this.position = this.duration;
       this.onEnded();
-    };
-  }
-
-  private stop(): void {
-    for (const source of this.sources) {
-      source.onended = null;
-      try { source.stop(); } catch { /* not started yet */ }
-      source.disconnect();
     }
-    this.sources = [];
   }
 
   /**
@@ -176,7 +173,8 @@ export class SungPlayer {
   private applyGains(): void {
     const levels = this.levels();
     const total = levels.reduce((a, b) => a + b, 0);
-    this.sum.gain.value = total > 1 ? 1 / total : 1;
-    this.gains.forEach((gain, i) => { gain.gain.value = levels[i]!; });
+    const scale = total > 1 ? 1 / total : 1;
+    this.applied = levels.map((g) => g * scale);
+    this.send({ type: "gains", gains: this.applied });
   }
 }

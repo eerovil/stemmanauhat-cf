@@ -33,6 +33,29 @@ test("a song with a sung MP3 per part plays those together, and the cursor follo
   await expect(page.getByTestId("time")).toHaveText("0:08");
 });
 
+test("at tempo 70 % the sung parts play slower, the cursor advancing at 0.7 times real time", async ({ page }) => {
+  await page.goto("/c/public/laulettu");
+  await choosePartIfAsked(page, "Tenori");
+  await expect(gains(page)).toHaveAttribute("data-player", "sung");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  for (let i = 0; i < 6; i++) await page.getByRole("button", { name: "Hitaammin" }).click();
+  await expect(page.getByRole("group", { name: "Tempo" })).toContainText("70 %");
+  await page.getByRole("button", { name: "Sulje säädöt" }).click();
+  const position = async () => Number(await page.locator("input.progress").inputValue());
+  await page.getByRole("button", { name: "Soita" }).click();
+  await expect(page.getByRole("button", { name: "Tauko" })).toHaveAttribute("data-sounding", "1", { timeout: 10_000 });
+  // The song's clock against the wall clock, over three seconds.
+  await expect.poll(position).toBeGreaterThan(0.5);
+  const [t0, p0] = [Date.now(), await position()];
+  await page.waitForTimeout(3000);
+  const [t1, p1] = [Date.now(), await position()];
+  const speed = (p1 - p0) / ((t1 - t0) / 1000);
+  expect(speed).toBeGreaterThan(0.6);
+  expect(speed).toBeLessThan(0.8);
+  await page.getByRole("button", { name: "Tauko" }).click();
+});
+
 test("a song that lists MP3s it does not have plays the piano", async ({ page }) => {
   await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
   await page.getByRole("link", { name: "Kokeilulaulu" }).click();
