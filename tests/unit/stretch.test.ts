@@ -70,8 +70,8 @@ describe("PartStretcher", () => {
       s.rate = rate;
       s.start(0);
       const out = render(s, RATE);
-      expect(out.length).toBe(RATE);
-      expect(s.position()).toBeCloseTo(RATE * rate, 3);
+      expect(out.length).toBe(Math.floor(RATE / BLOCK) * BLOCK);
+      expect(s.position()).toBeCloseTo(out.length * rate, 3);
       expect(pitchOf(out.subarray(GRAIN * 2), [110, 165, 220, 330, 440])).toBe(220);
       // Grains overlap-add to one: the level stays, not louder and not pumping.
       expect(peak(out.subarray(GRAIN * 2))).toBeGreaterThan(0.45);
@@ -94,17 +94,17 @@ describe("PartStretcher", () => {
     const s = new PartStretcher([tone(220, 3)]);
     s.setGains([1]);
     s.start(0);
-    render(s, RATE / 2);
-    expect(s.position()).toBe(RATE / 2);
+    render(s, 20480);
+    expect(s.position()).toBe(20480);
     s.setRate(0.5);
-    render(s, RATE);
-    expect(s.position()).toBeCloseTo(RATE / 2 + RATE / 2, 3);
+    render(s, 40960);
+    expect(s.position()).toBeCloseTo(20480 + 20480, 3);
     s.setRate(1);
     render(s, 1024);
-    expect(s.position()).toBeCloseTo(RATE + 1024, 3);
+    expect(s.position()).toBeCloseTo(40960 + 1024, 3);
     s.setRate(1.2);
     render(s, 1280);
-    expect(s.position()).toBeCloseTo(RATE + 1024 + 1536, 3);
+    expect(s.position()).toBeCloseTo(40960 + 1024 + 1536, 3);
   });
 
   it("ends when the longest part has played out, at any tempo", () => {
