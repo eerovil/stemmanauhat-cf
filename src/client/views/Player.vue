@@ -7,7 +7,7 @@ import {
 import Icon from "../components/Icon.vue";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
-import { SungPlayer } from "../player/sung";
+import type { SungPlayer } from "../player/sung";
 import { startingPart } from "../player/part";
 import { SlidingPieces } from "../player/slide";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
@@ -88,11 +88,16 @@ let mixer: MidiPlayer | FilePlayer | SungPlayer | null = null;
 const playerKind = ref<"midi" | "file" | "sung" | "">("");
 /** The singer's choice when the song has sung parts: piano (the default) or the sung parts. */
 const sound = ref<"piano" | "sung">("piano");
-/** Whether this song has a sung MP3 for every part and this browser can play them together. */
+/**
+ * Whether every part has a sung MP3 (marked `sung`: rows from before #36 list piano
+ * MP3s under the same names) and this browser can play them together.
+ */
 const hasSung = computed(() => {
   const parts = song.value?.parts ?? [];
-  return !wantsFilePlayback() && parts.length > 0 && parts.every((p) => (p.file ?? "").endsWith(".mp3"));
+  return !wantsFilePlayback() && parts.length > 0 && parts.every((p) => p.sung === true && (p.file ?? "").endsWith(".mp3"));
 });
+/** What the Ääni choice shows: what plays, not what was asked for (a sung load can fall back to the piano). */
+const shownSound = computed(() => (switching.value ? sound.value : playerKind.value === "sung" ? "sung" : "piano"));
 /** True while the player is being swapped for the other sound. */
 const switching = ref(false);
 /** Firefox on Android slides the one-line view as moving picture pieces (player/slide.ts). */
@@ -139,7 +144,8 @@ onMounted(async () => {
     ]);
     timing = parseTiming(timingJson);
     barCount.value = timing.measures;
-    mixer = await createMixer(s);
+    // The page always opens on the piano; chosen singing loads behind it (loadSung).
+    mixer = await createPiano(s);
     mixer.setMaster(myPart.value);
     mixer.onEnded = () => { playing.value = false; };
     setMode(carried.mode ?? "focus", false);
@@ -151,6 +157,7 @@ onMounted(async () => {
     if (carriedRate) setRate(carriedRate, false);
     else if (oldRate) setRate(oldRate);
     loading.value = false;
+    if (sound.value === "sung" && hasSung.value) void loadSung();
     // The score box exists only once loading is false.
     await new Promise(requestAnimationFrame);
     // OpenSheetMusicDisplay is most of the app's size: load it only on a song page.
@@ -170,27 +177,56 @@ onMounted(async () => {
   }
 });
 
-/**
- * A song whose every part has a sung MP3 plays those, all on one clock, when the
- * singer has chosen "Laulu" in Säädöt (the piano is the default, Eero 2026-10-13);
- * a file listed but missing (the rows from before #36) falls back to the piano,
- * as does Firefox on Android, which plays a rendered file.
- */
-async function createMixer(s: Song): Promise<MidiPlayer | FilePlayer | SungPlayer> {
+/** The piano: score.mid through the synth, or a rendered file on Firefox for Android. */
+async function createPiano(s: Song): Promise<MidiPlayer | FilePlayer> {
   const log = (note: string) => { loadingNote.value = note; };
-  const names = s.parts.map((p) => p.name);
-  const files = s.parts.map((p) => p.file ?? "");
-  if (sound.value === "sung" && hasSung.value) {
-    try {
-      const sung = await SungPlayer.create(files.map((f) => s.base + f), log);
-      playerKind.value = "sung";
-      return sung;
-    } catch (error) {
-      console.warn(`sung parts not played: ${String(error)}`);
-    }
-  }
   playerKind.value = wantsFilePlayback() ? "file" : "midi";
-  return (wantsFilePlayback() ? FilePlayer : MidiPlayer).create(s.base + "score.mid", names, log);
+  return (wantsFilePlayback() ? FilePlayer : MidiPlayer).create(s.base + "score.mid", s.parts.map((p) => p.name), log);
+}
+
+/** Hand the song to another player at the same place, with the same part, mix and tempo. */
+async function takeOver(next: MidiPlayer | FilePlayer | SungPlayer, t: number, resume: boolean) {
+  mixer = next;
+  mixer.setMaster(myPart.value);
+  mixer.onEnded = () => { playing.value = false; };
+  setMode(mode.value, false);
+  if (mode.value !== "minus" && mode.value !== "solo") setOthers(others.value, false);
+  mixer.setRate(rate.value);
+  mixer.seek(t);
+  if (resume) await mixer.play();
+  playing.value = mixer.playing;
+  levels.value = mixer.effectiveLevels();
+}
+
+/** Counts sung loads, so a load the singer has since cancelled (Piano) is thrown away. */
+let sungLoad = 0;
+
+/**
+ * The sung parts, loaded while the piano already plays (Eero, 2026-10-13: singing
+ * must not slow the page down). Its code and the MP3s are fetched only now; once
+ * every part is decoded the singing takes over at the same place. A load that
+ * fails leaves the piano playing, and the Ääni switch says so.
+ */
+async function loadSung() {
+  const s = song.value;
+  if (!s || !hasSung.value) return;
+  const load = ++sungLoad;
+  switching.value = true;
+  try {
+    const { SungPlayer } = await import("../player/sung");
+    const sung = await SungPlayer.create(s.parts.map((p) => s.base + (p.file ?? "")));
+    if (load !== sungLoad || sound.value !== "sung" || !mixer) { sung.destroy(); return; }
+    const resume = mixer.playing;
+    const t = mixer.time();
+    mixer.pause();
+    mixer.destroy();
+    playerKind.value = "sung";
+    await takeOver(sung, t, resume);
+  } catch (error) {
+    console.warn(`sung parts not played: ${String(error)}`);
+  } finally {
+    if (load === sungLoad) switching.value = false;
+  }
 }
 
 onBeforeUnmount(() => {
@@ -428,29 +464,20 @@ function setRate(value: number, save = true) {
 
 /** Swap the piano for the sung parts or back, keeping the place, the tempo and the mix. */
 async function setSound(next: "piano" | "sung") {
-  if (next === sound.value || switching.value || !song.value || !mixer) return;
+  if (!song.value || !mixer || next === sound.value && (switching.value || next === shownSound.value)) return;
   sound.value = next;
   carrySettings({ sound: next });
-  switching.value = true;
+  if (next === "sung") { await loadSung(); return; }
+  // Piano: a sung load still under way is dropped, and singing that plays hands back.
+  sungLoad++;
+  switching.value = false;
+  if (playerKind.value !== "sung") return;
   const resume = mixer.playing;
   const t = mixer.time();
   mixer.pause();
   mixer.destroy();
   mixer = null;
-  try {
-    mixer = await createMixer(song.value);
-    mixer.setMaster(myPart.value);
-    mixer.onEnded = () => { playing.value = false; };
-    setMode(mode.value, false);
-    if (mode.value !== "minus" && mode.value !== "solo") setOthers(others.value, false);
-    mixer.setRate(rate.value);
-    mixer.seek(t);
-    if (resume) await mixer.play();
-    playing.value = mixer.playing;
-    levels.value = mixer.effectiveLevels();
-  } finally {
-    switching.value = false;
-  }
+  await takeOver(await createPiano(song.value), t, resume);
 }
 
 function stepTempo(delta: number) {
@@ -656,14 +683,14 @@ function onPointerUp(event: PointerEvent) {
           <div class="setting">
             <span class="row-label">Ääni</span>
             <div class="segmented two" role="group" aria-label="Ääni">
-              <button type="button" :class="{ on: sound === 'piano' }" :aria-pressed="sound === 'piano'"
-                :disabled="switching" @click="setSound('piano')">Piano</button>
-              <button type="button" :class="{ on: sound === 'sung' }" :aria-pressed="sound === 'sung'"
-                :disabled="switching" @click="setSound('sung')">Laulu</button>
+              <button type="button" :class="{ on: shownSound === 'piano' }" :aria-pressed="shownSound === 'piano'"
+                @click="setSound('piano')">Piano</button>
+              <button type="button" :class="{ on: shownSound === 'sung' }" :aria-pressed="shownSound === 'sung'"
+                @click="setSound('sung')">Laulu</button>
             </div>
           </div>
-          <div v-if="sound === 'sung'" class="mode-hint sung-credit">
-            {{ switching ? "Ladataan laulua…" : "Tekoälyn laulama. Ääni: REMY, UTAU French Resources (Hisa!)" }}</div>
+          <div v-if="switching" class="mode-hint">Ladataan laulua…</div>
+          <div v-else-if="sound === 'sung' && playerKind !== 'sung'" class="mode-hint">Laulua ei saatu soimaan, soitetaan piano.</div>
         </template>
         <div v-if="mode !== 'solo'" class="others-row">
           <span class="row-label">Muut stemmat</span>
@@ -724,6 +751,9 @@ function onPointerUp(event: PointerEvent) {
             <span v-if="credits(song)" class="info-credits">{{ credits(song) }}</span>
             <span class="info-meta">Tahti {{ bar }} / {{ barCount }} ·
               <span data-testid="time">{{ clock(now) }}</span> / {{ clock(duration) }}</span>
+            <!-- REMY's terms: credit the voice wherever its singing plays (AGENTS.md). -->
+            <span v-if="switching && sound === 'sung'" class="info-credits sung-loading">Ladataan laulua…</span>
+            <span v-else-if="playerKind === 'sung'" class="info-credits sung-credit">Tekoälyn laulama · Ääni: REMY, UTAU French Resources (Hisa!)</span>
           </div>
           <button type="button" class="own" aria-label="Vaihda oma stemma" @click="askPart = true">
             <span class="own-tag">Oma</span><span class="own-name">{{ song.parts[myPart]?.name }}</span></button>

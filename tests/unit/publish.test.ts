@@ -33,8 +33,8 @@ describe("publishPlan", () => {
     const files = ["parts/1-Tenori.mp3", "parts/2-Basso.mp3"];
     const plan = publishPlan(manifest, "public", date, files);
     expect(plan.files).toEqual(["score.musicxml", "score.mid", "timing.json", "manifest.json", ...files]);
-    expect(plan.r2Manifest.parts).toEqual([{ name: "Tenori", file: files[0] }, { name: "Basso", file: files[1] }]);
-    expect(plan.sql).toContain(`'[{"name":"Tenori","file":"parts/1-Tenori.mp3"},{"name":"Basso","file":"parts/2-Basso.mp3"}]'`);
+    expect(plan.r2Manifest.parts).toEqual([{ name: "Tenori", file: files[0], sung: true }, { name: "Basso", file: files[1], sung: true }]);
+    expect(plan.sql).toContain(`'[{"name":"Tenori","file":"parts/1-Tenori.mp3","sung":true},{"name":"Basso","file":"parts/2-Basso.mp3","sung":true}]'`);
     expect(() => publishPlan(manifest, "public", date, [files[0]])).toThrow("bad part files");
   });
   it("finds the parts' MP3s in a bundle by number, in the manifest's order, or none", () => {
@@ -104,10 +104,10 @@ describe("publishPlan", () => {
   });
 });
 
-function bundle(root: string, slug: string, withMidi = true) {
+function bundle(root: string, slug: string, withMidi = true, sung = false) {
   const dir = join(root, slug);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "manifest.json"), JSON.stringify({ ...manifest, slug }));
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify({ ...manifest, slug, ...(sung ? { sung: true } : {}) }));
   for (const f of ["score.musicxml", "timing.json", ...(withMidi ? ["score.mid"] : [])]) writeFileSync(join(dir, f), f);
   return dir;
 }
@@ -154,10 +154,26 @@ describe("publishAll", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+  it("leaves out the part MP3s of a bundle not marked sung: older bundles carry piano renders", async () => {
+    const root = mkdtempSync(join(tmpdir(), "publish-"));
+    try {
+      const dir = bundle(root, "vanha");
+      mkdirSync(join(dir, "parts"));
+      for (const f of ["1-Tenori.mp3", "2-Basso.mp3"]) writeFileSync(join(dir, "parts", f), f);
+      const puts: string[] = [];
+      const rows: string[] = [];
+      const store = { put: async (key: string) => { puts.push(key); }, sql: async (sql: string) => { rows.push(sql); } };
+      expect(await publishAll(store, "jm", [dir], { log: () => {}, now: () => date })).toBe(0);
+      expect(puts.some((k) => k.endsWith(".mp3"))).toBe(false);
+      expect(rows[0]).toContain(`'[{"name":"Tenori"},{"name":"Basso"}]'`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("uploads a sung bundle's part MP3s as audio and lists them in the row", async () => {
     const root = mkdtempSync(join(tmpdir(), "publish-"));
     try {
-      const dir = bundle(root, "laulettu");
+      const dir = bundle(root, "laulettu", true, true);
       mkdirSync(join(dir, "parts"));
       for (const f of ["1-Tenori.mp3", "2-Basso.mp3"]) writeFileSync(join(dir, "parts", f), f);
       const puts: string[] = [];
@@ -167,7 +183,7 @@ describe("publishAll", () => {
       expect(await publishAll(store, "public", [dir], { log: () => {}, now: () => date })).toBe(0);
       expect(puts).toContain("songs/public/laulettu/20261010T123456Z/parts/1-Tenori.mp3 audio/mpeg");
       expect(puts).toContain("songs/public/laulettu/20261010T123456Z/parts/2-Basso.mp3 audio/mpeg");
-      expect(rows[0]).toContain('"file":"parts/2-Basso.mp3"');
+      expect(rows[0]).toContain('"file":"parts/2-Basso.mp3","sung":true');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

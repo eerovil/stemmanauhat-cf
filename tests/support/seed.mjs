@@ -14,15 +14,21 @@ const FILES = ["score.musicxml", "timing.json", "manifest.json", "score.mid"];
 const PART_FILES = ["parts/1-Tenori.mp3", "parts/2-Basso.mp3"];
 // Songs published since #36 list part names only; kokeilu and iltalaulu keep the
 // older rows' MP3 file names, which must still read (their MP3s are not in R2,
-// so they play the piano). laulettu has the same names and its MP3s uploaded:
-// the sung player (a local test, 2026-10-12).
+// so they play the piano); iltalaulu's are uploaded, as the old publish did with
+// piano renders, and are not singing. laulettu's parts are marked sung and
+// uploaded: the sung player, Säädöt › Ääni: Laulu.
 const PARTS = JSON.stringify([{ name: "Tenori" }, { name: "Basso" }]);
 const OLD_PARTS = JSON.stringify([
   { name: "Tenori", file: "parts/1-Tenori.mp3" },
   { name: "Basso", file: "parts/2-Basso.mp3" },
 ]);
+const SUNG_PARTS = JSON.stringify([
+  { name: "Tenori", file: "parts/1-Tenori.mp3", sung: true },
+  { name: "Basso", file: "parts/2-Basso.mp3", sung: true },
+]);
 const OLD_ROWS = ["kokeilu", "iltalaulu"];
 const SUNG_ROWS = ["laulettu"];
+const WITH_MP3S = ["laulettu", "iltalaulu"];
 
 const wrangler = (...args) => execFileSync("node_modules/.bin/wrangler", args, { stdio: ["ignore", "ignore", "inherit"] });
 
@@ -54,13 +60,13 @@ const sql = [
   "INSERT INTO admins (email) VALUES ('yllapito@example.com');",
   `INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES ('jm', '${salt.toString("base64url")}', '${await hash(PASSPHRASE, salt)}', 10000, 1);`,
   ...songs.map(([choir, slug, title, , duration, credits]) =>
-    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, composer, lyricist, arranger) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${VERSION}/', '${OLD_ROWS.includes(slug) || SUNG_ROWS.includes(slug) ? OLD_PARTS : PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z', ${credits.map(value).join(", ")});`),
+    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, composer, lyricist, arranger) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${VERSION}/', '${SUNG_ROWS.includes(slug) ? SUNG_PARTS : OLD_ROWS.includes(slug) ? OLD_PARTS : PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z', ${credits.map(value).join(", ")});`),
 ].join("\n");
 writeFileSync("tests/fixtures/seed.generated.sql", sql + "\n");
 wrangler("d1", "execute", "stemmanauhat", "--local", "--file", "tests/fixtures/seed.generated.sql");
 
 for (const [choir, slug, , fixture] of songs) {
-  for (const file of SUNG_ROWS.includes(slug) ? [...FILES, ...PART_FILES] : FILES) {
+  for (const file of WITH_MP3S.includes(slug) ? [...FILES, ...PART_FILES] : FILES) {
     wrangler("r2", "object", "put", `stemmanauhat/songs/${choir}/${slug}/${VERSION}/${file}`,
       "--local", "--file", `${fixture}/${file}`);
   }

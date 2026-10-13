@@ -5,7 +5,7 @@
 #
 # A bundle dir is what scripts/song-app-bundle.py builds: manifest.json,
 # score.musicxml, score.mid and timing.json, plus parts/<n>-<Name>.mp3 when the
-# parts are sung (one per part, in the manifest's order; the player then plays
+# parts are sung (and the manifest says "sung": true) (one per part, in the manifest's order; the player then plays
 # those on one clock instead of score.mid). The container sees only
 # this checkout, so the bundles are copied under .wrangler/publish/ (git-ignored)
 # first. See scripts/publish-songs.mjs.

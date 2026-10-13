@@ -15,8 +15,12 @@ export interface Me {
 
 export interface Part {
   name: string;
-  /** The part's sung MP3 under the song's base, when it has one: the player plays those instead of score.mid. */
+  /**
+   * The part's MP3 under the song's base. Rows from before #36 list piano renders here;
+   * only a part marked `sung` is singing, which Säädöt offers as "Laulu".
+   */
   file?: string;
+  sung?: boolean;
 }
 
 export interface SongSummary {
