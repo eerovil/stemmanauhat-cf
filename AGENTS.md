@@ -18,6 +18,11 @@ D1 for the per-choir email allow-lists, Google sign-in). Read README.md first.
   drifted apart and crackled on Android: keep one synth clock for all parts, and don't swap the
   piano for another sound without asking him. The soundfont is never committed (15 MB); tests use
   spessasynth's tiny built-in sound bank.
+- **Sung parts are an option, not a replacement.** A song published with a sung MP3 per part
+  (`parts/<n>-<Name>.mp3`, AI-sung with the REMY DiffSinger voice) offers "Ääni: Piano / Laulu" in
+  Säädöt; the piano stays the default and the choice carries from song to song (Eero, 2026-10-13).
+  The sung parts play on one Web Audio clock (`player/sung.ts`). REMY's terms require a credit:
+  keep "Ääni: REMY, UTAU French Resources (Hisa!)" visible whenever the sung parts play.
 
 ## Tests
 

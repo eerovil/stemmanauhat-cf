@@ -212,6 +212,8 @@ export interface CarriedSettings {
   staves?: "all" | "own";
   /** The tempo, 0.5–1.5 of the written one. */
   rate?: number;
+  /** "sung": play a song's sung parts when it has them; the piano otherwise (the default). */
+  sound?: "piano" | "sung";
 }
 
 /** A tempo the player accepts: 0.5–1.5 of the written one. */

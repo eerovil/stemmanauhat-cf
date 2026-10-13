@@ -1,18 +1,65 @@
 import { expect, test } from "@playwright/test";
 import { choosePartIfAsked, gains, PASSPHRASE, playAndSeeCursorMove } from "./helpers";
 
-// A song whose parts are sung MP3s plays them on one Web Audio clock (player/sung.ts),
-// a local test Eero asked for on 2026-10-12. The seed uploads the fixture's two tones.
-test("a song with a sung MP3 per part plays those together, and the cursor follows", async ({ page }) => {
+// A song whose parts are sung MP3s plays them on one Web Audio clock (player/sung.ts) when the
+// singer picks "Laulu" in Säädöt; the piano is the default (Eero, 2026-10-13). The seed uploads
+// the fixture's two tones.
+const SUNG = () => localStorage.setItem("stemmanauhat:settings", JSON.stringify({ sound: "sung" }));
+
+test("the piano is the default; Säädöt's Laulu plays the sung parts, and the choice carries", async ({ page }) => {
   const parts: string[] = [];
   page.on("response", (r) => { if (/\/files\/.*\/parts\/.*\.mp3$/.test(r.url())) parts.push(`${r.status()} ${new URL(r.url()).pathname}`); });
   await page.goto("/c/public/laulettu");
   await choosePartIfAsked(page, "Tenori");
+  await expect(gains(page)).toHaveAttribute("data-player", "midi");
+  expect(parts).toEqual([]);
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  const sound = page.getByRole("group", { name: "Ääni" });
+  await expect(sound.getByRole("button", { name: "Piano" })).toHaveAttribute("aria-pressed", "true");
+  await sound.getByRole("button", { name: "Laulu" }).click();
   await expect(gains(page)).toHaveAttribute("data-player", "sung");
+  await expect(page.getByText("Ääni: REMY")).toBeVisible();
   expect(parts.sort()).toEqual([
     "200 /files/public/laulettu/20261009T120000Z/parts/1-Tenori.mp3",
     "200 /files/public/laulettu/20261009T120000Z/parts/2-Basso.mp3",
   ]);
+  // The next visit starts sung.
+  await page.reload();
+  await expect(gains(page)).toHaveAttribute("data-player", "sung");
+});
+
+test("switching between the piano and the sung parts keeps the place", async ({ page }) => {
+  await page.goto("/c/public/laulettu");
+  await choosePartIfAsked(page, "Tenori");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.locator("input.progress").fill("4.5");
+  await expect(page.locator(".info-meta")).toContainText("Tahti 3 / 4");
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await page.getByRole("group", { name: "Ääni" }).getByRole("button", { name: "Laulu" }).click();
+  await expect(gains(page)).toHaveAttribute("data-player", "sung");
+  await expect(page.locator(".info-meta")).toContainText("Tahti 3 / 4");
+  await page.getByRole("group", { name: "Ääni" }).getByRole("button", { name: "Piano" }).click();
+  await expect(gains(page)).toHaveAttribute("data-player", "midi");
+  await expect(page.locator(".info-meta")).toContainText("Tahti 3 / 4");
+});
+
+test("a song with no sung parts has no sound choice", async ({ page }) => {
+  await page.addInitScript(SUNG);
+  await page.goto("/c/public/esittely");
+  await choosePartIfAsked(page, "Tenori");
+  await expect(gains(page)).toHaveAttribute("data-player", "midi");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.getByRole("group", { name: "Tempo" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Ääni" })).toHaveCount(0);
+});
+
+test("a song with a sung MP3 per part plays those together, and the cursor follows", async ({ page }) => {
+  await page.addInitScript(SUNG);
+  await page.goto("/c/public/laulettu");
+  await choosePartIfAsked(page, "Tenori");
+  await expect(gains(page)).toHaveAttribute("data-player", "sung");
   await page.getByRole("button", { name: "Selvä" }).click();
   // The same balance rule as the piano's; the parts' gains add up to at most 1.
   await expect(gains(page)).toHaveAttribute("data-gains", "0.862 0.138");
@@ -34,6 +81,7 @@ test("a song with a sung MP3 per part plays those together, and the cursor follo
 });
 
 test("at tempo 70 % the sung parts play slower, the cursor advancing at 0.7 times real time", async ({ page }) => {
+  await page.addInitScript(SUNG);
   await page.goto("/c/public/laulettu");
   await choosePartIfAsked(page, "Tenori");
   await expect(gains(page)).toHaveAttribute("data-player", "sung");
@@ -57,6 +105,7 @@ test("at tempo 70 % the sung parts play slower, the cursor advancing at 0.7 time
 });
 
 test("a song that lists MP3s it does not have plays the piano", async ({ page }) => {
+  await page.addInitScript(SUNG);
   await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
   await page.getByRole("link", { name: "Kokeilulaulu" }).click();
   await choosePartIfAsked(page, "Tenori");
