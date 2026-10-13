@@ -180,8 +180,9 @@ onMounted(async () => {
 /** The piano: score.mid through the synth, or a rendered file on Firefox for Android. */
 async function createPiano(s: Song): Promise<MidiPlayer | FilePlayer> {
   const log = (note: string) => { loadingNote.value = note; };
+  const piano = await (wantsFilePlayback() ? FilePlayer : MidiPlayer).create(s.base + "score.mid", s.parts.map((p) => p.name), log);
   playerKind.value = wantsFilePlayback() ? "file" : "midi";
-  return (wantsFilePlayback() ? FilePlayer : MidiPlayer).create(s.base + "score.mid", s.parts.map((p) => p.name), log);
+  return piano;
 }
 
 /** Hand the song to another player at the same place, with the same part, mix and tempo. */

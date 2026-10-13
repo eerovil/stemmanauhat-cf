@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SungPlayer } from "../../src/client/player/sung";
+import { SUNG_GAIN, SungPlayer } from "../../src/client/player/sung";
 import type { FromWorklet, ToWorklet } from "../../src/client/player/sung-worklet";
 
 /** A stand-in for Web Audio: a clock the test moves, and a worklet node that records what it is told. */
 class FakeParam { constructor(public value: number) {} }
 class FakeNode {
-  connect(node: FakeNode): FakeNode { return node; }
+  gain = new FakeParam(1);
+  next: FakeNode | null = null;
+  connect(node: FakeNode): FakeNode { this.next = node; return node; }
   disconnect(): void {}
 }
 class FakeCompressor extends FakeNode {
@@ -152,6 +154,16 @@ describe("SungPlayer", () => {
     expect(p.effectiveLevels()[1]).toBe(0);
     expect(total()).toBeLessThanOrEqual(1);
     expect(gains()).toEqual(p.effectiveLevels());
+  });
+
+  it("lifts the mix by SUNG_GAIN into the limiter, which holds the peaks under the ceiling", async () => {
+    const { context } = await player();
+    const boost = context.node!.next!;
+    expect(boost.gain.value).toBeCloseTo(SUNG_GAIN);
+    expect(SUNG_GAIN).toBeGreaterThan(1.9);
+    const limiter = boost.next as FakeCompressor;
+    expect(limiter.threshold.value).toBeLessThan(0);
+    expect(limiter.next).toBe(context.analyser);
   });
 
   it("reports the end when the worklet says the song has played out, only while playing", async () => {
