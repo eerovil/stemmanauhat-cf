@@ -46,6 +46,9 @@ a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
   `score.mid` is played by spessasynth (an AudioWorklet synth) with MuseScore's grand piano: each
   part's MIDI channel has its own gain, then +15 dB and a limiter. `timing.json` (from the same
   MIDI clock) moves the cursor.
+  A song published with a sung MP3 per part (AI-sung, the REMY voice) also offers "Ääni: Laulu"
+  in Säädöt: all its parts then play from those files on one Web Audio clock, at any tempo
+  without changing the pitch. The piano stays the default; the choice carries from song to song.
 - **App:** the site installs to a phone's home screen ("Lisää aloitusnäytölle" / "Asenna sovellus"):
   `public/manifest.webmanifest` and the icons drawn from `public/icon.svg` by
   `scripts/make-pwa-icons.mjs`. `public/sw.js` only shows an offline page when there is no network;

@@ -1,5 +1,5 @@
 // Publish song bundles built by song-app (manifest.json, score.musicxml,
-// score.mid, timing.json) to the site's R2 and D1, in the layout of
+// score.mid, timing.json, and parts/<n>-<Name>.mp3 when the parts are sung) to the site's R2 and D1, in the layout of
 // song-app's docs/stemmanauhat-site.md. A stand-in until song-app's own publish
 // (eerovil/musescore-choir-plugins#382) uploads score.mid. Run it through
 // scripts/publish-songs.sh, which puts the bundles where the container sees them.
@@ -12,7 +12,7 @@
 // few at a time, then one D1 query points the song at the new version, so the
 // site sees the old version or the whole new one. An older version's files stay
 // in R2. The token comes only from scripts/run.sh --cloudflare.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,8 +40,22 @@ export function creditsOf(manifest) {
   return out;
 }
 
+/**
+ * The sung MP3 of each part in `dir`, in the manifest's part order: parts/1-<Name>.mp3,
+ * parts/2-<Name>.mp3 ... (song-app numbers them). [] when the bundle has none;
+ * a bundle with some parts' files but not all is refused, not half published.
+ */
+export function partFilesIn(dir, parts) {
+  const partsDir = join(dir, "parts");
+  const names = existsSync(partsDir) ? readdirSync(partsDir) : [];
+  const files = parts.map((_, i) => names.filter((n) => n.startsWith(`${i + 1}-`) && n.endsWith(".mp3")));
+  if (files.every((f) => f.length === 0)) return [];
+  if (!files.every((f) => f.length === 1)) throw new Error(`${dir}: parts/ needs exactly one <n>-<Name>.mp3 per part`);
+  return files.map((f) => `parts/${f[0]}`);
+}
+
 /** What to upload for one bundle and the D1 statement that publishes it. */
-export function publishPlan(manifest, choir, date) {
+export function publishPlan(manifest, choir, date, partFiles = []) {
   if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
   const { slug, title, parts, duration } = manifest;
   if (!slug || slug.includes("/") || !title || !Array.isArray(parts) || parts.length === 0 || !(duration > 0)
@@ -51,11 +65,12 @@ export function publishPlan(manifest, choir, date) {
   const credits = creditsOf(manifest);
   const version = versionFor(date);
   const prefix = `songs/${choir}/${slug}/${version}/`;
-  const files = FILES;
-  // The part names only. The player plays score.mid and matches parts to its
-  // tracks by name, so a part's audio file is neither uploaded nor listed, even
-  // from an older bundle that still has one (#36).
-  const partsJson = JSON.stringify(parts.map(({ name }) => ({ name })));
+  if (partFiles.length > 0 && partFiles.length !== parts.length) throw new Error(`bad part files for ${slug}`);
+  const files = [...FILES, ...partFiles];
+  // The part names, and each part's sung MP3 only when the bundle has them
+  // (partFilesIn): the player then plays those instead of score.mid. A name in
+  // an older manifest alone is not listed (#36): it points at nothing uploaded.
+  const partsJson = JSON.stringify(parts.map(({ name }, i) => (partFiles[i] ? { name, file: partFiles[i] } : { name })));
   const publishedAt = date.toISOString().replace(/\.\d+Z$/, "Z");
   // The manifest in R2 carries the same facts as the row, as song-app writes it.
   const r2Manifest = { slug, title, choir, version, score: "score.musicxml", timing: "timing.json",
@@ -82,7 +97,7 @@ export function publishPlan(manifest, choir, date) {
 const BUCKET = "stemmanauhat";
 const DATABASE_ID = "b3d80c7d-0fb7-45a2-b6f6-f7311556b953"; // wrangler.jsonc
 const TYPES = { ".musicxml": "application/vnd.recordare.musicxml+xml", ".mid": "audio/midi",
-  ".json": "application/json" };
+  ".json": "application/json", ".mp3": "audio/mpeg" };
 const UPLOADS_AT_ONCE = 6;
 const TRIES = 4;
 
@@ -150,7 +165,7 @@ export async function publishAll(store, choir, dirs, { log = console.log, now = 
   // Check every bundle before anything goes up.
   const songs = dirs.map((dir) => {
     const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
-    const plan = publishPlan(manifest, choir, now());
+    const plan = publishPlan(manifest, choir, now(), partFilesIn(dir, manifest.parts ?? []));
     const missing = plan.files.filter((f) => f !== "manifest.json" && !existsSync(join(dir, f)));
     if (missing.length > 0) throw new Error(`${dir}: missing ${missing.join(", ")}`);
     return { dir, manifest, plan };

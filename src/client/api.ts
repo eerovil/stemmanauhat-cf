@@ -15,7 +15,7 @@ export interface Me {
 
 export interface Part {
   name: string;
-  /** Only on songs published before #36: the part's MP3, which nothing plays any more. */
+  /** The part's sung MP3 under the song's base, when it has one: the player plays those instead of score.mid. */
   file?: string;
 }
 
@@ -212,6 +212,8 @@ export interface CarriedSettings {
   staves?: "all" | "own";
   /** The tempo, 0.5–1.5 of the written one. */
   rate?: number;
+  /** "sung": play a song's sung parts when it has them; the piano otherwise (the default). */
+  sound?: "piano" | "sung";
 }
 
 /** A tempo the player accepts: 0.5–1.5 of the written one. */
