@@ -51,7 +51,7 @@ const songs = [
   // A free-rhythm verse written as one bar of 32 quarters (#45).
   ["public", "vapaa-rytmi", "Vapaa rytmi", "tests/fixtures/long-bar", 20.0, [null, null, null]],
   // The two-part song sung: the fixture MP3s are synthetic tones, one per part.
-  ["public", "laulettu", "Laulettu laulu", "tests/fixtures/two-part", 8.0, [null, null, null]],
+  ["public", "laulettu", "Laulettu laulu", "tests/fixtures/two-part", 8.0, ["Esimerkki Säveltäjä", "Esimerkki Sanoittaja", null]],
 ];
 const value = (text) => (text === null ? "NULL" : `'${text}'`);
 const sql = [
