@@ -42,6 +42,8 @@ export function creditsOf(manifest) {
 
 /**
  * The sung MP3 of each part in `dir`, in the manifest's part order: parts/1-<Name>.mp3,
+ * read only for a bundle whose manifest says `"sung": true` (see publishAll): older
+ * song-app bundles carry piano renders under the same names, which are not singing.
  * parts/2-<Name>.mp3 ... (song-app numbers them). [] when the bundle has none;
  * a bundle with some parts' files but not all is refused, not half published.
  */
@@ -68,9 +70,9 @@ export function publishPlan(manifest, choir, date, partFiles = []) {
   if (partFiles.length > 0 && partFiles.length !== parts.length) throw new Error(`bad part files for ${slug}`);
   const files = [...FILES, ...partFiles];
   // The part names, and each part's sung MP3 only when the bundle has them
-  // (partFilesIn): the player then plays those instead of score.mid. A name in
-  // an older manifest alone is not listed (#36): it points at nothing uploaded.
-  const partsJson = JSON.stringify(parts.map(({ name }, i) => (partFiles[i] ? { name, file: partFiles[i] } : { name })));
+  // (partFilesIn), marked `sung` so the player offers them as "Laulu". A name in an
+  // older manifest alone is not listed (#36): it points at nothing uploaded.
+  const partsJson = JSON.stringify(parts.map(({ name }, i) => (partFiles[i] ? { name, file: partFiles[i], sung: true } : { name })));
   const publishedAt = date.toISOString().replace(/\.\d+Z$/, "Z");
   // The manifest in R2 carries the same facts as the row, as song-app writes it.
   const r2Manifest = { slug, title, choir, version, score: "score.musicxml", timing: "timing.json",
@@ -165,7 +167,8 @@ export async function publishAll(store, choir, dirs, { log = console.log, now = 
   // Check every bundle before anything goes up.
   const songs = dirs.map((dir) => {
     const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
-    const plan = publishPlan(manifest, choir, now(), partFilesIn(dir, manifest.parts ?? []));
+    const sung = manifest.sung === true ? partFilesIn(dir, manifest.parts ?? []) : [];
+    const plan = publishPlan(manifest, choir, now(), sung);
     const missing = plan.files.filter((f) => f !== "manifest.json" && !existsSync(join(dir, f)));
     if (missing.length > 0) throw new Error(`${dir}: missing ${missing.join(", ")}`);
     return { dir, manifest, plan };

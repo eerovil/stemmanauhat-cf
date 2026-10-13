@@ -19,7 +19,9 @@ test("the piano is the default; Säädöt's Laulu plays the sung parts, and the 
   await expect(sound.getByRole("button", { name: "Piano" })).toHaveAttribute("aria-pressed", "true");
   await sound.getByRole("button", { name: "Laulu" }).click();
   await expect(gains(page)).toHaveAttribute("data-player", "sung");
-  await expect(page.getByText("Ääni: REMY")).toBeVisible();
+  // REMY's credit stays in the dock while the singing plays, with Säädöt closed too.
+  await page.getByRole("button", { name: "Sulje säädöt" }).click();
+  await expect(page.locator(".dock .sung-credit")).toContainText("Ääni: REMY");
   expect(parts.sort()).toEqual([
     "200 /files/public/laulettu/20261009T120000Z/parts/1-Tenori.mp3",
     "200 /files/public/laulettu/20261009T120000Z/parts/2-Basso.mp3",
@@ -42,6 +44,19 @@ test("switching between the piano and the sung parts keeps the place", async ({ 
   await page.getByRole("group", { name: "Ääni" }).getByRole("button", { name: "Piano" }).click();
   await expect(gains(page)).toHaveAttribute("data-player", "midi");
   await expect(page.locator(".info-meta")).toContainText("Tahti 3 / 4");
+});
+
+test("an old row whose piano MP3s are in R2 is not offered as sung, and shows no singing credit", async ({ page }) => {
+  await page.addInitScript(SUNG);
+  await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  await page.getByRole("link", { name: "Iltalaulu" }).click();
+  await choosePartIfAsked(page, "Tenori");
+  await expect(gains(page)).toHaveAttribute("data-player", "midi");
+  await expect(page.locator(".sung-credit")).toHaveCount(0);
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.getByRole("group", { name: "Tempo" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Ääni" })).toHaveCount(0);
 });
 
 test("a song with no sung parts has no sound choice", async ({ page }) => {

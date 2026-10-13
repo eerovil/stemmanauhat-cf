@@ -88,11 +88,16 @@ let mixer: MidiPlayer | FilePlayer | SungPlayer | null = null;
 const playerKind = ref<"midi" | "file" | "sung" | "">("");
 /** The singer's choice when the song has sung parts: piano (the default) or the sung parts. */
 const sound = ref<"piano" | "sung">("piano");
-/** Whether this song has a sung MP3 for every part and this browser can play them together. */
+/**
+ * Whether every part has a sung MP3 (marked `sung`: rows from before #36 list piano
+ * MP3s under the same names) and this browser can play them together.
+ */
 const hasSung = computed(() => {
   const parts = song.value?.parts ?? [];
-  return !wantsFilePlayback() && parts.length > 0 && parts.every((p) => (p.file ?? "").endsWith(".mp3"));
+  return !wantsFilePlayback() && parts.length > 0 && parts.every((p) => p.sung === true && (p.file ?? "").endsWith(".mp3"));
 });
+/** What the Ääni choice shows: what plays, not what was asked for (a sung load can fall back to the piano). */
+const shownSound = computed(() => (switching.value ? sound.value : playerKind.value === "sung" ? "sung" : "piano"));
 /** True while the player is being swapped for the other sound. */
 const switching = ref(false);
 /** Firefox on Android slides the one-line view as moving picture pieces (player/slide.ts). */
@@ -428,7 +433,7 @@ function setRate(value: number, save = true) {
 
 /** Swap the piano for the sung parts or back, keeping the place, the tempo and the mix. */
 async function setSound(next: "piano" | "sung") {
-  if (next === sound.value || switching.value || !song.value || !mixer) return;
+  if (next === shownSound.value || switching.value || !song.value || !mixer) return;
   sound.value = next;
   carrySettings({ sound: next });
   switching.value = true;
@@ -656,14 +661,14 @@ function onPointerUp(event: PointerEvent) {
           <div class="setting">
             <span class="row-label">Ääni</span>
             <div class="segmented two" role="group" aria-label="Ääni">
-              <button type="button" :class="{ on: sound === 'piano' }" :aria-pressed="sound === 'piano'"
+              <button type="button" :class="{ on: shownSound === 'piano' }" :aria-pressed="shownSound === 'piano'"
                 :disabled="switching" @click="setSound('piano')">Piano</button>
-              <button type="button" :class="{ on: sound === 'sung' }" :aria-pressed="sound === 'sung'"
+              <button type="button" :class="{ on: shownSound === 'sung' }" :aria-pressed="shownSound === 'sung'"
                 :disabled="switching" @click="setSound('sung')">Laulu</button>
             </div>
           </div>
-          <div v-if="sound === 'sung'" class="mode-hint sung-credit">
-            {{ switching ? "Ladataan laulua…" : "Tekoälyn laulama. Ääni: REMY, UTAU French Resources (Hisa!)" }}</div>
+          <div v-if="switching" class="mode-hint">Ladataan laulua…</div>
+          <div v-else-if="sound === 'sung' && playerKind !== 'sung'" class="mode-hint">Laulua ei saatu soimaan, soitetaan piano.</div>
         </template>
         <div v-if="mode !== 'solo'" class="others-row">
           <span class="row-label">Muut stemmat</span>
@@ -724,6 +729,8 @@ function onPointerUp(event: PointerEvent) {
             <span v-if="credits(song)" class="info-credits">{{ credits(song) }}</span>
             <span class="info-meta">Tahti {{ bar }} / {{ barCount }} ·
               <span data-testid="time">{{ clock(now) }}</span> / {{ clock(duration) }}</span>
+            <!-- REMY's terms: credit the voice wherever its singing plays (AGENTS.md). -->
+            <span v-if="playerKind === 'sung'" class="info-credits sung-credit">Tekoälyn laulama · Ääni: REMY, UTAU French Resources (Hisa!)</span>
           </div>
           <button type="button" class="own" aria-label="Vaihda oma stemma" @click="askPart = true">
             <span class="own-tag">Oma</span><span class="own-name">{{ song.parts[myPart]?.name }}</span></button>
