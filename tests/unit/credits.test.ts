@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { credits, hasSungParts, listCredits } from "../../src/client/api";
+import { credits, hasSungParts, listCredits, sungCredit } from "../../src/client/api";
 
 describe("credits", () => {
   it("names who wrote the song, leaving out what is not known", () => {
@@ -30,5 +30,13 @@ describe("hasSungParts", () => {
     expect(hasSungParts([{ name: "T", file: "parts/1-T.mp3" }])).toBe(false);
     expect(hasSungParts([{ name: "T" }])).toBe(false);
     expect(hasSungParts([])).toBe(false);
+  });
+});
+
+describe("sungCredit", () => {
+  it("credits the voice that sings, REMY when the parts do not name one", () => {
+    expect(sungCredit([{ name: "T", file: "a.mp3", sung: true }])).toBe("Tekoälyn laulama · Ääni: REMY, UTAU French Resources (Hisa!)");
+    expect(sungCredit([{ name: "S", file: "a.mp3", sung: true, voice: "LYSE" }]))
+      .toBe("Tekoälyn laulama · Ääni: LYSE, UTAU French Resources (valshamr)");
   });
 });

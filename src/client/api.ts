@@ -21,6 +21,21 @@ export interface Part {
    */
   file?: string;
   sung?: boolean;
+  /** The AI voice that sings a sung part; REMY when not named. */
+  voice?: string;
+}
+
+/** Who each AI voice is credited to, as its terms ask (REMY's and LYSE's tos.txt). */
+export const VOICE_CREDITS: Record<string, string> = {
+  REMY: "UTAU French Resources (Hisa!)",
+  LYSE: "UTAU French Resources (valshamr)",
+};
+
+/** The credit line shown while a song's sung parts play: the voice that sings them, with its makers. */
+export function sungCredit(parts: Part[]): string {
+  const voice = parts.find((p) => p.voice)?.voice ?? "REMY";
+  const by = VOICE_CREDITS[voice];
+  return `Tekoälyn laulama · Ääni: ${voice}${by ? `, ${by}` : ""}`;
 }
 
 export interface SongSummary {

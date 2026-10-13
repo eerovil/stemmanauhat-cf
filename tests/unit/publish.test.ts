@@ -37,6 +37,14 @@ describe("publishPlan", () => {
     expect(plan.sql).toContain(`'[{"name":"Tenori","file":"parts/1-Tenori.mp3","sung":true},{"name":"Basso","file":"parts/2-Basso.mp3","sung":true}]'`);
     expect(() => publishPlan(manifest, "public", date, [files[0]])).toThrow("bad part files");
   });
+  it("names the singing voice on every sung part when the manifest says it, and refuses a malformed one", () => {
+    const files = ["parts/1-Tenori.mp3", "parts/2-Basso.mp3"];
+    const plan = publishPlan({ ...manifest, voice: "LYSE" }, "public", date, files);
+    expect(plan.r2Manifest.parts).toEqual([
+      { name: "Tenori", file: files[0], sung: true, voice: "LYSE" }, { name: "Basso", file: files[1], sung: true, voice: "LYSE" }]);
+    expect(publishPlan({ ...manifest, voice: "LYSE" }, "public", date).r2Manifest.parts).toEqual([{ name: "Tenori" }, { name: "Basso" }]);
+    expect(() => publishPlan({ ...manifest, voice: "'; DROP" }, "public", date, files)).toThrow("bad voice");
+  });
   it("finds the parts' MP3s in a bundle by number, in the manifest's order, or none", () => {
     const dir = mkdtempSync(join(tmpdir(), "bundle-"));
     try {

@@ -72,7 +72,11 @@ export function publishPlan(manifest, choir, date, partFiles = []) {
   // The part names, and each part's sung MP3 only when the bundle has them
   // (partFilesIn), marked `sung` so the player offers them as "Laulu". A name in an
   // older manifest alone is not listed (#36): it points at nothing uploaded.
-  const partsJson = JSON.stringify(parts.map(({ name }, i) => (partFiles[i] ? { name, file: partFiles[i], sung: true } : { name })));
+  // The voice that sings them (the player credits it), when the manifest names one; REMY otherwise.
+  const voice = manifest.voice;
+  if (voice != null && !(typeof voice === "string" && /^[A-Za-z][A-Za-z0-9 ]{0,30}$/.test(voice))) throw new Error(`bad voice for ${slug}`);
+  const sungAs = (file) => ({ file, sung: true, ...(voice ? { voice } : {}) });
+  const partsJson = JSON.stringify(parts.map(({ name }, i) => (partFiles[i] ? { name, ...sungAs(partFiles[i]) } : { name })));
   const publishedAt = date.toISOString().replace(/\.\d+Z$/, "Z");
   // The manifest in R2 carries the same facts as the row, as song-app writes it.
   const r2Manifest = { slug, title, choir, version, score: "score.musicxml", timing: "timing.json",
