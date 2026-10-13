@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
-  carriedSettings, hasSungParts, carrySettings, credits, FLAG_PROBLEMS, getJson, postJson, problemLabels, Refused, remembered,
+  carriedSettings, hasSungParts, sungCredit, carrySettings, credits, FLAG_PROBLEMS, getJson, postJson, problemLabels, Refused, remembered,
   rememberSong, songMemory, validRate, type FlagProblem, type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
@@ -752,9 +752,9 @@ function onPointerUp(event: PointerEvent) {
             <span v-if="credits(song)" class="info-credits">{{ credits(song) }}</span>
             <span class="info-meta">Tahti {{ bar }} / {{ barCount }} ·
               <span data-testid="time">{{ clock(now) }}</span> / {{ clock(duration) }}</span>
-            <!-- REMY's terms: credit the voice wherever its singing plays (AGENTS.md). -->
+            <!-- The voice's terms: credit it wherever its singing plays (AGENTS.md). -->
             <span v-if="switching && sound === 'sung'" class="info-credits sung-loading">Ladataan laulua…</span>
-            <span v-else-if="playerKind === 'sung'" class="info-credits sung-credit">Tekoälyn laulama · Ääni: REMY, UTAU French Resources (Hisa!)</span>
+            <span v-else-if="playerKind === 'sung'" class="info-credits sung-credit">{{ sungCredit(song.parts) }}</span>
           </div>
           <button type="button" class="own" aria-label="Vaihda oma stemma" @click="askPart = true">
             <span class="own-tag">Oma</span><span class="own-name">{{ song.parts[myPart]?.name }}</span></button>

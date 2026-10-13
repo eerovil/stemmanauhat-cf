@@ -23,8 +23,9 @@ D1 for the per-choir email allow-lists, Google sign-in). Read README.md first.
   `"sung": true`; rows from before #36 list piano MP3s under the same names, which are not
   singing; AI-sung with the REMY DiffSinger voice) offers "Ääni: Piano / Laulu" in
   Säädöt; the piano stays the default and the choice carries from song to song (Eero, 2026-10-13).
-  The sung parts play on one Web Audio clock (`player/sung.ts`). REMY's terms require a credit:
-  keep "Ääni: REMY, UTAU French Resources (Hisa!)" visible whenever the sung parts play (it is in
+  The sung parts play on one Web Audio clock (`player/sung.ts`). Each voice's terms require a credit:
+  keep "Ääni: <voice>, <its makers>" (`sungCredit`, `VOICE_CREDITS` in `api.ts`; REMY for the men's
+  songs, LYSE for the women's, named per song by the manifest's `"voice"`) visible whenever the sung parts play (it is in
   the dock's info, under the bar and time).
 
 ## Tests
