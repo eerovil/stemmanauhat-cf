@@ -76,7 +76,9 @@ test("choosing Piano while the singing loads keeps the piano", async ({ page }) 
   await expect(page.locator(".dock .sung-loading")).toHaveCount(0);
 });
 
-test("switching between the piano and the sung parts keeps the place", async ({ page }) => {
+test("switching between the piano and the sung parts keeps the place, and the piano plays again", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/c/public/laulettu");
   await choosePartIfAsked(page, "Tenori");
   await page.getByRole("button", { name: "Selvä" }).click();
@@ -89,6 +91,12 @@ test("switching between the piano and the sung parts keeps the place", async ({ 
   await page.getByRole("group", { name: "Ääni" }).getByRole("button", { name: "Piano" }).click();
   await expect(gains(page)).toHaveAttribute("data-player", "midi");
   await expect(page.locator(".info-meta")).toContainText("Tahti 3 / 4");
+  // The second piano on the page loads its sound and plays (it once got a detached buffer).
+  await page.getByRole("button", { name: "Sulje säädöt" }).click();
+  await page.getByRole("button", { name: "Soita" }).click();
+  await expect(page.getByRole("button", { name: "Tauko" })).toHaveAttribute("data-sounding", "1", { timeout: 10_000 });
+  await page.getByRole("button", { name: "Tauko" }).click();
+  expect(errors).toEqual([]);
 });
 
 test("an old row whose piano MP3s are in R2 is not offered as sung, and shows no singing credit", async ({ page }) => {

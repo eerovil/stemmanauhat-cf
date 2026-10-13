@@ -1,4 +1,11 @@
 import { CEILING_DB } from "./midi";
+
+/**
+ * The sung parts' boost before the limiter: the renders peak near −2 dB and sound
+ * quieter than the piano, which gets +27 dB into the same limiter (Eero, 2026-10-13:
+ * "make it a bit louder"). The limiter keeps the peaks under CEILING_DB.
+ */
+export const SUNG_GAIN = 10 ** (6 / 20);
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import type { FromWorklet, ToWorklet } from "./sung-worklet";
 import workletUrl from "./sung-worklet?worker&url";
@@ -12,7 +19,7 @@ import workletUrl from "./sung-worklet?worker&url";
  * all of them at a single position, so one sample clock drives them all at any
  * tempo (stretched without changing the pitch, as the piano's tempo is); and
  * the parts' gains never add up to more than 1, so the mix is never louder
- * than one part at full scale (the limiter after it is only a guard).
+ * than one part at full scale; then SUNG_GAIN lifts it and the limiter holds the peaks.
  */
 export class SungPlayer {
   onEnded: () => void = () => {};
@@ -43,7 +50,9 @@ export class SungPlayer {
     limiter.release.value = 0.15;
     this.meter = context.createAnalyser();
     this.meter.fftSize = this.samples.length;
-    node.connect(limiter).connect(this.meter).connect(context.destination);
+    const boost = context.createGain();
+    boost.gain.value = SUNG_GAIN;
+    node.connect(boost).connect(limiter).connect(this.meter).connect(context.destination);
     node.port.onmessage = (event: MessageEvent<FromWorklet>) => this.receive(event.data);
     // The worklet gets each part's samples once (the decoded buffers are only
     // read here, so their channel data can be given away).

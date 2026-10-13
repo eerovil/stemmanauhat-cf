@@ -110,7 +110,9 @@ export class MidiPlayer {
     const synth = new WorkletSynthesizer(context);
     await synth.isReady;
     log("Ladataan pianoa…");
-    await synth.soundBankManager.addSoundBank(await soundfont, "piano");
+    // A copy each time: the synth hands the buffer to its worklet, which detaches it, and a
+    // second piano on the same page (Ääni back from Laulu, the next song) would get nothing.
+    await synth.soundBankManager.addSoundBank((await soundfont).slice(0), "piano");
 
     const channels = partChannels(BasicMIDI.fromArrayBuffer(midiBuffer.slice(0)), partNames);
     const seq = new Sequencer(synth, { skipToFirstNoteOn: false });
