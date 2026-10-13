@@ -22,6 +22,13 @@ test("the piano is the default; Säädöt's Laulu plays the sung parts, and the 
   // REMY's credit stays in the dock while the singing plays, with Säädöt closed too.
   await page.getByRole("button", { name: "Sulje säädöt" }).click();
   await expect(page.locator(".dock .sung-credit")).toContainText("Ääni: REMY");
+  // The fourth line grows the dock: the title and the credit are whole inside it.
+  const row = (await page.locator(".dock-row").boundingBox())!;
+  for (const line of [page.locator(".info-title"), page.locator(".dock .sung-credit")]) {
+    const box = (await line.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(row.y);
+    expect(box.y + box.height).toBeLessThanOrEqual(row.y + row.height + 0.5);
+  }
   expect(parts.sort()).toEqual([
     "200 /files/public/laulettu/20261009T120000Z/parts/1-Tenori.mp3",
     "200 /files/public/laulettu/20261009T120000Z/parts/2-Basso.mp3",
