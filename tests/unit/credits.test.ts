@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { credits, listCredits } from "../../src/client/api";
+import { credits, hasSungParts, listCredits } from "../../src/client/api";
 
 describe("credits", () => {
   it("names who wrote the song, leaving out what is not known", () => {
@@ -20,5 +20,15 @@ describe("listCredits", () => {
     expect(listCredits({ lyricist: "B", arranger: "C" })).toBe("sov. C");
     expect(listCredits({ lyricist: "B" })).toBe("");
     expect(listCredits({})).toBe("");
+  });
+});
+
+describe("hasSungParts", () => {
+  it("is true only when every part has an MP3 marked sung", () => {
+    expect(hasSungParts([{ name: "T", file: "parts/1-T.mp3", sung: true }, { name: "B", file: "parts/2-B.mp3", sung: true }])).toBe(true);
+    expect(hasSungParts([{ name: "T", file: "parts/1-T.mp3", sung: true }, { name: "B", file: "parts/2-B.mp3" }])).toBe(false);
+    expect(hasSungParts([{ name: "T", file: "parts/1-T.mp3" }])).toBe(false);
+    expect(hasSungParts([{ name: "T" }])).toBe(false);
+    expect(hasSungParts([])).toBe(false);
   });
 });

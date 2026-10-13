@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { getJson, listCredits, postForm, postJson, Refused, remembered, type Me, type Setlist, type SongOrder, type SongRequest,
+import { getJson, hasSungParts, listCredits, postForm, postJson, Refused, remembered, type Me, type Setlist, type SongOrder, type SongRequest,
   songListKey, type SongSummary } from "../api";
+import Icon from "../components/Icon.vue";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string }>();
@@ -276,7 +277,7 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       <ul v-if="shown.length || !others.length" class="songs">
         <li v-for="s in shown" :key="s.slug">
           <span v-if="s.place" class="place">{{ s.place }}.</span>
-          <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}</span>
+          <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}<span v-if="hasSungParts(s.parts)" class="sung-mark" role="img" aria-label="Laulettu versio" title="Laulettu versio"><Icon name="voice" :size="15" /></span></span>
             <span class="credits">{{ listCredits(s) }}</span></a>
           <span v-if="newest.has(s.slug)" class="badge">Uusi</span>
           <span v-if="order === 'date' && !setlist" class="date">{{ day(s.published_at) }}</span>
@@ -286,7 +287,7 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
         <h2 class="others-heading">Muut kappaleet</h2>
         <ul class="songs others">
           <li v-for="s in others" :key="s.slug">
-            <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}</span>
+            <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}<span v-if="hasSungParts(s.parts)" class="sung-mark" role="img" aria-label="Laulettu versio" title="Laulettu versio"><Icon name="voice" :size="15" /></span></span>
               <span class="credits">{{ listCredits(s) }}</span></a>
             <span v-if="newest.has(s.slug)" class="badge">Uusi</span>
           </li>

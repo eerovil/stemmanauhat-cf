@@ -187,3 +187,14 @@ test("a song that lists MP3s it does not have plays the piano", async ({ page })
   await expect(gains(page)).toHaveAttribute("data-player", "midi");
   await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.160");
 });
+
+test("the song list marks the songs that can be heard sung, and only those", async ({ page }) => {
+  await page.goto("/c/public");
+  const row = (title: string) => page.locator(".songs li", { has: page.getByRole("link", { name: title }) });
+  await expect(row("Laulettu laulu").getByRole("img", { name: "Laulettu versio" })).toBeVisible();
+  await expect(row("Esittelylaulu").locator(".sung-mark")).toHaveCount(0);
+  // An old row whose parts are piano MP3s is not marked.
+  await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  await expect(row("Iltalaulu")).toBeVisible();
+  await expect(row("Iltalaulu").locator(".sung-mark")).toHaveCount(0);
+});

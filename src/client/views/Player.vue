@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
-  carriedSettings, carrySettings, credits, FLAG_PROBLEMS, getJson, postJson, problemLabels, Refused, remembered,
+  carriedSettings, hasSungParts, carrySettings, credits, FLAG_PROBLEMS, getJson, postJson, problemLabels, Refused, remembered,
   rememberSong, songMemory, validRate, type FlagProblem, type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
@@ -94,7 +94,7 @@ const sound = ref<"piano" | "sung">("piano");
  */
 const hasSung = computed(() => {
   const parts = song.value?.parts ?? [];
-  return !wantsFilePlayback() && parts.length > 0 && parts.every((p) => p.sung === true && (p.file ?? "").endsWith(".mp3"));
+  return !wantsFilePlayback() && hasSungParts(parts);
 });
 /** What the Ääni choice shows: what plays, not what was asked for (a sung load can fall back to the piano). */
 const shownSound = computed(() => (switching.value ? sound.value : playerKind.value === "sung" ? "sung" : "piano"));

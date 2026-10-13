@@ -35,6 +35,11 @@ export interface SongSummary {
   arranger?: string | null;
 }
 
+/** Whether every part has a sung MP3 marked `sung` (rows from before #36 list piano MP3s). */
+export function hasSungParts(parts: Part[]): boolean {
+  return parts.length > 0 && parts.every((p) => p.sung === true && (p.file ?? "").endsWith(".mp3"));
+}
+
 type Credited = Pick<SongSummary, "composer" | "lyricist" | "arranger">;
 
 /** "säv. X · san. Y · sov. Z", leaving out what is not known; "" when nothing is. The player's line. */
