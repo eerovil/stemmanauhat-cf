@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "stemmanauhat",
+  "name": "rehearse",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-09-01",
   "observability": { "enabled": true },
@@ -10,9 +10,13 @@
   // PUBLIC_HOST is optional: a name of your own that a proxy forwards to
   // WORKER_HOST (this copy's VPS). Leave it out if there is none.
   "vars": {
-    "WORKER_HOST": "stemmanauhat.eerovil.workers.dev",
-    "PUBLIC_HOST": "stemmanauhat.vilpponen.fi"
+    "WORKER_HOST": "rehearse.joyweshare.org"
   },
+
+  // JoyWeShare Rehearse answers at this name directly: a Cloudflare custom
+  // domain on the joyweshare.org zone, whose DNS record and certificate
+  // Cloudflare makes itself. No proxy, so no PUBLIC_HOST.
+  "routes": [{ "pattern": "rehearse.joyweshare.org", "custom_domain": true }],
 
   // The Vue front end, built by `vite build`. The Worker runs first on every
   // request so that pages, files and the old ?user= links all pass its access
@@ -29,7 +33,7 @@
       "binding": "DB",
       "database_name": "stemmanauhat",
       // Written by scripts/cloudflare-setup.sh. Not a secret.
-      "database_id": "b3d80c7d-0fb7-45a2-b6f6-f7311556b953",
+      "database_id": "b846d799-f829-4bfc-85a1-1cd28c6d0590",
       "migrations_dir": "migrations"
     }
   ],
