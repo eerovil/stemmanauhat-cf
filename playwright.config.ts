@@ -42,7 +42,9 @@ export default defineConfig({
       timeout: 15_000,
     },
     {
-      command: `node tests/support/seed.mjs && node_modules/.bin/vite build && node_modules/.bin/wrangler dev --ip 127.0.0.1 --port ${port} ${varFlags}`,
+      // --local-upstream keeps the requests on this address: with a custom domain under
+      // routes in wrangler.jsonc, wrangler dev would present them as that domain.
+      command: `node tests/support/seed.mjs && node_modules/.bin/vite build && node_modules/.bin/wrangler dev --ip 127.0.0.1 --port ${port} --local-upstream 127.0.0.1:${port} ${varFlags}`,
       url: `${origin}/health`,
       reuseExistingServer: false,
       timeout: 180_000,
