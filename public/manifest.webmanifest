@@ -1,8 +1,8 @@
 {
-  "name": "Stemmanauhat",
-  "short_name": "Stemmanauhat",
-  "description": "Kuorojen harjoitusnauhat: nuotti ja oma stemma.",
-  "lang": "fi",
+  "name": "JoyWeShare Rehearse",
+  "short_name": "Rehearse",
+  "description": "Practice tracks for choirs: the score and your own part.",
+  "lang": "en",
   "id": "/",
   "start_url": "/",
   "scope": "/",

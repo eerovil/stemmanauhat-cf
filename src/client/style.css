@@ -181,7 +181,7 @@ footer { margin-top: 1.5rem; }
 .segmented.modes button { height: 34px; font-size: 13.5px; white-space: nowrap; padding: 0 2px; border-radius: 999px; }
 .segmented.two { grid-template-columns: 1fr 1fr; width: 180px; height: 40px; }
 .segmented.two button { font-size: 14px; border-radius: 999px; }
-/* The EN | FI switch: small, beside the page's other links. */
+/* The EN | FI switch (JoyWeShare): small, beside the page's other links. */
 .segmented.language { width: 96px; height: 32px; }
 .segmented.language button { min-height: 0; padding: 0; font-size: 13px; }
 .narrow .segmented.language { margin: 1.25rem auto 0; }

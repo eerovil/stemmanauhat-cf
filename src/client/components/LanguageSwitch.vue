@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The EN | FI switch: the choice is remembered on this device.
+// The EN | FI switch (JoyWeShare): the choice is remembered on this device.
 import { lang, LANGS, setLang, t } from "../i18n";
 </script>
 

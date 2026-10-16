@@ -1,6 +1,6 @@
 /**
- * The messages a singer or admin can see from the server, in English and Finnish.
- * The page says which language it shows in the X-Lang header
+ * The messages a singer or admin can see from the server, in English and Finnish
+ * (JoyWeShare). The page says which language it shows in the X-Lang header
  * (src/client/api.ts); without it, Finnish, as before.
  */
 export type ServerLang = "fi" | "en";

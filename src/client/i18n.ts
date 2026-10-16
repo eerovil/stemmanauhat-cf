@@ -1,5 +1,5 @@
 /**
- * The site's words in English and Finnish.
+ * The site's words in English and Finnish (JoyWeShare).
  *
  * The Finnish is the site's own text, copied as it was; the English is written for
  * US use. Part names, song titles and the AI voices' names are not translated.
@@ -46,7 +46,9 @@ const fi = {
     other: "Muu",
   },
 
-  homeOpenHint: "Tekijänoikeusvapaita kuorolauluja kaikille. Valitse laulu ja harjoittele omaa stemmaasi.",
+  // JoyWeShare: replaces his "Tekijänoikeusvapaita kuorolauluja kaikille…" (copyright-free
+  // songs), a claim this site does not make; Don's wording, 2026-10-15.
+  homeOpenHint: "Harjoittele omaa stemmaasi omin päin, milloin vain.",
   homeMembersHint: "Kuoron jäsen? Kirjaudu, niin näet oman kuorosi laulut.",
   signedInAs: (email: string) => `Kirjautuneena: ${email}`,
 
@@ -194,7 +196,7 @@ const fi = {
 export type Messages = typeof fi;
 
 const en: Messages = {
-  siteName: "Stemmanauhat",
+  siteName: "JoyWeShare Rehearse",
   language: "Language",
   signOut: "Sign out",
   signInGoogle: "Sign in with Google",
@@ -224,7 +226,7 @@ const en: Messages = {
     other: "Other",
   },
 
-  homeOpenHint: "Choir songs free of copyright, for everyone. Choose a song and practice your part.",
+  homeOpenHint: "Rehearse your part on your own, anytime.",
   homeMembersHint: "In a choir? Sign in to see your choir's songs.",
   signedInAs: (email: string) => `Signed in as ${email}`,
 
