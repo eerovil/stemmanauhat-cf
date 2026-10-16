@@ -137,11 +137,11 @@ describe("SungPlayer", () => {
     expect(port.sent.filter((m) => m.type === "seek")).toHaveLength(4);
   });
 
-  it("mixes with the piano's rule, scaled so the parts never add up to more than 1, in the worklet", async () => {
+  it("mixes with the piano's rule, scaled so the parts' power never adds up to more than 1, in the worklet", async () => {
     const { p, port } = await player();
     const gains = () => (port.sent.filter((m) => m.type === "gains").at(-1) as { gains: number[] }).gains;
     expect(p.levels().map((g) => Number(g.toFixed(3)))).toEqual([1, 0.16]);
-    const total = () => p.effectiveLevels().reduce((a, b) => a + b, 0);
+    const total = () => p.effectiveLevels().reduce((a, b) => a + b * b, 0);
     expect(total()).toBeCloseTo(1);
     expect(p.effectiveLevels()[0]! / p.effectiveLevels()[1]!).toBeCloseTo(1 / 0.16);
     expect(gains()).toEqual(p.effectiveLevels());
@@ -149,11 +149,27 @@ describe("SungPlayer", () => {
     expect(p.levels().map((g) => Number(g.toFixed(3)))).toEqual([0.16, 1]);
     p.setOthers(1);
     expect(p.levels()[0]).toBeCloseTo(p.levels()[1]!);
-    expect(total()).toBeCloseTo(1);
+    expect(total()).toBeLessThanOrEqual(1);
     p.setOwn(false);
     expect(p.effectiveLevels()[1]).toBe(0);
     expect(total()).toBeLessThanOrEqual(1);
     expect(gains()).toEqual(p.effectiveLevels());
+  });
+
+  it("keeps a song with many parts about as loud as one with few", async () => {
+    const context = new FakeContext();
+    vi.stubGlobal("AudioWorkletNode", FakeWorkletNode);
+    vi.stubGlobal("fetch", async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([6]).buffer }));
+    const urls = Array.from({ length: 8 }, (_, i) => `/x/parts/${i + 1}-P.mp3`);
+    const p = await SungPlayer.create(urls, () => {}, context as unknown as AudioContext);
+    const power = () => p.effectiveLevels().reduce((a, b) => a + b * b, 0);
+    expect(p.effectiveLevels()[0]).toBeGreaterThan(0.9);    // your own part: was 0.47 with eight parts
+    expect(power()).toBeCloseTo(1);
+    p.setOthers(1);                                          // all eight parts alike
+    const g = p.effectiveLevels();
+    expect(g.every((x) => Math.abs(x - g[0]!) < 1e-9)).toBe(true);
+    expect(g[0]!).toBeGreaterThan(2 / 8);                    // was 1/8 each
+    expect(power()).toBeLessThanOrEqual(1);
   });
 
   it("lifts the mix by SUNG_GAIN into the limiter, which holds the peaks under the ceiling", async () => {

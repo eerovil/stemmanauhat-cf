@@ -136,8 +136,8 @@ test("a song with a sung MP3 per part plays those together, and the cursor follo
   await choosePartIfAsked(page, "Tenori");
   await expect(gains(page)).toHaveAttribute("data-player", "sung");
   await page.getByRole("button", { name: "Selvä" }).click();
-  // The same balance rule as the piano's; the parts' gains add up to at most 1.
-  await expect(gains(page)).toHaveAttribute("data-gains", "0.862 0.138");
+  // The same balance rule as the piano's; the parts' power (squared gains) adds up to at most 1.
+  await expect(gains(page)).toHaveAttribute("data-gains", "0.987 0.158");
   await playAndSeeCursorMove(page);
 
   // Seeking and the tempo keep the one clock: the time shown follows.
