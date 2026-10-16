@@ -1,6 +1,7 @@
 import { BasicMIDI } from "spessasynth_core";
 import { Sequencer, WorkletSynthesizer } from "spessasynth_lib";
 import processorUrl from "spessasynth_lib/dist/spessasynth_processor.min.js?url";
+import { words } from "../i18n";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 
 /**
@@ -109,7 +110,7 @@ export class MidiPlayer {
     ]);
     const synth = new WorkletSynthesizer(context);
     await synth.isReady;
-    log("Ladataan pianoa…");
+    log(words().loadingPiano);
     // A copy each time: the synth hands the buffer to its worklet, which detaches it, and a
     // second piano on the same page (Ääni back from Laulu, the next song) would get nothing.
     await synth.soundBankManager.addSoundBank((await soundfont).slice(0), "piano");
