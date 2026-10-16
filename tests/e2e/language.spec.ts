@@ -24,8 +24,8 @@ test("an English browser gets the song list in English, with US dates and Englis
   await expect(page.getByText("You came in with the choir's link.")).toBeVisible();
 
   const titles = page.locator(".songs .song-title");
-  // English puts Ä with the A's; Finnish puts it after Z.
-  await expect(titles).toHaveText(["Alpha", "Äiti", "Zeta"]);
+  // English sorts Ä as A (so Äiti before Alpha); Finnish puts it after Z.
+  await expect(titles).toHaveText(["Äiti", "Alpha", "Zeta"]);
   const order = page.getByRole("group", { name: "Order" });
   await order.getByRole("button", { name: "Newest" }).click();
   await expect(page.locator(".songs .date")).toHaveText(["10/5/2026", "9/1/2026", "8/1/2026"]);
