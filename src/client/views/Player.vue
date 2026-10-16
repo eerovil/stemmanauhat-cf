@@ -693,8 +693,8 @@ function onPointerUp(event: PointerEvent) {
           <div v-else-if="sound === 'sung' && playerKind !== 'sung'" class="mode-hint">{{ t.singingFailed }}</div>
         </template>
         <div v-if="mode !== 'solo'" class="others-row">
-          <span class="row-label">Muut stemmat</span>
-          <input type="range" min="0" max="1" step="0.01" :value="others" aria-label="Muiden stemmojen voimakkuus"
+          <span class="row-label">{{ t.otherParts }}</span>
+          <input type="range" min="0" max="1" step="0.01" :value="others" :aria-label="t.otherPartsVolume"
             @input="onOthersSlider(Number(($event.target as HTMLInputElement).value))" />
           <span class="others-value">{{ Math.round(gainOf(others) * 100) }} %</span>
         </div>
