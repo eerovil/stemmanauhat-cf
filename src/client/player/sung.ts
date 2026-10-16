@@ -18,8 +18,8 @@ import workletUrl from "./sung-worklet?worker&url";
  * AudioContext and handed to one audio worklet (sung-worklet.ts), which reads
  * all of them at a single position, so one sample clock drives them all at any
  * tempo (stretched without changing the pitch, as the piano's tempo is); and
- * the parts' gains never add up to more than 1, so the mix is never louder
- * than one part at full scale; then SUNG_GAIN lifts it and the limiter holds the peaks.
+ * the parts' gains are scaled by their combined power, so a song with eight parts is
+ * about as loud as one with two; then SUNG_GAIN lifts it and the limiter holds the peaks.
  */
 export class SungPlayer {
   onEnded: () => void = () => {};
@@ -175,14 +175,16 @@ export class SungPlayer {
   }
 
   /**
-   * The parts' gains from the same rule as the piano's, scaled so they add up to
-   * at most 1: a mix is then never louder than its loudest part alone, and these
-   * parts peak at -6 dB, so the sum stays well under full scale.
+   * The parts' gains from the same rule as the piano's, scaled so their squares add up
+   * to at most 1. Singing voices add up by power, not by amplitude: scaling by the plain
+   * sum (as before) made a song quieter the more parts it had, eight parts at 1/8 each
+   * (Eero, "Lempilintu", eeron-omat-taskit#45). Where the parts sing in unison and add
+   * up louder, the limiter holds the peaks.
    */
   private applyGains(): void {
     const levels = this.levels();
-    const total = levels.reduce((a, b) => a + b, 0);
-    const scale = total > 1 ? 1 / total : 1;
+    const power = levels.reduce((a, b) => a + b * b, 0);
+    const scale = power > 1 ? 1 / Math.sqrt(power) : 1;
     this.applied = levels.map((g) => g * scale);
     this.send({ type: "gains", gains: this.applied });
   }
