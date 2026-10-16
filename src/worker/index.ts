@@ -5,6 +5,7 @@ import { AUTHORIZE_URL, TOKEN_URL, authorizeUrl, exchangeCode, normalizeEmail, r
 import { joinUrl, linkKey } from "./links";
 import { publicOrigin } from "./origin";
 import { isPdf, parseFlag, parseRequest, PDF_MAX_BYTES, requestPdfKey } from "./requests";
+import { requestLang, serverMessage, type ServerLang } from "./messages";
 import { newPassphraseRecord, passphraseMatches } from "./passphrase";
 import { clearSessionCookie, readSession, sessionCookie, type Session } from "./session";
 import { base64UrlEncode, cookieValue, readValue, signValue } from "./signing";
@@ -464,7 +465,7 @@ async function adminLink(ctx: Ctx): Promise<Response> {
     return json({ link: true, url: joinUrl(publicOrigin(ctx.url, ctx.request.headers, ctx.env), choir, key) });
   }
   const passphrase = typeof body.passphrase === "string" ? body.passphrase.trim() : "";
-  if (passphrase.length < 6) return json({ error: "Salasanan pitää olla vähintään 6 merkkiä." }, 400);
+  if (passphrase.length < 6) return json({ error: serverMessage(requestLang(ctx.request)).passphraseShort }, 400);
   const record = await newPassphraseRecord(passphrase);
   await db.prepare(
     `INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES (?1, ?2, ?3, ?4, 1)
@@ -480,15 +481,16 @@ const SETLIST_SONGS_MAX = 200;
  * A setlist as an admin sent it: a name and the choir's songs in order.
  * Returns the error to show instead when it is not one.
  */
-export function parseSetlist(body: Record<string, unknown>, choirSlugs: Set<string>):
+export function parseSetlist(body: Record<string, unknown>, choirSlugs: Set<string>, lang: ServerLang = "fi"):
   { name: string; songs: string[] } | { error: string } {
+  const say = serverMessage(lang);
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name || name.length > SETLIST_NAME_MAX) return { error: `Nimen pitää olla 1–${SETLIST_NAME_MAX} merkkiä.` };
+  if (!name || name.length > SETLIST_NAME_MAX) return { error: say.setlistNameLength(SETLIST_NAME_MAX) };
   const songs = body.songs;
   if (!Array.isArray(songs) || songs.length > SETLIST_SONGS_MAX
     || !songs.every((slug) => typeof slug === "string" && choirSlugs.has(slug))
     || new Set(songs).size !== songs.length) {
-    return { error: "Kappalelista ei kelpaa." };
+    return { error: say.badSongList };
   }
   return { name, songs };
 }
@@ -514,7 +516,7 @@ async function adminSetlists(ctx: Ctx): Promise<Response> {
     return json({ deleted: id });
   }
   const { results } = await db.prepare("SELECT slug FROM songs WHERE choir = ?").bind(choir).all<{ slug: string }>();
-  const setlist = parseSetlist(body, new Set(results.map((r) => r.slug)));
+  const setlist = parseSetlist(body, new Set(results.map((r) => r.slug)), requestLang(ctx.request));
   if ("error" in setlist) return json(setlist, 400);
   const at = new Date(ctx.now * 1000).toISOString();
   if (id === null) {
@@ -553,12 +555,12 @@ async function sendRequest(ctx: Ctx): Promise<Response> {
   const file = form.get("pdf");
   let pdf: Uint8Array | null = null;
   if (file instanceof File && file.size > 0) {
-    if (file.size > PDF_MAX_BYTES) return json({ error: "PDF on liian suuri (yli 20 Mt)." }, 400);
+    if (file.size > PDF_MAX_BYTES) return json({ error: serverMessage(requestLang(ctx.request)).pdfTooBig }, 400);
     pdf = new Uint8Array(await file.arrayBuffer());
-    if (!isPdf(pdf)) return json({ error: "Liite ei ole PDF." }, 400);
+    if (!isPdf(pdf)) return json({ error: serverMessage(requestLang(ctx.request)).notPdf }, 400);
   }
   const fields = Object.fromEntries([...form.entries()].filter(([, v]) => typeof v === "string"));
-  const request = parseRequest(fields, pdf !== null);
+  const request = parseRequest(fields, pdf !== null, requestLang(ctx.request));
   if ("error" in request) return json(request, 400);
 
   const db = ctx.env.DB;
@@ -604,7 +606,7 @@ async function sendFlag(ctx: Ctx, choir: string, slug: string): Promise<Response
     return json({ error: "bad JSON" }, 400);
   }
   if (typeof body !== "object" || body === null) return json({ error: "bad JSON" }, 400);
-  const flag = parseFlag(body as Record<string, unknown>);
+  const flag = parseFlag(body as Record<string, unknown>, requestLang(ctx.request));
   if ("error" in flag) return json(flag, 400);
   const row = await db.prepare(
     `INSERT INTO song_requests (choir, title, note, requester, created_at, song, bar, problems, part)

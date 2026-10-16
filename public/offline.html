@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="fi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#2a5fab">
-<title>Ei verkkoyhteyttä · Stemmanauhat</title>
+<title>No connection · JoyWeShare Rehearse</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1.5rem;
@@ -21,9 +21,11 @@
 <body>
 <main>
   <img src="/icon-192.png" alt="">
-  <h1>Ei verkkoyhteyttä</h1>
-  <p>Stemmanauhat tarvitsee verkkoyhteyden, jotta laulut ja nuotit latautuvat.</p>
-  <button type="button" onclick="location.reload()">Yritä uudelleen</button>
+  <h1>No connection</h1>
+  <p>JoyWeShare Rehearse needs a connection to load the songs and scores.</p>
+  <h1 lang="fi">Ei verkkoyhteyttä</h1>
+  <p lang="fi">Stemmanauhat tarvitsee verkkoyhteyden, jotta laulut ja nuotit latautuvat.</p>
+  <button type="button" onclick="location.reload()">Try again · Yritä uudelleen</button>
 </main>
 <script>window.addEventListener("online", function () { location.reload(); });</script>
 </body>

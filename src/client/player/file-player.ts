@@ -1,3 +1,4 @@
+import { words } from "../i18n";
 import { BasicMIDI } from "spessasynth_core";
 import { CEILING_DB, OUTPUT_GAIN, partChannels, SOUNDFONT_URL } from "./midi";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
@@ -61,10 +62,10 @@ export class FilePlayer {
     const channels = partChannels(BasicMIDI.fromArrayBuffer(midi!.slice(0)), partNames);
     const worker = new Worker(new URL("./render-worker.ts", import.meta.url), { type: "module" });
     const player = new FilePlayer(worker, channels.length);
-    player.progress = (f) => log(`Valmistellaan ääntä… ${Math.round(f * 100)} %`);
+    player.progress = (f) => log(`${words().preparingSound} ${Math.round(f * 100)} %`);
     const init: ToWorker = { type: "init", soundfont: soundfont!, midi: midi!, sampleRate: SAMPLE_RATE, partChannels: channels };
     worker.postMessage(init, [soundfont!, midi!]);
-    log("Valmistellaan ääntä…");
+    log(words().preparingSound);
     // Only render here. The first file is mixed once the player has set the
     // singer's part and mix (straight after this returns), so playback never
     // starts on a default mix that is swapped out a moment later.
