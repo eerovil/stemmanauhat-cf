@@ -31,7 +31,7 @@ test("Chromium can install the site as an app", async ({ page, context, request 
   const processed = await cdp.send("Page.getAppManifest");
   const origin = new URL(page.url()).origin;
   expect(processed.errors ?? []).toEqual([]);
-  expect(processed.manifest?.name).toBe("Stemmanauhat");
+  expect(processed.manifest?.name).toBe("JoyWeShare Rehearse");
   expect(processed.manifest?.display).toMatch(/standalone/i);
   expect(processed.manifest?.startUrl).toBe(`${origin}/`);
   expect(processed.manifest?.scope).toBe(`${origin}/`);

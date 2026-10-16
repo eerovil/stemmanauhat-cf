@@ -38,9 +38,12 @@ describe("the phrase table", () => {
     expect(fi.added(3)).toBe("Lisätty 3.");
   });
 
-  it("keeps the home page's line, with its English translation", () => {
-    expect(MESSAGES.fi.homeOpenHint).toBe("Tekijänoikeusvapaita kuorolauluja kaikille. Valitse laulu ja harjoittele omaa stemmaasi.");
-    expect(MESSAGES.en.homeOpenHint).toBe("Choir songs free of copyright, for everyone. Choose a song and practice your part.");
+  it("attributes accurately, in either language", () => {
+    expect(MESSAGES.en.homeOpenHint).toBe("Rehearse your part on your own, anytime.");
+    expect(MESSAGES.fi.homeOpenHint).toBe("Harjoittele omaa stemmaasi omin päin, milloin vain.");
+    for (const lang of ["fi", "en"] as const) {
+      expect(JSON.stringify(MESSAGES[lang])).not.toMatch(/copyright|tekijänoikeus/i);
+    }
   });
 });
 

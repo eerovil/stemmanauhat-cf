@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PASSPHRASE } from "./helpers";
 
-// The site in English and Finnish. The other browser tests run with a
+// JoyWeShare: the site in English and Finnish. The other browser tests run with a
 // Finnish browser (playwright.config.ts); these run with an English one.
 test.use({ locale: "en-US" });
 
@@ -18,7 +18,7 @@ test("an English browser gets the song list in English, with US dates and Englis
   });
   await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
   await expect(page).toHaveURL(/\/c\/jm$/);
-  await expect(page).toHaveTitle("Stemmanauhat");
+  await expect(page).toHaveTitle("JoyWeShare Rehearse");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("searchbox", { name: "Search for a song" })).toBeVisible();
   await expect(page.getByText("You came in with the choir's link.")).toBeVisible();
@@ -56,7 +56,7 @@ test("the player's part question and settings are in English", async ({ page }) 
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "Which part do you sing?" })).toBeVisible();
   await dialog.getByRole("button", { name: "Tenori", exact: true }).click();
-  await expect(page).toHaveTitle("Kokeilulaulu – Stemmanauhat");
+  await expect(page).toHaveTitle("Kokeilulaulu – JoyWeShare Rehearse");
   await page.getByRole("button", { name: "Got it" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const listen = page.getByRole("group", { name: "How you listen" });
