@@ -36,6 +36,10 @@ describe("the phrase table", () => {
     expect(fi.settings).toBe("Säädöt");
     expect(fi.chooseYourPart).toBe("Valitse oma stemma");
     expect(fi.added(3)).toBe("Lisätty 3.");
+    expect(fi.otherParts).toBe("Muut stemmat");
+    expect(fi.otherPartsVolume).toBe("Muiden stemmojen voimakkuus");
+    expect(fi.loadingPiano).toBe("Ladataan pianoa…");
+    expect(fi.loadingParts).toBe("Ladataan stemmoja…");
   });
 
   it("keeps the home page's line, with its English translation", () => {

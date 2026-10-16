@@ -63,6 +63,8 @@ test("the player's part question and settings are in English", async ({ page }) 
   await expect(listen.getByRole("button", { name: "Mine up front" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Your part loud, the others softer")).toBeVisible();
   await expect(page.getByRole("button", { name: "Close settings" })).toBeVisible();
+  await expect(page.getByText("Other parts", { exact: true })).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Volume of the other parts" })).toBeVisible();
 });
 
 test("the server answers in the page's language", async ({ page }) => {
