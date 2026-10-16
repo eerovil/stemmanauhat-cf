@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
-  carriedSettings, hasSungParts, sungCredit, carrySettings, credits, FLAG_PROBLEMS, getJson, postJson, problemLabels, Refused, remembered,
+  carriedSettings, hasSungParts, sungCredit, carrySettings, credits, getJson, postJson, problemLabels, Refused, remembered,
   rememberSong, songMemory, validRate, type FlagProblem, type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
+import LanguageSwitch from "../components/LanguageSwitch.vue";
+import { t, words } from "../i18n";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
 import type { SungPlayer } from "../player/sung";
@@ -40,12 +42,9 @@ const sounding = ref(false);
 /** How the voices are mixed: the four ways singers practise (Eero, 2026-10-10). */
 const mode = ref<MixMode>("focus");
 const others = ref(DEFAULT_OTHERS);
-const MODES: { id: MixMode; label: string; hint: string }[] = [
-  { id: "focus", label: "Oma esillä", hint: "Oma stemma kovaa, muut hiljempaa" },
-  { id: "equal", label: "Tasan", hint: "Kaikki stemmat yhtä kovaa, kuin kuorossa" },
-  { id: "minus", label: "Ilman omaa", hint: "Oma stemma hiljaa: laula se itse" },
-  { id: "solo", label: "Vain oma", hint: "Pelkkä oma stemma" },
-];
+/** The four ways, with their words in the language shown now (src/client/i18n.ts). */
+const MODES = computed((): { id: MixMode; label: string; hint: string }[] =>
+  (["focus", "equal", "minus", "solo"] as const).map((id) => ({ id, ...t.value.modes[id] })));
 
 /**
  * Two ways to see the score: "Kaikki" is every staff that fits, on one line
@@ -122,7 +121,7 @@ onMounted(async () => {
     throw error;
   }
   const s = song.value;
-  document.title = `${s.title} – Stemmanauhat`;
+  document.title = `${s.title} – ${words().siteName}`;
   remembered.setLast(props.choir, props.slug);
 
   // The part: this song's, else the one usually sung in this choir (S1b falling back to S1), else
@@ -532,7 +531,7 @@ function startFlag() {
 async function sendFlag() {
   const f = flagging.value!;
   if (!f.problems.length && !f.note.trim()) {
-    flagError.value = "Valitse mikä on vialla tai kirjoita lisätietoja.";
+    flagError.value = words().flagNeedSomething;
     return;
   }
   const typed = String(f.bar).trim();
@@ -558,7 +557,7 @@ async function sendFlag() {
 
 /** "Tahti 12 · Väärä nuotti · the note": one open flag on the settings sheet. */
 function flagLine(f: Song["flags"][number]): string {
-  return [f.bar ? `Tahti ${f.bar}` : "", problemLabels(f.problems), f.note ?? ""].filter(Boolean).join(" · ");
+  return [f.bar ? `${words().bar} ${f.bar}` : "", problemLabels(f.problems), f.note ?? ""].filter(Boolean).join(" · ");
 }
 
 function dismissHint() {
@@ -641,10 +640,10 @@ function onPointerUp(event: PointerEvent) {
   <RefusedView v-if="refused" :status="refused" :email="me?.email" />
   <main v-else class="player" :class="{ 'one-line': singleLine }"
     :style="{ paddingBottom: `${dockHeight + (singleLine ? 0 : 16)}px` }">
-    <p v-if="loading" class="hint page">{{ loadingNote || "Ladataan…" }}</p>
+    <p v-if="loading" class="hint page">{{ loadingNote || t.loading }}</p>
     <p v-else-if="failure" class="error page" role="alert">
-      Kappaleen lataus epäonnistui: {{ failure }}
-      <button type="button" class="link" @click="reload">Yritä uudelleen</button>
+      {{ t.loadFailed }} {{ failure }}
+      <button type="button" class="link" @click="reload">{{ t.retry }}</button>
     </p>
 
     <template v-else-if="song">
@@ -660,38 +659,38 @@ function onPointerUp(event: PointerEvent) {
       <!-- A one-time hint: a small card above the dock, like the other sheets. -->
       <div v-if="showHint && !askPart && !sheetOpen && !flagging" class="hint-card" role="note" :style="{ bottom: `${dockHeight + 12}px` }">
         <ul>
-          <li v-if="singleLine"><Icon name="tap" :size="20" /><span><b>Napauta</b> nuottia: soita tai pysäytä</span></li>
-          <li v-else><Icon name="tap" :size="20" /><span><b>Napauta</b> nuottia: siirry siihen</span></li>
-          <li v-if="singleLine"><Icon name="scroll" :size="20" /><span><b>Vedä</b> nuottia sivulle: siirry</span></li>
+          <li v-if="singleLine"><Icon name="tap" :size="20" /><span><b>{{ t.tapWord }}</b>{{ t.tapPlay }}</span></li>
+          <li v-else><Icon name="tap" :size="20" /><span><b>{{ t.tapWord }}</b>{{ t.tapMove }}</span></li>
+          <li v-if="singleLine"><Icon name="scroll" :size="20" /><span><b>{{ t.dragWord }}</b>{{ t.dragMove }}</span></li>
         </ul>
-        <button type="button" @click="dismissHint">Selvä</button>
+        <button type="button" @click="dismissHint">{{ t.gotIt }}</button>
       </div>
 
       <!-- Säädöt: a sheet just above the dock; a tap on the dimmed score closes it. -->
       <div v-if="sheetOpen" class="backdrop" @click="closePanels"></div>
       <div v-if="sheetOpen" class="sheet" :style="{ bottom: `${dockHeight - 1}px` }">
         <div class="handle" aria-hidden="true"></div>
-        <ul v-if="song.flags.length" class="flags" aria-label="Ilmoitetut virheet">
-          <li v-for="f in song.flags" :key="f.id">Ilmoitettu virhe: {{ flagLine(f) }}</li>
+        <ul v-if="song.flags.length" class="flags" :aria-label="t.reportedProblems">
+          <li v-for="f in song.flags" :key="f.id">{{ t.reportedProblem }} {{ flagLine(f) }}</li>
         </ul>
-        <div class="section-label">Kuuntelu</div>
-        <div class="segmented modes" role="group" aria-label="Miten kuuntelet">
+        <div class="section-label">{{ t.listening }}</div>
+        <div class="segmented modes" role="group" :aria-label="t.howYouListen">
           <button v-for="m in MODES" :key="m.id" type="button" :class="{ on: mode === m.id }"
             :aria-pressed="mode === m.id" @click="setMode(m.id)">{{ m.label }}</button>
         </div>
         <div class="mode-hint">{{ MODES.find((m) => m.id === mode)?.hint }}</div>
         <template v-if="hasSung">
           <div class="setting">
-            <span class="row-label">Ääni</span>
-            <div class="segmented two" role="group" aria-label="Ääni">
+            <span class="row-label">{{ t.sound }}</span>
+            <div class="segmented two" role="group" :aria-label="t.sound">
               <button type="button" :class="{ on: shownSound === 'piano' }" :aria-pressed="shownSound === 'piano'"
-                @click="setSound('piano')">Piano</button>
+                @click="setSound('piano')">{{ t.piano }}</button>
               <button type="button" :class="{ on: shownSound === 'sung' }" :aria-pressed="shownSound === 'sung'"
-                @click="setSound('sung')">Laulu</button>
+                @click="setSound('sung')">{{ t.sung }}</button>
             </div>
           </div>
-          <div v-if="switching" class="mode-hint">Ladataan laulua…</div>
-          <div v-else-if="sound === 'sung' && playerKind !== 'sung'" class="mode-hint">Laulua ei saatu soimaan, soitetaan piano.</div>
+          <div v-if="switching" class="mode-hint">{{ t.loadingSinging }}</div>
+          <div v-else-if="sound === 'sung' && playerKind !== 'sung'" class="mode-hint">{{ t.singingFailed }}</div>
         </template>
         <div v-if="mode !== 'solo'" class="others-row">
           <span class="row-label">Muut stemmat</span>
@@ -700,68 +699,73 @@ function onPointerUp(event: PointerEvent) {
           <span class="others-value">{{ Math.round(gainOf(others) * 100) }} %</span>
         </div>
         <div class="setting">
-          <span class="row-label">Tempo</span>
-          <div class="stepper" role="group" aria-label="Tempo">
-            <button type="button" aria-label="Hitaammin" :disabled="rate <= 0.5" @click="stepTempo(-0.05)">−</button>
-            <button type="button" class="value" aria-label="Normaali tempo" @click="setRate(1)">
-              {{ rate === 1 ? "Normaali" : `${Math.round(rate * 100)} %` }}</button>
-            <button type="button" aria-label="Nopeammin" :disabled="rate >= 1.5" @click="stepTempo(0.05)">+</button>
+          <span class="row-label">{{ t.tempo }}</span>
+          <div class="stepper" role="group" :aria-label="t.tempo">
+            <button type="button" :aria-label="t.slower" :disabled="rate <= 0.5" @click="stepTempo(-0.05)">−</button>
+            <button type="button" class="value" :aria-label="t.normalTempo" @click="setRate(1)">
+              {{ rate === 1 ? t.normal : `${Math.round(rate * 100)} %` }}</button>
+            <button type="button" :aria-label="t.faster" :disabled="rate >= 1.5" @click="stepTempo(0.05)">+</button>
           </div>
         </div>
         <div class="divider"></div>
-        <div class="section-label">Nuotti</div>
+        <div class="section-label">{{ t.score }}</div>
         <div class="setting">
-          <span class="row-label">Viivastot</span>
-          <div class="segmented two" role="group" aria-label="Viivastot">
+          <span class="row-label">{{ t.staves }}</span>
+          <div class="segmented two" role="group" :aria-label="t.staves">
             <button type="button" :class="{ on: staffMode === 'all' }" :aria-pressed="staffMode === 'all'"
-              @click="setStaffMode('all')">Kaikki</button>
+              @click="setStaffMode('all')">{{ t.allStaves }}</button>
             <button type="button" :class="{ on: staffMode === 'own' }" :aria-pressed="staffMode === 'own'"
-              @click="setStaffMode('own')">Oma</button>
+              @click="setStaffMode('own')">{{ t.ownStaff }}</button>
           </div>
         </div>
         <div class="setting">
-          <span class="row-label">Nuotin koko</span>
-          <div class="stepper" role="group" aria-label="Nuotin koko">
-            <button type="button" aria-label="Pienennä nuottia" :disabled="zoom <= ZOOMS[0]!" @click="changeZoom(-1)">−</button>
+          <span class="row-label">{{ t.scoreSize }}</span>
+          <div class="stepper" role="group" :aria-label="t.scoreSize">
+            <button type="button" :aria-label="t.smaller" :disabled="zoom <= ZOOMS[0]!" @click="changeZoom(-1)">−</button>
             <span class="value">{{ Math.round(zoom * 100) }} %</span>
-            <button type="button" aria-label="Suurenna nuottia" :disabled="zoom >= ZOOMS[ZOOMS.length - 1]!"
+            <button type="button" :aria-label="t.larger" :disabled="zoom >= ZOOMS[ZOOMS.length - 1]!"
               @click="changeZoom(1)">+</button>
           </div>
         </div>
         <template v-if="canFlag">
           <div class="divider"></div>
-          <button type="button" class="flag-open" @click="startFlag">Ilmoita virheestä</button>
+          <button type="button" class="flag-open" @click="startFlag">{{ t.reportProblem }}</button>
         </template>
+        <div class="divider"></div>
+        <div class="setting">
+          <span class="row-label">{{ t.language }}</span>
+          <LanguageSwitch />
+        </div>
       </div>
 
       <div v-if="flagThanks" class="hint-card" role="status" :style="{ bottom: `${dockHeight + 12}px` }">
-        <span class="flag-thanks">Kiitos! Ilmoitus lähetetty.</span>
-        <button type="button" @click="flagThanks = false">Selvä</button>
+        <span class="flag-thanks">{{ t.flagThanks }}</span>
+        <button type="button" @click="flagThanks = false">{{ t.gotIt }}</button>
       </div>
 
       <!-- The dock: the position line on its top edge, then one row. -->
       <section ref="dock" class="dock" :data-gains="levels.map((g) => g.toFixed(3)).join(' ')" :data-player="playerKind">
         <input class="progress" type="range" min="0" :max="duration" step="0.1" :value="now"
-          :style="{ '--fill': `${duration ? (now / duration) * 100 : 0}%` }" aria-label="Kohta kappaleessa"
+          :style="{ '--fill': `${duration ? (now / duration) * 100 : 0}%` }" :aria-label="t.position"
           @input="seekTo" />
         <div class="dock-row">
-          <a :href="`/c/${encodeURIComponent(props.choir)}`" class="back" aria-label="Takaisin lauluihin">
+          <a :href="`/c/${encodeURIComponent(props.choir)}`" class="back" :aria-label="t.backToSongs">
             <Icon name="chevronLeft" :size="24" /></a>
           <div class="info">
             <span class="info-title">{{ song.title }}</span>
             <span v-if="credits(song)" class="info-credits">{{ credits(song) }}</span>
-            <span class="info-meta">Tahti {{ bar }} / {{ barCount }} ·
+            <span class="info-meta">{{ t.bar }} {{ bar }} / {{ barCount }} ·
               <span data-testid="time">{{ clock(now) }}</span> / {{ clock(duration) }}</span>
             <!-- The voice's terms: credit it wherever its singing plays (AGENTS.md). -->
-            <span v-if="switching && sound === 'sung'" class="info-credits sung-loading">Ladataan laulua…</span>
+            <span v-if="switching && sound === 'sung'" class="info-credits sung-loading">{{ t.loadingSinging }}</span>
             <span v-else-if="playerKind === 'sung'" class="info-credits sung-credit">{{ sungCredit(song.parts) }}</span>
           </div>
-          <button type="button" class="own" aria-label="Vaihda oma stemma" @click="askPart = true">
-            <span class="own-tag">Oma</span><span class="own-name">{{ song.parts[myPart]?.name }}</span></button>
-          <button type="button" class="play" :aria-label="playing ? 'Tauko' : 'Soita'"
+          <button type="button" class="own" :aria-label="t.changePart" @click="askPart = true">
+            <span class="own-tag">{{ t.ownTag }}</span><span class="own-name">{{ song.parts[myPart]?.name }}</span></button>
+          <button type="button" class="play" :aria-label="playing ? t.pause : t.play"
             :data-sounding="sounding ? '1' : '0'" @click="togglePlay"><Icon :name="playing ? 'pause' : 'play'" :size="24" /></button>
           <button type="button" class="settings" :class="{ on: sheetOpen }" :aria-expanded="sheetOpen"
-            :aria-label="sheetOpen ? 'Sulje säädöt' : 'Säädöt'" @click="sheetOpen = !sheetOpen">
+            :aria-label="sheetOpen ? t.closeSettings : t.settings" @click="sheetOpen = !sheetOpen">
             <Icon :name="sheetOpen ? 'close' : 'more'" :size="22" /></button>
         </div>
       </section>
@@ -769,24 +773,24 @@ function onPointerUp(event: PointerEvent) {
       <!-- Ilmoita virheestä (#41): a sheet from the bottom, over everything, like the part picker. -->
       <template v-if="flagging">
         <div class="picker-backdrop" @click="flagging = null"></div>
-        <form class="picker flag-form" role="dialog" aria-label="Ilmoita virheestä" @submit.prevent="sendFlag">
+        <form class="picker flag-form" role="dialog" :aria-label="t.reportProblem" @submit.prevent="sendFlag">
           <div class="handle" aria-hidden="true"></div>
-          <h2>Ilmoita virheestä</h2>
-          <p>Mikä on vialla? Ilmoitus menee ylläpitäjälle, joka korjaa nuotin.</p>
-          <div class="flag-problems" role="group" aria-label="Mikä on vialla">
-            <label v-for="(label, key) in FLAG_PROBLEMS" :key="key" :class="{ on: flagging.problems.includes(key) }">
+          <h2>{{ t.reportProblem }}</h2>
+          <p>{{ t.flagIntro }}</p>
+          <div class="flag-problems" role="group" :aria-label="t.whatsWrong">
+            <label v-for="(label, key) in t.flagProblems" :key="key" :class="{ on: flagging.problems.includes(key) }">
               <input v-model="flagging.problems" type="checkbox" :value="key" />{{ label }}</label>
           </div>
-          <label class="flag-field flag-bar">Tahti
+          <label class="flag-field flag-bar">{{ t.bar }}
             <input v-model="flagging.bar" type="number" inputmode="numeric" min="1" :max="barCount" /></label>
-          <label class="flag-field">Lisätietoja
+          <label class="flag-field">{{ t.notes }}
             <textarea v-model="flagging.note" rows="2" maxlength="1000"></textarea></label>
-          <label v-if="!me?.email" class="flag-field">Nimesi
+          <label v-if="!me?.email" class="flag-field">{{ t.yourName }}
             <input v-model="flagging.name" type="text" maxlength="100" /></label>
           <p v-if="flagError" class="error" role="alert">{{ flagError }}</p>
           <div class="flag-actions">
-            <button type="submit" class="send" :disabled="flagSending">Lähetä</button>
-            <button type="button" @click="flagging = null">Peru</button>
+            <button type="submit" class="send" :disabled="flagSending">{{ t.send }}</button>
+            <button type="button" @click="flagging = null">{{ t.cancel }}</button>
           </div>
         </form>
       </template>
@@ -794,10 +798,10 @@ function onPointerUp(event: PointerEvent) {
       <!-- Oma stemma: a sheet from the bottom, over everything. On the first visit a part must be picked. -->
       <template v-if="askPart">
         <div class="picker-backdrop" @click="if (!firstAsk) askPart = false;"></div>
-        <div class="picker" role="dialog" aria-label="Valitse oma stemma">
+        <div class="picker" role="dialog" :aria-label="t.chooseYourPart">
           <div class="handle" aria-hidden="true"></div>
-          <h2>Mikä on sinun stemmasi?</h2>
-          <p>Se soi kovimmin ja sen nuotit näkyvät tummalla sinisellä. Voit vaihtaa sitä myöhemmin napauttamalla Oma-painiketta.</p>
+          <h2>{{ t.whichPart }}</h2>
+          <p>{{ t.partIntro }}</p>
           <div class="picker-grid">
             <button v-for="(p, i) in song.parts" :key="i" type="button"
               :class="{ mine: i === myPart && !firstAsk }" @click="pickPart(i)">{{ p.name }}</button>

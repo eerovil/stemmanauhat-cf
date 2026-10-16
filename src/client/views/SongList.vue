@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from "vue";
 import { getJson, hasSungParts, listCredits, postForm, postJson, Refused, remembered, type Me, type Setlist, type SongOrder, type SongRequest,
   songListKey, type SongSummary } from "../api";
 import Icon from "../components/Icon.vue";
+import LanguageSwitch from "../components/LanguageSwitch.vue";
+import { byTitle, day, t, words } from "../i18n";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string }>();
@@ -90,7 +92,7 @@ const shown = computed((): (SongSummary & { place?: number })[] => {
   return [...songs.value]
     .filter(matches)
     .sort((a, b) => (order.value === "date" ? b.published_at.localeCompare(a.published_at) : 0)
-      || a.title.localeCompare(b.title, "fi"));
+      || byTitle(a, b));
 });
 /** With a setlist picked, a search also finds the songs outside it, so a remembered
  * setlist cannot quietly hide a song (#49). */
@@ -99,7 +101,7 @@ const others = computed((): SongSummary[] => {
   if (!setlist.value || !q) return [];
   const inList = new Set(setlist.value.songs);
   return songs.value.filter((s) => !inList.has(s.slug) && s.title.toLowerCase().includes(q))
-    .sort((a, b) => a.title.localeCompare(b.title, "fi"));
+    .sort(byTitle);
 });
 /** How many of the choir's songs the picked setlist leaves out of the list. */
 const inSetlist = computed(() => setlist.value?.songs.filter((slug) => bySlug.value.has(slug)).length ?? 0);
@@ -107,7 +109,6 @@ const inSetlist = computed(() => setlist.value?.songs.filter((slug) => bySlug.va
 // Admins make and change setlists here, where the songs to choose from are.
 const editing = ref<{ id: number | null; name: string; songs: string[] } | null>(null);
 const editMessage = ref("");
-const byTitle = (a: SongSummary, b: SongSummary) => a.title.localeCompare(b.title, "fi");
 const editPicked = computed(() => editing.value?.songs.flatMap((slug) => bySlug.value.get(slug) ?? []) ?? []);
 const editRest = computed(() => songs.value.filter((s) => !editing.value?.songs.includes(s.slug)).sort(byTitle));
 function startNew() {
@@ -139,20 +140,20 @@ async function save() {
     await load();
     pick(r.id);
     editing.value = null;
-    editMessage.value = "Tallennettu.";
+    editMessage.value = words().saved;
   } catch (error) {
     editMessage.value = (error as Error).message;
   }
 }
 async function removeSetlist() {
   const edit = editing.value!;
-  if (edit.id === null || !confirm(`Poistetaanko setlista ${edit.name}?`)) return;
+  if (edit.id === null || !confirm(words().confirmDeleteSetlist(edit.name))) return;
   try {
     await postJson("/api/admin/setlists", { choir: props.choir, id: edit.id, delete: true });
     await load();
     pick(null);
     editing.value = null;
-    editMessage.value = "Setlista poistettu.";
+    editMessage.value = words().setlistDeleted;
   } catch (error) {
     editMessage.value = (error as Error).message;
   }
@@ -178,7 +179,7 @@ function pickPdf(event: Event) {
 async function sendRequest() {
   const r = requesting.value!;
   if (!r.title.trim() && !requestPdf.value) {
-    requestMessage.value = "Kirjoita kappaleen nimi tai liitä nuotti.";
+    requestMessage.value = words().needTitleOrPdf;
     return;
   }
   const form = new FormData();
@@ -189,7 +190,7 @@ async function sendRequest() {
   try {
     await postForm("/api/requests", form);
     requesting.value = null;
-    requestMessage.value = "Kiitos! Pyyntö lähetetty.";
+    requestMessage.value = words().requestSent;
     await load();
   } catch (error) {
     requestMessage.value = (error as Error).message;
@@ -197,7 +198,6 @@ async function sendRequest() {
     sending.value = false;
   }
 }
-const day = (at: string) => new Date(at).toLocaleDateString("fi-FI");
 const last = computed(() => {
   const slug = remembered.last(props.choir);
   return songs.value.find((s) => s.slug === slug) ?? null;
@@ -211,114 +211,115 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
   <main v-else-if="!ready" class="page songlist"></main>
   <main v-else class="page songlist">
     <header class="bar">
-      <a href="/" class="home-link">Stemmanauhat</a>
+      <a href="/" class="home-link">{{ t.siteName }}</a>
       <h1>{{ choirName }}</h1>
     </header>
     <aside v-if="me?.joinable.includes(choir)" class="join card">
-      <p>Pääsit sisään linkillä. Lisää Google-tilisi kuoron jäseneksi, niin pysyt kirjautuneena kaikilla laitteillasi.</p>
-      <a class="button primary" :href="joinUrl">Lisää Google-tili</a>
+      <p>{{ t.joinText }}</p>
+      <a class="button primary" :href="joinUrl">{{ t.joinButton }}</a>
     </aside>
-    <a v-if="last" class="button primary continue" :href="songUrl(last.slug)">▶ Jatka siitä: {{ last.title }}</a>
+    <a v-if="last" class="button primary continue" :href="songUrl(last.slug)">▶ {{ t.continueFrom }}: {{ last.title }}</a>
     <section v-if="editing" class="card setlist-edit">
-      <h2>{{ editing.id === null ? "Uusi setlista" : "Muokkaa setlistaa" }}</h2>
-      <input v-model="editing.name" type="text" placeholder="Setlistan nimi" aria-label="Setlistan nimi" />
+      <h2>{{ editing.id === null ? t.newSetlist : t.editSetlist }}</h2>
+      <input v-model="editing.name" type="text" :placeholder="t.setlistName" :aria-label="t.setlistName" />
       <p v-if="editMessage" class="hint">{{ editMessage }}</p>
       <ol class="songs picked">
         <li v-for="(s, i) in editPicked" :key="s.slug">
           <label><input type="checkbox" checked @change="toggle(s.slug)" />{{ s.title }}</label>
-          <button type="button" class="link" :disabled="i === 0" :aria-label="`Siirrä ylös: ${s.title}`" @click="move(i, -1)">↑</button>
-          <button type="button" class="link" :disabled="i === editPicked.length - 1" :aria-label="`Siirrä alas: ${s.title}`" @click="move(i, 1)">↓</button>
+          <button type="button" class="link" :disabled="i === 0" :aria-label="t.moveUp(s.title)" @click="move(i, -1)">↑</button>
+          <button type="button" class="link" :disabled="i === editPicked.length - 1" :aria-label="t.moveDown(s.title)" @click="move(i, 1)">↓</button>
         </li>
       </ol>
-      <p v-if="!editPicked.length" class="hint">Valitse kappaleet alta.</p>
-      <h3>Lisää kappaleita</h3>
+      <p v-if="!editPicked.length" class="hint">{{ t.pickSongsBelow }}</p>
+      <h3>{{ t.addSongs }}</h3>
       <ul class="songs">
         <li v-for="s in editRest" :key="s.slug">
           <label><input type="checkbox" @change="toggle(s.slug)" />{{ s.title }}</label>
         </li>
       </ul>
       <div class="row">
-        <button type="button" class="primary" @click="save">Tallenna</button>
-        <button type="button" @click="editing = null">Peru</button>
-        <button v-if="editing.id !== null" type="button" class="link" @click="removeSetlist">Poista setlista</button>
+        <button type="button" class="primary" @click="save">{{ t.save }}</button>
+        <button type="button" @click="editing = null">{{ t.cancel }}</button>
+        <button v-if="editing.id !== null" type="button" class="link" @click="removeSetlist">{{ t.deleteSetlist }}</button>
       </div>
     </section>
     <section v-else-if="requesting" class="card request-form">
-      <h2>Pyydä stemmanauhaa</h2>
-      <p class="hint">Kirjoita kappaleen nimi tai liitä nuotti, tai molemmat.</p>
-      <label>Kappaleen nimi<input v-model="requesting.title" type="text" maxlength="200" /></label>
-      <label>Säveltäjä / sovittaja<input v-model="requesting.credits" type="text" maxlength="200" /></label>
-      <label>Lisätietoja<textarea v-model="requesting.note" rows="3" maxlength="1000"></textarea></label>
-      <label v-if="!me?.email">Nimesi<input v-model="requesting.name" type="text" maxlength="100" /></label>
-      <label>Nuotti (PDF, vapaaehtoinen)<input type="file" accept="application/pdf,.pdf" @change="pickPdf" /></label>
+      <h2>{{ t.requestTrack }}</h2>
+      <p class="hint">{{ t.requestHint }}</p>
+      <label>{{ t.songName }}<input v-model="requesting.title" type="text" maxlength="200" /></label>
+      <label>{{ t.composerArranger }}<input v-model="requesting.credits" type="text" maxlength="200" /></label>
+      <label>{{ t.notes }}<textarea v-model="requesting.note" rows="3" maxlength="1000"></textarea></label>
+      <label v-if="!me?.email">{{ t.yourName }}<input v-model="requesting.name" type="text" maxlength="100" /></label>
+      <label>{{ t.musicPdfOptional }}<input type="file" accept="application/pdf,.pdf" @change="pickPdf" /></label>
       <p v-if="requestMessage" class="hint">{{ requestMessage }}</p>
       <div class="row">
-        <button type="button" class="primary" :disabled="sending" @click="sendRequest">Lähetä</button>
-        <button type="button" @click="requesting = null">Peru</button>
+        <button type="button" class="primary" :disabled="sending" @click="sendRequest">{{ t.send }}</button>
+        <button type="button" @click="requesting = null">{{ t.cancel }}</button>
       </div>
     </section>
     <template v-else>
       <div v-if="setlists.length || me?.admin" class="row setlists">
-        <select v-if="setlists.length" :value="setlist?.id ?? ''" aria-label="Setlista" :class="{ picked: setlist }"
+        <select v-if="setlists.length" :value="setlist?.id ?? ''" :aria-label="t.setlist" :class="{ picked: setlist }"
           @change="pick(Number(($event.target as HTMLSelectElement).value) || null)">
-          <option value="">Kaikki kappaleet</option>
+          <option value="">{{ t.allSongs }}</option>
           <option v-for="l in setlists" :key="l.id" :value="l.id">{{ l.name }}</option>
         </select>
-        <button v-if="setlist" type="button" @click="pick(null)">Näytä kaikki</button>
-        <button v-if="me?.admin && setlist" type="button" @click="startEdit(setlist)">Muokkaa</button>
-        <button v-if="me?.admin" type="button" @click="startNew">Uusi setlista</button>
+        <button v-if="setlist" type="button" @click="pick(null)">{{ t.showAll }}</button>
+        <button v-if="me?.admin && setlist" type="button" @click="startEdit(setlist)">{{ t.edit }}</button>
+        <button v-if="me?.admin" type="button" @click="startNew">{{ t.newSetlist }}</button>
       </div>
       <p v-if="editMessage" class="hint">{{ editMessage }}</p>
-      <input v-model="query" class="search" type="search" placeholder="Hae kappaletta" aria-label="Hae kappaletta" />
-      <div v-if="!setlist" class="segmented two order" role="group" aria-label="Järjestys">
-        <button type="button" :class="{ on: order === 'name' }" :aria-pressed="order === 'name'" @click="sortBy('name')">Nimi</button>
-        <button type="button" :class="{ on: order === 'date' }" :aria-pressed="order === 'date'" @click="sortBy('date')">Uusimmat</button>
+      <input v-model="query" class="search" type="search" :placeholder="t.searchSongs" :aria-label="t.searchSongs" />
+      <div v-if="!setlist" class="segmented two order" role="group" :aria-label="t.order">
+        <button type="button" :class="{ on: order === 'name' }" :aria-pressed="order === 'name'" @click="sortBy('name')">{{ t.byName }}</button>
+        <button type="button" :class="{ on: order === 'date' }" :aria-pressed="order === 'date'" @click="sortBy('date')">{{ t.newest }}</button>
       </div>
       <ul v-if="shown.length || !others.length" class="songs">
         <li v-for="s in shown" :key="s.slug">
           <span v-if="s.place" class="place">{{ s.place }}.</span>
-          <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}<span v-if="hasSungParts(s.parts)" class="sung-mark" role="img" aria-label="Laulettu versio" title="Laulettu versio"><Icon name="voice" :size="15" /></span></span>
+          <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}<span v-if="hasSungParts(s.parts)" class="sung-mark" role="img" :aria-label="t.sungVersion" :title="t.sungVersion"><Icon name="voice" :size="15" /></span></span>
             <span class="credits">{{ listCredits(s) }}</span></a>
-          <span v-if="newest.has(s.slug)" class="badge">Uusi</span>
+          <span v-if="newest.has(s.slug)" class="badge">{{ t.newBadge }}</span>
           <span v-if="order === 'date' && !setlist" class="date">{{ day(s.published_at) }}</span>
         </li>
       </ul>
       <template v-if="others.length">
-        <h2 class="others-heading">Muut kappaleet</h2>
+        <h2 class="others-heading">{{ t.otherSongs }}</h2>
         <ul class="songs others">
           <li v-for="s in others" :key="s.slug">
-            <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}<span v-if="hasSungParts(s.parts)" class="sung-mark" role="img" aria-label="Laulettu versio" title="Laulettu versio"><Icon name="voice" :size="15" /></span></span>
+            <a :href="songUrl(s.slug)"><span class="song-title">{{ s.title }}<span v-if="hasSungParts(s.parts)" class="sung-mark" role="img" :aria-label="t.sungVersion" :title="t.sungVersion"><Icon name="voice" :size="15" /></span></span>
               <span class="credits">{{ listCredits(s) }}</span></a>
-            <span v-if="newest.has(s.slug)" class="badge">Uusi</span>
+            <span v-if="newest.has(s.slug)" class="badge">{{ t.newBadge }}</span>
           </li>
         </ul>
       </template>
-      <p v-if="!songs.length" class="hint">Ei vielä kappaleita.</p>
-      <p v-else-if="setlist && !setlist.songs.length" class="hint">Setlistassa ei ole vielä kappaleita.</p>
+      <p v-if="!songs.length" class="hint">{{ t.noSongs }}</p>
+      <p v-else-if="setlist && !setlist.songs.length" class="hint">{{ t.setlistEmpty }}</p>
       <p v-if="setlist && !query.trim() && inSetlist < songs.length" class="hint setlist-note">
-        Setlistassa {{ inSetlist }} kappaletta, kaikkiaan {{ songs.length }}.
-        <button type="button" class="link" @click="pick(null)">Näytä kaikki</button>
+        {{ t.setlistCount(inSetlist, songs.length) }}
+        <button type="button" class="link" @click="pick(null)">{{ t.showAll }}</button>
       </p>
       <section v-if="canRequest" class="requests">
-        <h2 v-if="requests.length">Pyydetyt ({{ requests.length }})</h2>
+        <h2 v-if="requests.length">{{ t.requested(requests.length) }}</h2>
         <!-- Not .songs: the song list's tests and styles mean the songs alone. -->
         <ul v-if="requests.length" class="requested">
           <li v-for="r in requests" :key="r.id">
-            <span class="request"><span class="request-title">{{ r.title ?? "Nuotti (PDF)" }}</span>
+            <span class="request"><span class="request-title">{{ r.title ?? t.pdfOnly }}</span>
               <span class="request-details">{{ [r.credits, r.note].filter(Boolean).join(" · ") }}</span></span>
             <span class="request-date">{{ day(r.created_at) }}</span>
           </li>
         </ul>
         <p v-if="requestMessage" class="hint">{{ requestMessage }}</p>
-        <button type="button" @click="startRequest">Pyydä stemmanauhaa</button>
+        <button type="button" @click="startRequest">{{ t.requestTrack }}</button>
       </section>
     </template>
     <footer class="row">
-      <a v-if="me?.admin" href="/admin">Ylläpito</a>
-      <a v-if="me?.admin && canRequest && requests.length + openFlags" href="/admin">Pyyntöjä: {{ requests.length + openFlags }}</a>
+      <a v-if="me?.admin" href="/admin">{{ t.admin }}</a>
+      <a v-if="me?.admin && canRequest && requests.length + openFlags" href="/admin">{{ t.requestsCount(requests.length + openFlags) }}</a>
       <form v-if="me?.email || me?.linked.length" method="post" action="/auth/logout">
-        <button type="submit" class="link">Kirjaudu ulos</button>
+        <button type="submit" class="link">{{ t.signOut }}</button>
       </form>
+      <LanguageSwitch />
     </footer>
   </main>
 </template>
