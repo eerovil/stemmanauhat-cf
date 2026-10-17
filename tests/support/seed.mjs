@@ -1,6 +1,6 @@
 // Fresh local D1 and R2 for the browser tests: the migrations, made-up
 // members, a passphrase link for jm, the synthetic two-part song uploaded for jm
-// (with made-up composer, lyricist and arranger) and for the public demo (a composer only, and once more for jm as Iltalaulu), a synthetic song with one crowded bar for jm, a public one that opens with a very long bar, and a stand-in for the piano (spessasynth's own tiny
+// (with made-up composer, lyricist and arranger), once with both parts on one staff for naiskuoro, and for the public demo (a composer only, and once more for jm as Iltalaulu), a synthetic song with one crowded bar for jm, a public one that opens with a very long bar, and a stand-in for the piano (spessasynth's own tiny
 // saw-wave sound bank; the real piano is MuseScore's and lives only in R2).
 // Run from the repo root.
 import { execFileSync } from "node:child_process";
@@ -25,6 +25,12 @@ const OLD_PARTS = JSON.stringify([
 const SUNG_PARTS = JSON.stringify([
   { name: "Tenori", file: "parts/1-Tenori.mp3", sung: true },
   { name: "Basso", file: "parts/2-Basso.mp3", sung: true },
+]);
+// Both parts drawn on one staff, as voice 1 and voice 2: what musescore-choir-plugins
+// publishes for a song of more than five parts (#420).
+const SHARED_PARTS = JSON.stringify([
+  { name: "Tenori", staff: 0, voices: [1] },
+  { name: "Basso", staff: 0, voices: [2] },
 ]);
 const OLD_ROWS = ["kokeilu", "iltalaulu"];
 const SUNG_ROWS = ["laulettu"];
@@ -52,6 +58,8 @@ const songs = [
   ["public", "vapaa-rytmi", "Vapaa rytmi", "tests/fixtures/long-bar", 20.0, [null, null, null]],
   // The two-part song sung: the fixture MP3s are synthetic tones, one per part.
   ["public", "laulettu", "Laulettu laulu", "tests/fixtures/two-part", 8.0, ["Esimerkki Säveltäjä", "Esimerkki Sanoittaja", null]],
+  // The two-part song with both parts on one staff (musescore-choir-plugins#420).
+  ["naiskuoro", "jaettu", "Jaettu", "tests/fixtures/shared-staff", 8.0, [null, null, null]],
 ];
 const value = (text) => (text === null ? "NULL" : `'${text}'`);
 const sql = [
@@ -60,7 +68,7 @@ const sql = [
   "INSERT INTO admins (email) VALUES ('yllapito@example.com');",
   `INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES ('jm', '${salt.toString("base64url")}', '${await hash(PASSPHRASE, salt)}', 10000, 1);`,
   ...songs.map(([choir, slug, title, , duration, credits]) =>
-    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, composer, lyricist, arranger) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${VERSION}/', '${SUNG_ROWS.includes(slug) ? SUNG_PARTS : OLD_ROWS.includes(slug) ? OLD_PARTS : PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z', ${credits.map(value).join(", ")});`),
+    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, composer, lyricist, arranger) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${VERSION}/', '${slug === "jaettu" ? SHARED_PARTS : SUNG_ROWS.includes(slug) ? SUNG_PARTS : OLD_ROWS.includes(slug) ? OLD_PARTS : PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z', ${credits.map(value).join(", ")});`),
 ].join("\n");
 writeFileSync("tests/fixtures/seed.generated.sql", sql + "\n");
 wrangler("d1", "execute", "stemmanauhat", "--local", "--file", "tests/fixtures/seed.generated.sql");

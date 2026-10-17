@@ -1,0 +1,26 @@
+{
+ "slug": "jaettu",
+ "title": "Jaettu",
+ "choir": "naiskuoro",
+ "version": "20261009T120000Z",
+ "score": "score.musicxml",
+ "timing": "timing.json",
+ "parts": [
+  {
+   "name": "Tenori",
+   "staff": 0,
+   "voices": [
+    1
+   ]
+  },
+  {
+   "name": "Basso",
+   "staff": 0,
+   "voices": [
+    2
+   ]
+  }
+ ],
+ "duration": 8.0,
+ "midi": "score.mid"
+}
