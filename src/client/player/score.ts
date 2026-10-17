@@ -1,4 +1,5 @@
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
+import type { Focus } from "./part";
 import { barAnchors, joinBars, xOnAnchors, type Anchor } from "./bar";
 import { biggestStep, cappedTargets, needsWidening, nextFactors } from "./spacing";
 import { BarMap, splitLongBars } from "./split";
@@ -11,6 +12,8 @@ const NOTEHEAD = 1.3;
 interface Sounding {
   /** Index of the part (MusicXML instrument) the note belongs to. */
   part: number;
+  /** Its voice there, as the MusicXML numbers it: two parts can share a staff. */
+  voice: number;
   start: number;
   end: number;
   el: SVGGElement;
@@ -223,7 +226,7 @@ export class Score {
     return { x0: centre - this.noteWidth, x1: centre + this.noteWidth, top: bar.top, bottom: bar.bottom };
   }
 
-  /** Where a part's staff is, in container pixels (meaningful in the one-line view). */
+  /** Where a staff is, by MusicXML part, in container pixels (meaningful in the one-line view). */
   partSpan(part: number): { top: number; bottom: number } | null {
     return this.spans.get(part) ?? null;
   }
@@ -254,9 +257,11 @@ export class Score {
 
   /**
    * Colours the notes sounding at this bar and beat, as the videos do: your part's
-   * notes full blue, everyone else's a lighter blue. Returns how many are lit.
+   * notes full blue, everyone else's a lighter blue. On a staff two parts share, yours
+   * are the notes in your voices. Returns how many are lit.
    */
-  light(songMeasure: number | null, songBeat: number, focusPart: number): number {
+  light(songMeasure: number | null, songBeat: number, focus: Focus): number {
+    const mine = (n: Sounding) => n.part === focus.staff && (!focus.voices || focus.voices.includes(n.voice));
     const at = songMeasure === null ? null : this.pieces.toPiece(songMeasure, songBeat);
     const bar = at ? this.bars[at.piece] : undefined;
     const beat = at?.beat ?? songBeat;
@@ -278,8 +283,8 @@ export class Score {
         }
         this.copies.set(n, lit);
       }
-      lit.copy.classList.toggle("lit-focus", n.part === focusPart);
-      lit.copy.classList.toggle("lit-other", n.part !== focusPart);
+      lit.copy.classList.toggle("lit-focus", mine(n));
+      lit.copy.classList.toggle("lit-other", !mine(n));
     }
     return now.length;
   }
@@ -397,7 +402,8 @@ export class Score {
               const el = (note as unknown as { getSVGGElement?: () => SVGGElement | undefined })
                 .getSVGGElement?.();
               if (!el) continue;
-              notes.push({ part, start: beat, end: beat + note.sourceNote.Length.RealValue * 4, el });
+              const voiceId = voice.parentVoiceEntry?.ParentVoice?.VoiceId ?? 1;
+              notes.push({ part, voice: voiceId, start: beat, end: beat + note.sourceNote.Length.RealValue * 4, el });
             }
           }
         }

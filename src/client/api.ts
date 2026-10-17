@@ -25,6 +25,12 @@ export interface Part {
   sung?: boolean;
   /** The AI voice that sings a sung part; REMY when not named. */
   voice?: string;
+  /**
+   * Where the part is drawn when it shares a staff (musescore-choir-plugins#420): the
+   * MusicXML part (0-based) and its notes' voice numbers there. Absent: a staff of its own.
+   */
+  staff?: number;
+  voices?: number[];
 }
 
 /** Who each AI voice is credited to, as its terms ask (REMY's and LYSE's tos.txt). */

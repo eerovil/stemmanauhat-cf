@@ -9,7 +9,7 @@ import { t, words } from "../i18n";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
 import type { SungPlayer } from "../player/sung";
-import { startingPart } from "../player/part";
+import { focusOf, staffOf, startingPart, visibleStaves } from "../player/part";
 import { SlidingPieces } from "../player/slide";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
@@ -294,7 +294,8 @@ function tick(frameTime: number) {
   const position = positionAt(timing, t);
   bar.value = position.measure + 1;
   const started = t > 0 || mixer.playing;
-  const lit = score.light(started ? position.measure : null, position.beat, myPart.value);
+  const lit = score.light(started ? position.measure : null, position.beat,
+    focusOf(song.value!.parts, myPart.value));
   const spot = score.marker(position.measure, position.beat);
   const el = cursor.value;
   if (!spot || !el) return;
@@ -380,7 +381,7 @@ function verticalOffset(boxHeight: number): number {
   if (!score) return 0;
   const room = score.height - boxHeight;
   if (room <= 0) return room * 0.4;
-  const span = score.partSpan(myPart.value);
+  const span = score.partSpan(staffOf(song.value!.parts, myPart.value));
   if (!span) return 0;
   return Math.min(room, Math.max(0, (span.top + span.bottom) / 2 - boxHeight / 2));
 }
@@ -395,9 +396,9 @@ function changeZoom(step: number) {
   lastTop = -1;
 }
 
-/** Which parts' staves to draw: all, or only yours. */
+/** Which staves to draw: all, or only yours (shared with another part when the page prints it so). */
 function visibleParts(): boolean[] {
-  return song.value!.parts.map((_, i) => singleLine.value || i === myPart.value);
+  return visibleStaves(song.value!.parts, myPart.value, singleLine.value);
 }
 
 async function setStaffMode(next: StaffMode) {
@@ -416,7 +417,8 @@ async function setStaffMode(next: StaffMode) {
 }
 
 function choosePart(index: number) {
-  const ownStaffChanges = !singleLine.value && index !== myPart.value;
+  const parts = song.value!.parts;
+  const ownStaffChanges = !singleLine.value && staffOf(parts, index) !== staffOf(parts, myPart.value);
   myPart.value = index;
   const name = song.value!.parts[index]!.name;
   remembered.setPart(props.choir, name);
