@@ -13,6 +13,7 @@
   main { max-width: 24rem; }
   img { width: 4.5rem; height: 4.5rem; border-radius: 1.1rem; }
   h1 { margin: 1rem 0 0.5rem; font-size: 1.4rem; }
+  h1 span { font-size: 1.1rem; font-weight: 600; color: #687385; }
   p { margin: 0 0 1.25rem; color: #687385; }
   button { min-height: 44px; padding: 0.6rem 1rem; border: 0; border-radius: 12px; font: inherit; font-weight: 600;
     color: #ffffff; background: #2a5fab; cursor: pointer; }
@@ -21,9 +22,8 @@
 <body>
 <main>
   <img src="/icon-192.png" alt="">
-  <h1>Ei verkkoyhteyttä</h1>
+  <h1>Ei verkkoyhteyttä<br><span lang="en">No connection</span></h1>
   <p>Stemmanauhat tarvitsee verkkoyhteyden, jotta laulut ja nuotit latautuvat.</p>
-  <h1 lang="en">No connection</h1>
   <p lang="en">Stemmanauhat needs a connection to load the songs and scores.</p>
   <button type="button" onclick="location.reload()">Yritä uudelleen · Try again</button>
 </main>
