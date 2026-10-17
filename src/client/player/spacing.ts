@@ -47,9 +47,23 @@ export function needsWidening(have: number[], want: number[]): boolean {
  * The next width factor of each bar: scaled by how far it still is from its
  * target. A bar's width does not grow in proportion to its factor (the room
  * around the bar line stays the same), so this is corrected after measuring.
+ * Given the factors and widths of the layout before, a bar that has been widened
+ * once is aimed along the line through its two measurements instead: a bar of
+ * rests is mostly that fixed room, and scaled again it stayed 5 % short (#75).
  */
-export function nextFactors(factors: number[], have: number[], want: number[]): number[] {
-  return factors.map((f, i) => (want[i]! > have[i]! * (1 + TOLERANCE) && have[i]! > 0 ? f * (want[i]! / have[i]!) : f));
+export function nextFactors(
+  factors: number[], have: number[], want: number[],
+  before?: { factors: number[]; have: number[] },
+): number[] {
+  return factors.map((f, i) => {
+    const w = want[i]!;
+    const h = have[i]!;
+    if (!(w > h * (1 + TOLERANCE) && h > 0)) return f;
+    const f0 = before?.factors[i];
+    const h0 = before?.have[i];
+    if (f0 !== undefined && h0 !== undefined && f > f0 && h > h0) return f + ((w - h) * (f - f0)) / (h - h0);
+    return f * (w / h);
+  });
 }
 
 /** The biggest step in width per beat between neighbouring bars (bars with no width skipped). */

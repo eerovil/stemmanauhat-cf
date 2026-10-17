@@ -53,7 +53,7 @@ const salt = Buffer.from("fixed-test-salt!");
 const songs = [
   ["jm", "kokeilu", "Kokeilulaulu", "tests/fixtures/two-part", 8.0, ["Aino Esimerkki", "Eino Runoniekka", "Sulo Sovittaja"]],
   ["public", "esittely", "Esittelylaulu", "tests/fixtures/two-part", 8.0, ["Aino Esimerkki", null, null]],
-  ["jm", "epatasainen", "Epätasainen", "tests/fixtures/uneven", 12.0, [null, null, null]],
+  ["jm", "epatasainen", "Epätasainen", "tests/fixtures/uneven", 14.0, [null, null, null]],
   // A third jm song, so a setlist has something to leave out (#34).
   ["jm", "iltalaulu", "Iltalaulu", "tests/fixtures/two-part", 8.0, [null, null, null]],
   // A free-rhythm verse written as one bar of 32 quarters (#45).

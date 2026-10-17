@@ -14,6 +14,12 @@ test("the one-line view widens the bars around a crowded one, as the videos do",
   await expect(score).toHaveAttribute("data-widenings", /^[12]$/);
   expect(Number(await score.getAttribute("data-step"))).toBeLessThanOrEqual(1.3 * 1.05);
 
+  // Bar 5 is a whole-bar rest, drawn mid-bar. Measured from the rest, it looked
+  // half as wide as it is and was widened to twice its neighbours (#75). Measured
+  // from its left edge, it is no wider per beat than the wider of them.
+  const widths = (await score.getAttribute("data-widths"))!.split(" ").map(Number);
+  expect(widths[4]!).toBeLessThanOrEqual(Math.max(widths[3]!, widths[5]!) * 1.05);
+
   // "Oma" keeps the page layout as it is drawn.
   await page.getByRole("button", { name: "Säädöt" }).click();
   await page.getByRole("group", { name: "Viivastot" }).getByRole("button", { name: "Oma" }).click();
