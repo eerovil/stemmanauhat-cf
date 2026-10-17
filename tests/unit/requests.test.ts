@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPdf, parseFlag, parseRequest, requestPdfKey } from "../../src/worker/requests";
+import { isPdf, parseFlag, parseRequest, pdfTitle, requestPdfKey } from "../../src/worker/requests";
 
 describe("parseRequest", () => {
   it("takes a song name alone, or a PDF alone, with every other field optional", () => {
@@ -23,6 +23,17 @@ describe("isPdf", () => {
     expect(isPdf(new TextEncoder().encode("%PDF-1.4\n%%EOF"))).toBe(true);
     expect(isPdf(new TextEncoder().encode("<html>"))).toBe(false);
     expect(isPdf(new Uint8Array())).toBe(false);
+  });
+});
+
+describe("pdfTitle", () => {
+  it("names a request after its PDF's file name, without the .pdf", () => {
+    expect(pdfTitle("Ubi Caritas et Amor.pdf")).toBe("Ubi Caritas et Amor");
+    expect(pdfTitle(" Iltatähti.PDF ")).toBe("Iltatähti");
+    expect(pdfTitle("nuotti")).toBe("nuotti");
+    expect(pdfTitle(".pdf")).toBeNull();
+    expect(pdfTitle("")).toBeNull();
+    expect(pdfTitle(`${"x".repeat(300)}.pdf`)).toBe("x".repeat(200));
   });
 });
 

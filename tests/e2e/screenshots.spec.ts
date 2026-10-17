@@ -289,3 +289,32 @@ test("the test list, as an admin sees it (#73)", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Testilista" })).toBeVisible();
   await page.screenshot({ path: `${dir}/home-admin-phone.png` });
 });
+
+test("requests (#77): the song named after the PDF, a PDF too big, and the list showing the name", async ({ page, browser }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await page.goto("/c/jm?lang=en");
+  await page.getByRole("button", { name: "Request a practice track" }).click();
+  const file = page.getByLabel("Music (PDF, optional)");
+  await file.setInputFiles(
+    { name: "Ubi Caritas et Amor.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") });
+  await expect(page.getByLabel("Song name")).toHaveValue("Ubi Caritas et Amor");
+  await page.screenshot({ path: `${dir}/request-named-from-pdf-phone.png` });
+  await file.setInputFiles(
+    { name: "Iso nuotti.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(20 * 1024 * 1024 + 1) });
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("The PDF is too large (over 20 MB).")).toBeVisible();
+  await page.screenshot({ path: `${dir}/request-pdf-too-big-phone.png` });
+  await file.setInputFiles(
+    { name: "Ubi Caritas et Amor.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") });
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".requested li")).toContainText("Ubi Caritas et Amor");
+  await page.locator(".requests").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${dir}/request-listed-by-pdf-name-phone.png`, fullPage: true });
+
+  const admin = await (await browser.newContext()).newPage();
+  await signInAs(admin, "/admin", "yllapito@example.com");
+  admin.once("dialog", (dialog) => dialog.accept());
+  const ubi = admin.locator('[data-choir="jm"] .request-list li', { hasText: "Ubi Caritas et Amor" });
+  await ubi.getByRole("button", { name: "Poista" }).click();
+  await expect(ubi).toHaveCount(0);
+});

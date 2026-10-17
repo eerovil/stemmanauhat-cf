@@ -4,7 +4,7 @@ import { serveObject, safeSongPath } from "./files";
 import { AUTHORIZE_URL, TOKEN_URL, authorizeUrl, exchangeCode, normalizeEmail, readEmail } from "./google";
 import { joinUrl, linkKey } from "./links";
 import { publicOrigin } from "./origin";
-import { isPdf, parseFlag, parseRequest, PDF_MAX_BYTES, requestPdfKey } from "./requests";
+import { isPdf, parseFlag, parseRequest, PDF_MAX_BYTES, pdfTitle, requestPdfKey } from "./requests";
 import { requestLang, serverMessage, type ServerLang } from "./messages";
 import { newPassphraseRecord, passphraseMatches } from "./passphrase";
 import { clearSessionCookie, readSession, sessionCookie, type Session } from "./session";
@@ -638,6 +638,8 @@ async function sendRequest(ctx: Ctx): Promise<Response> {
   const fields = Object.fromEntries([...form.entries()].filter(([, v]) => typeof v === "string"));
   const request = parseRequest(fields, pdf !== null, requestLang(ctx.request));
   if ("error" in request) return json(request, 400);
+  // Sent with only a PDF: its file name is the song's name (#77).
+  if (!request.title && file instanceof File && pdf) request.title = pdfTitle(file.name);
 
   const db = ctx.env.DB;
   const at = new Date(ctx.now * 1000).toISOString();

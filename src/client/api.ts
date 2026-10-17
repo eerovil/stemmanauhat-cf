@@ -180,6 +180,8 @@ export async function postForm<T>(url: string, form: FormData): Promise<T> {
     body: form,
   });
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+  // A 413 from the proxy in front of the Worker has no message of ours (#77).
+  if (response.status === 413 && !data.error) throw new Error(words().pdfTooBig);
   if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
   return data;
 }

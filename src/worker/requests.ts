@@ -34,6 +34,14 @@ export function parseRequest(fields: Record<string, unknown>, hasPdf: boolean,
   return out as unknown as SongRequest;
 }
 
+/**
+ * The song name a PDF's file name gives, for a request sent with no name (#77):
+ * "Ubi Caritas et Amor.pdf" → "Ubi Caritas et Amor". Null when nothing is left.
+ */
+export function pdfTitle(fileName: string): string | null {
+  return fileName.trim().replace(/\.pdf$/i, "").trim().slice(0, REQUEST_MAX.title).trim() || null;
+}
+
 export function requestPdfKey(choir: string, id: number): string {
   return `requests/${choir}/${id}.pdf`;
 }
