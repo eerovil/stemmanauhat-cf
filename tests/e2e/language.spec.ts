@@ -60,11 +60,23 @@ test("the player's part question and settings are in English", async ({ page }) 
   await page.getByRole("button", { name: "Got it" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const listen = page.getByRole("group", { name: "How you listen" });
+  // On a narrow phone every mode's label has room on both sides, not just barely fitting (#69).
+  await page.setViewportSize({ width: 350, height: 780 });
+  for (const button of await listen.getByRole("button").all()) {
+    const room = await button.evaluate((b) => {
+      const text = document.createRange();
+      text.selectNodeContents(b);
+      return b.clientWidth - text.getBoundingClientRect().width;
+    });
+    expect(room).toBeGreaterThanOrEqual(12);
+  }
   await expect(listen.getByRole("button", { name: "Mine up front" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Your part loud, the others softer")).toBeVisible();
   await expect(page.getByRole("button", { name: "Close settings" })).toBeVisible();
   await expect(page.getByText("Other parts", { exact: true })).toBeVisible();
   await expect(page.getByRole("slider", { name: "Volume of the other parts" })).toBeVisible();
+  // The player has no language switch: the language is picked on the other pages.
+  await expect(page.getByRole("group", { name: "Language" })).toHaveCount(0);
 });
 
 test("the server answers in the page's language", async ({ page }) => {

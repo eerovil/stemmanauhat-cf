@@ -5,7 +5,6 @@ import {
   rememberSong, songMemory, validRate, type FlagProblem, type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
-import LanguageSwitch from "../components/LanguageSwitch.vue";
 import { t, words } from "../i18n";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
@@ -731,11 +730,6 @@ function onPointerUp(event: PointerEvent) {
           <div class="divider"></div>
           <button type="button" class="flag-open" @click="startFlag">{{ t.reportProblem }}</button>
         </template>
-        <div class="divider"></div>
-        <div class="setting">
-          <span class="row-label">{{ t.language }}</span>
-          <LanguageSwitch />
-        </div>
       </div>
 
       <div v-if="flagThanks" class="hint-card" role="status" :style="{ bottom: `${dockHeight + 12}px` }">
