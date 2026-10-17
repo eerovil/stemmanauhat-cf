@@ -76,7 +76,16 @@ export function publishPlan(manifest, choir, date, partFiles = []) {
   const voice = manifest.voice;
   if (voice != null && !(typeof voice === "string" && /^[A-Za-z][A-Za-z0-9 ]{0,30}$/.test(voice))) throw new Error(`bad voice for ${slug}`);
   const sungAs = (file) => ({ file, sung: true, ...(voice ? { voice } : {}) });
-  const partsJson = JSON.stringify(parts.map(({ name }, i) => (partFiles[i] ? { name, ...sungAs(partFiles[i]) } : { name })));
+  // Where a part is drawn when it shares a staff (musescore-choir-plugins#420), kept as song-app wrote it.
+  const placed = (p) => {
+    const ok = Number.isInteger(p.staff) && p.staff >= 0 && Array.isArray(p.voices) && p.voices.length > 0
+      && p.voices.every((v) => Number.isInteger(v) && v >= 1 && v <= 4);
+    if (p.staff === undefined && p.voices === undefined) return {};
+    if (!ok) throw new Error(`bad staff or voices for ${p.name} in ${slug}`);
+    return { staff: p.staff, voices: p.voices };
+  };
+  const partsJson = JSON.stringify(parts.map((p, i) => ({
+    name: p.name, ...placed(p), ...(partFiles[i] ? sungAs(partFiles[i]) : {}) })));
   const publishedAt = date.toISOString().replace(/\.\d+Z$/, "Z");
   // The manifest in R2 carries the same facts as the row, as song-app writes it.
   const r2Manifest = { slug, title, choir, version, score: "score.musicxml", timing: "timing.json",

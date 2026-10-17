@@ -6,7 +6,9 @@
 #
 # Each <out-dir>/<slug>/ gets what song-app's publish uploads, plus score.mid:
 # manifest.json, score.musicxml, score.mid and timing.json. The manifest lists the
-# part names only: the site plays score.mid, so no audio is rendered per part (#36).
+# part names only: the site plays score.mid, so no audio is rendered per part (#36);
+# a song of more than five parts adds where each is drawn (its staff and voices,
+# musescore-choir-plugins#420).
 # The tempo for a score without one is the recording's, as in song-app's publish,
 # and so are the tempo changes set for the recording. The manifest also carries
 # the score's composer, lyricist and arranger (its metaTags) when they are set.
@@ -52,13 +54,18 @@ for slug in slugs:
     with tempfile.TemporaryDirectory() as tmp:
         # The tempo changes the video was recorded with (song-app #387), so the site plays the same.
         tempo_changes = song.data.get("record", {}).get("tempo_changes") or None
-        bundle = publish.build_bundle(cleaned, tmp, initial_bpm=bpm, tempo_changes=tempo_changes, log=print)
+        # Parts sharing a staff (musescore-choir-plugins#420): the pairing saved on the
+        # Publish panel, else the one song-app works out from the page.
+        staff_groups = (song.data.get("publish") or {}).get("staff_groups")
+        bundle = publish.build_bundle(cleaned, tmp, initial_bpm=bpm, tempo_changes=tempo_changes,
+                                      staff_groups=staff_groups, log=print)
         shutil.copy(bundle.musicxml, os.path.join(out, "score.musicxml"))
         # build_bundle exports the MIDI next to the score; publish does not upload it yet.
         shutil.copy(os.path.join(tmp, "score.mid"), os.path.join(out, "score.mid"))
         with open(os.path.join(out, "timing.json"), "w") as f:
             json.dump(bundle.timing, f)
-        parts = [{"name": name} for name in bundle.parts]
+        # Where each part is drawn when some share a staff: its MusicXML part and voices.
+        parts = [{"name": name, **getattr(bundle, "layout", {}).get(name, {})} for name in bundle.parts]
     with open(os.path.join(out, "manifest.json"), "w") as f:
         json.dump({"slug": slug, "title": song.name, "parts": parts,
                    "duration": bundle.timing["duration"], **credits(cleaned)}, f, ensure_ascii=False)

@@ -37,6 +37,15 @@ describe("publishPlan", () => {
     expect(plan.sql).toContain(`'[{"name":"Tenori","file":"parts/1-Tenori.mp3","sung":true},{"name":"Basso","file":"parts/2-Basso.mp3","sung":true}]'`);
     expect(() => publishPlan(manifest, "public", date, [files[0]])).toThrow("bad part files");
   });
+  it("keeps where each part is drawn when parts share a staff (musescore-choir-plugins#420)", () => {
+    const shared = { ...manifest, parts: [{ name: "Tenori", staff: 0, voices: [1, 3] }, { name: "Basso", staff: 0, voices: [2] }] };
+    const plan = publishPlan(shared, "jm", date);
+    expect(plan.r2Manifest.parts).toEqual(shared.parts);
+    expect(plan.sql).toContain(`'[{"name":"Tenori","staff":0,"voices":[1,3]},{"name":"Basso","staff":0,"voices":[2]}]'`);
+    for (const bad of [{ staff: 0 }, { staff: -1, voices: [1] }, { staff: 0, voices: [5] }, { staff: 0, voices: [] }]) {
+      expect(() => publishPlan({ ...manifest, parts: [{ name: "Tenori", ...bad }] }, "jm", date)).toThrow("bad staff or voices");
+    }
+  });
   it("names the singing voice on every sung part when the manifest says it, and refuses a malformed one", () => {
     const files = ["parts/1-Tenori.mp3", "parts/2-Basso.mp3"];
     const plan = publishPlan({ ...manifest, voice: "LYSE" }, "public", date, files);
