@@ -145,6 +145,21 @@ test("the request form names the song after the PDF and says when it is too big 
   await file.setInputFiles({ name: "toinen.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) });
   await expect(name).toHaveValue("Kesäilta");
 
+  // One file is listed too, and can be removed.
+  await expect(page.locator(".pdf-list .pdf-name")).toHaveText(["toinen"]);
+  await page.getByRole("button", { name: "Poista toinen" }).click();
+  await expect(page.locator(".pdf-list")).toHaveCount(0);
+  await expect(file).toHaveValue("");
+
+  // A name typed for one file belongs to no file once several are chosen and
+  // all but one are removed: that one names it again.
+  await file.setInputFiles([
+    { name: "Aamu.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) },
+    { name: "Ilta.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) }]);
+  await expect(name).toHaveCount(0);
+  await page.getByRole("button", { name: "Poista Aamu" }).click();
+  await expect(name).toHaveValue("Ilta");
+
   // Over 20 MB: said at once, nothing sent.
   let sent = 0;
   await page.route("/api/requests", (route) => { sent++; return route.fulfill({ status: 413, body: "<html>413</html>" }); });

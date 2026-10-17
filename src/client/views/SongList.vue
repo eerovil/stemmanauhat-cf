@@ -171,6 +171,7 @@ const requesting = ref<{ title: string; credits: string; note: string; name: str
 // copied to each.
 const PDFS_MAX = 10;
 const requestPdfs = ref<File[]>([]);
+const pdfInput = ref<HTMLInputElement | null>(null);
 const pdfErrors = ref(new Map<File, string>());
 const several = computed(() => requestPdfs.value.length > 1);
 const requestMessage = ref("");
@@ -182,15 +183,18 @@ function startRequest() {
   requesting.value = { title: "", credits: "", note: "", name: "" };
 }
 function setPdfs(files: File[]) {
-  const previous = requestPdfs.value.length === 1 ? requestPdfs.value[0] : undefined;
+  const before = requestPdfs.value;
   requestPdfs.value = files;
   pdfErrors.value = new Map();
+  if (!files.length && pdfInput.value) pdfInput.value.value = "";
   // An empty song name takes the file's name, which can still be edited;
-  // so does one the previous file gave, but never one typed in.
+  // so does one the previous file gave, but never one typed in. Coming down
+  // from several files, the name field was hidden, so whatever it held then
+  // belongs to no file left: the remaining file names it.
   const r = requesting.value;
   if (files.length !== 1 || !r) return;
-  const given = previous ? pdfTitle(previous.name) ?? "" : "";
-  if (!r.title.trim() || r.title === given) r.title = pdfTitle(files[0]!.name) ?? "";
+  const given = before.length === 1 ? pdfTitle(before[0]!.name) ?? "" : "";
+  if (before.length > 1 || !r.title.trim() || r.title === given) r.title = pdfTitle(files[0]!.name) ?? "";
 }
 function pickPdf(event: Event) {
   const input = event.target as HTMLInputElement;
@@ -332,9 +336,9 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       </template>
       <label>{{ t.notes }}<textarea v-model="requesting.note" rows="3" maxlength="1000" :disabled="sending"></textarea></label>
       <label v-if="!me?.email">{{ t.yourName }}<input v-model="requesting.name" type="text" maxlength="100" :disabled="sending" /></label>
-      <label>{{ t.musicPdfOptional }}<input type="file" accept="application/pdf,.pdf" multiple :disabled="sending" @change="pickPdf" /></label>
+      <label>{{ t.musicPdfOptional }}<input ref="pdfInput" type="file" accept="application/pdf,.pdf" multiple :disabled="sending" @change="pickPdf" /></label>
       <p class="hint">{{ t.pdfsHint }}</p>
-      <ul v-if="several || pdfErrors.size" class="pdf-list">
+      <ul v-if="requestPdfs.length" class="pdf-list">
         <li v-for="pdf in requestPdfs" :key="pdf.name + pdf.size + pdf.lastModified">
           <span class="pdf-name">{{ pdfTitle(pdf.name) ?? pdf.name }}<span v-if="pdfErrors.get(pdf)" class="pdf-error error">{{ pdfErrors.get(pdf) }}</span></span>
           <button type="button" class="link" :aria-label="t.removePdf(pdfTitle(pdf.name) ?? pdf.name)" :disabled="sending" @click="removePdf(pdf)">✕</button>
