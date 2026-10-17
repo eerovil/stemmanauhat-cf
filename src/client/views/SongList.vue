@@ -166,47 +166,102 @@ const requests = ref<SongRequest[]>([]);
 const openFlags = ref(0);
 const canRequest = computed(() => me.value?.choirs.some((c) => c.id === props.choir && !c.public && !c.staging) ?? false);
 const requesting = ref<{ title: string; credits: string; note: string; name: string } | null>(null);
-const requestPdf = ref<File | null>(null);
+// Up to ten PDFs at once (#77), each sent as its own request named after its
+// file; with two or more, the name and composer fields go and the note is
+// copied to each.
+const PDFS_MAX = 10;
+const requestPdfs = ref<File[]>([]);
+const pdfInput = ref<HTMLInputElement | null>(null);
+const pdfErrors = ref(new Map<File, string>());
+const several = computed(() => requestPdfs.value.length > 1);
 const requestMessage = ref("");
 const sending = ref(false);
 function startRequest() {
   requestMessage.value = "";
-  requestPdf.value = null;
+  requestPdfs.value = [];
+  pdfErrors.value = new Map();
   requesting.value = { title: "", credits: "", note: "", name: "" };
 }
-function pickPdf(event: Event) {
-  const previous = requestPdf.value;
-  requestPdf.value = (event.target as HTMLInputElement).files?.[0] ?? null;
-  // An empty song name takes the file's name, which can still be edited (#77);
-  // so does one the previous file gave, but never one typed in.
+function setPdfs(files: File[]) {
+  const before = requestPdfs.value;
+  requestPdfs.value = files;
+  pdfErrors.value = new Map();
+  if (!files.length && pdfInput.value) pdfInput.value.value = "";
+  // An empty song name takes the file's name, which can still be edited;
+  // so does one the previous file gave, but never one typed in. Coming down
+  // from several files, the name field was hidden, so whatever it held then
+  // belongs to no file left: the remaining file names it.
   const r = requesting.value;
-  if (!requestPdf.value || !r) return;
-  const given = previous ? pdfTitle(previous.name) ?? "" : "";
-  if (!r.title.trim() || r.title === given) r.title = pdfTitle(requestPdf.value.name) ?? "";
+  if (files.length !== 1 || !r) return;
+  const given = before.length === 1 ? pdfTitle(before[0]!.name) ?? "" : "";
+  if (before.length > 1 || !r.title.trim() || r.title === given) r.title = pdfTitle(files[0]!.name) ?? "";
+}
+function pickPdf(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const files = [...(input.files ?? [])];
+  requestMessage.value = "";
+  if (files.length > PDFS_MAX) {
+    input.value = "";
+    setPdfs([]);
+    requestMessage.value = words().tooManyPdfs;
+    return;
+  }
+  setPdfs(files);
+}
+function removePdf(file: File) {
+  setPdfs(requestPdfs.value.filter((f) => f !== file));
+}
+/** One request; the error to show for it, or null once it is sent. */
+async function sendOne(fields: Record<string, string>, pdf: File | undefined): Promise<string | null> {
+  // Said here rather than after uploading it all from a phone.
+  if (pdf && pdf.size > PDF_MAX_BYTES) return words().pdfTooBig;
+  const form = new FormData();
+  form.set("choir", props.choir);
+  for (const [key, value] of Object.entries(fields)) form.set(key, value);
+  if (pdf) form.set("pdf", pdf);
+  try {
+    await postForm("/api/requests", form);
+    return null;
+  } catch (error) {
+    return (error as Error).message;
+  }
 }
 async function sendRequest() {
   const r = requesting.value!;
-  if (!r.title.trim() && !requestPdf.value) {
+  const pdfs = requestPdfs.value;
+  if (!r.title.trim() && !pdfs.length) {
     requestMessage.value = words().needTitleOrPdf;
     return;
   }
-  // Said here rather than after uploading it all from a phone.
-  if (requestPdf.value && requestPdf.value.size > PDF_MAX_BYTES) {
-    requestMessage.value = words().pdfTooBig;
-    return;
-  }
-  const form = new FormData();
-  form.set("choir", props.choir);
-  for (const [key, value] of Object.entries(r)) form.set(key, value);
-  if (requestPdf.value) form.set("pdf", requestPdf.value);
   sending.value = true;
   try {
-    await postForm("/api/requests", form);
-    requesting.value = null;
-    requestMessage.value = words().requestSent;
+    if (!several.value) {
+      const error = await sendOne(r, pdfs[0]);
+      if (error) {
+        requestMessage.value = error;
+        return;
+      }
+      requesting.value = null;
+      requestMessage.value = words().requestSent;
+    } else {
+      // One upload each, one after another, so each stays under the size limits.
+      // The same note for every song, whatever happens to the form meanwhile.
+      const fields = { note: r.note, name: r.name };
+      const failed = new Map<File, string>();
+      for (const pdf of pdfs) {
+        const error = await sendOne(fields, pdf);
+        if (error) failed.set(pdf, error);
+      }
+      if (failed.size) {
+        setPdfs([...failed.keys()]);
+        pdfErrors.value = failed;
+        requestMessage.value = words().sentSome(pdfs.length - failed.size, pdfs.length);
+      } else {
+        requesting.value = null;
+        requestMessage.value = words().requestsSent(pdfs.length);
+      }
+    }
     await load();
-  } catch (error) {
-    requestMessage.value = (error as Error).message;
   } finally {
     sending.value = false;
   }
@@ -275,15 +330,25 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
     <section v-else-if="requesting" class="card request-form">
       <h2>{{ t.requestTrack }}</h2>
       <p class="hint">{{ t.requestHint }}</p>
-      <label>{{ t.songName }}<input v-model="requesting.title" type="text" maxlength="200" /></label>
-      <label>{{ t.composerArranger }}<input v-model="requesting.credits" type="text" maxlength="200" /></label>
-      <label>{{ t.notes }}<textarea v-model="requesting.note" rows="3" maxlength="1000"></textarea></label>
-      <label v-if="!me?.email">{{ t.yourName }}<input v-model="requesting.name" type="text" maxlength="100" /></label>
-      <label>{{ t.musicPdfOptional }}<input type="file" accept="application/pdf,.pdf" @change="pickPdf" /></label>
+      <template v-if="!several">
+        <label>{{ t.songName }}<input v-model="requesting.title" type="text" maxlength="200" :disabled="sending" /></label>
+        <label>{{ t.composerArranger }}<input v-model="requesting.credits" type="text" maxlength="200" :disabled="sending" /></label>
+      </template>
+      <label>{{ t.notes }}<textarea v-model="requesting.note" rows="3" maxlength="1000" :disabled="sending"></textarea></label>
+      <label v-if="!me?.email">{{ t.yourName }}<input v-model="requesting.name" type="text" maxlength="100" :disabled="sending" /></label>
+      <label>{{ t.musicPdfOptional }}<input ref="pdfInput" type="file" accept="application/pdf,.pdf" multiple :disabled="sending" @change="pickPdf" /></label>
+      <p class="hint">{{ t.pdfsHint }}</p>
+      <ul v-if="requestPdfs.length" class="pdf-list">
+        <li v-for="pdf in requestPdfs" :key="pdf.name + pdf.size + pdf.lastModified">
+          <span class="pdf-name">{{ pdfTitle(pdf.name) ?? pdf.name }}<span v-if="pdfErrors.get(pdf)" class="pdf-error error">{{ pdfErrors.get(pdf) }}</span></span>
+          <button type="button" class="link" :aria-label="t.removePdf(pdfTitle(pdf.name) ?? pdf.name)" :disabled="sending" @click="removePdf(pdf)">✕</button>
+        </li>
+      </ul>
       <p v-if="requestMessage" class="hint">{{ requestMessage }}</p>
       <div class="row">
         <button type="button" class="primary" :disabled="sending" @click="sendRequest">{{ t.send }}</button>
-        <button type="button" @click="requesting = null">{{ t.cancel }}</button>
+        <!-- Not while a batch is still going up: it would carry on unseen (#77). -->
+        <button type="button" :disabled="sending" @click="requesting = null">{{ t.cancel }}</button>
       </div>
     </section>
     <template v-else>
