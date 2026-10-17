@@ -10,6 +10,8 @@ import { BasicSoundBank } from "spessasynth_core";
 
 export const PASSPHRASE = "testilinkki-jm";
 const VERSION = "20261009T120000Z";
+// The test list's songs are newer versions, so moving one over a choir's copy changes its address (#73).
+const versionFor = (choir) => (choir === "testi" ? "20261016T120000Z" : VERSION);
 const FILES = ["score.musicxml", "timing.json", "manifest.json", "score.mid"];
 const PART_FILES = ["parts/1-Tenori.mp3", "parts/2-Basso.mp3"];
 // Songs published since #36 list part names only; kokeilu and iltalaulu keep the
@@ -60,6 +62,9 @@ const songs = [
   ["public", "laulettu", "Laulettu laulu", "tests/fixtures/two-part", 8.0, ["Esimerkki Säveltäjä", "Esimerkki Sanoittaja", null]],
   // The two-part song with both parts on one staff (musescore-choir-plugins#420).
   ["naiskuoro", "jaettu", "Jaettu", "tests/fixtures/shared-staff", 8.0, [null, null, null]],
+  // The test list (#73): a new song, and a fixed Iltalaulu that replaces jm's when moved.
+  ["testi", "uusi", "Uusi laulu", "tests/fixtures/two-part", 8.0, ["Aino Esimerkki", null, null]],
+  ["testi", "iltalaulu", "Iltalaulu", "tests/fixtures/two-part", 8.0, [null, null, null]],
 ];
 const value = (text) => (text === null ? "NULL" : `'${text}'`);
 const sql = [
@@ -68,14 +73,14 @@ const sql = [
   "INSERT INTO admins (email) VALUES ('yllapito@example.com');",
   `INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES ('jm', '${salt.toString("base64url")}', '${await hash(PASSPHRASE, salt)}', 10000, 1);`,
   ...songs.map(([choir, slug, title, , duration, credits]) =>
-    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, composer, lyricist, arranger) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${VERSION}/', '${slug === "jaettu" ? SHARED_PARTS : SUNG_ROWS.includes(slug) ? SUNG_PARTS : OLD_ROWS.includes(slug) ? OLD_PARTS : PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z', ${credits.map(value).join(", ")});`),
+    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, composer, lyricist, arranger) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${versionFor(choir)}/', '${slug === "jaettu" ? SHARED_PARTS : SUNG_ROWS.includes(slug) ? SUNG_PARTS : OLD_ROWS.includes(slug) ? OLD_PARTS : PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z', ${credits.map(value).join(", ")});`),
 ].join("\n");
 writeFileSync("tests/fixtures/seed.generated.sql", sql + "\n");
 wrangler("d1", "execute", "stemmanauhat", "--local", "--file", "tests/fixtures/seed.generated.sql");
 
 for (const [choir, slug, , fixture] of songs) {
   for (const file of WITH_MP3S.includes(slug) ? [...FILES, ...PART_FILES] : FILES) {
-    wrangler("r2", "object", "put", `stemmanauhat/songs/${choir}/${slug}/${VERSION}/${file}`,
+    wrangler("r2", "object", "put", `stemmanauhat/songs/${choir}/${slug}/${versionFor(choir)}/${file}`,
       "--local", "--file", `${fixture}/${file}`);
   }
 }

@@ -511,7 +511,7 @@ function seekTo(event: Event) {
  * Flagging the score (#41): a singer in a private choir says what is wrong and
  * where, and it waits for Eero on /admin. The open list takes no flags.
  */
-const canFlag = computed(() => me.value?.choirs.some((c) => c.id === props.choir && !c.public) ?? false);
+const canFlag = computed(() => me.value?.choirs.some((c) => c.id === props.choir && !c.public && !c.staging) ?? false);
 /** `bar` turns into a number once typed in: Vue reads a number field as one. */
 const flagging = ref<{ problems: FlagProblem[]; bar: string | number; note: string; name: string } | null>(null);
 const flagError = ref("");
