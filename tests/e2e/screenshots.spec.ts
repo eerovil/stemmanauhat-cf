@@ -318,3 +318,13 @@ test("requests (#77): the song named after the PDF, a PDF too big, and the list 
   await ubi.getByRole("button", { name: "Poista" }).click();
   await expect(ubi).toHaveCount(0);
 });
+
+test("requests (#77): several PDFs at once", async ({ page }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await page.goto("/c/jm?lang=en");
+  await page.getByRole("button", { name: "Request a practice track" }).click();
+  await page.getByLabel("Music (PDF, optional)").setInputFiles(["Ubi Caritas et Amor", "Kesäillan valssi", "Iltatähti"]
+    .map((name) => ({ name: `${name}.pdf`, mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") })));
+  await page.getByLabel("Notes").fill("For the Christmas concert");
+  await page.screenshot({ path: `${dir}/request-several-pdfs-phone.png` });
+});
