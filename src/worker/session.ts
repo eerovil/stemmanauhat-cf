@@ -8,6 +8,10 @@ import { cookieValue, readValue, signValue } from "./signing";
 export interface Session {
   email?: string;
   links?: Record<string, number>;
+  /** An agent's read-only session from a login link (#79): the choirs it may open. */
+  agent?: string[];
+  /** Which AGENT_LOGIN_SECRET started it (agentKeyMark): a new key ends it. */
+  agentKey?: string;
   /** Unix seconds. */
   exp: number;
 }
@@ -30,12 +34,17 @@ function isSession(value: unknown): value is Session {
     if (typeof v.links !== "object" || v.links === null) return false;
     if (!Object.values(v.links).every((g) => typeof g === "number")) return false;
   }
+  if (v.agent !== undefined) {
+    if (!Array.isArray(v.agent) || !v.agent.every((c) => typeof c === "string")) return false;
+  }
+  if (v.agentKey !== undefined && typeof v.agentKey !== "string") return false;
   return true;
 }
 
-export async function sessionCookie(secret: string, session: Omit<Session, "exp">, now: number): Promise<string> {
-  const value = await signValue(secret, { ...session, exp: now + SESSION_SECONDS });
-  return `${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_SECONDS}`;
+export async function sessionCookie(secret: string, session: Omit<Session, "exp">, now: number,
+  seconds = SESSION_SECONDS): Promise<string> {
+  const value = await signValue(secret, { ...session, exp: now + seconds });
+  return `${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${seconds}`;
 }
 
 export function clearSessionCookie(): string {

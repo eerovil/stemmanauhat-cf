@@ -38,6 +38,21 @@ Every change runs the test suite (`pnpm test`), which must include at least one 
 test: sign-in stubbed, a song's score renders, audio plays, the cursor moves. A build or a linter
 alone is not a test. Use the AgentDeck job queue for test runs as the poller brief says.
 
+## Checking the live site as a singer
+
+The live site needs a Google sign-in, so an agent checks it with a login link
+only this host can make (#79):
+
+    ./scripts/agent-login.sh jm --next /c/jm/<song>
+
+It prints a link that works for 5 minutes. Open it in Playwright inside `./scripts/run.sh`.
+The session it starts lasts an hour and may open only the choirs named. It can never open
+the test list or `/admin`, and it cannot send anything (song requests, flags, admin
+changes): every POST is a 403. The key is the Worker secret `AGENT_LOGIN_SECRET`. Its only
+other copy is `~/.local/share/stemmanauhat/agent-login.key` on this host, never in the
+repository. Never paste a link into an issue, a pull request or a log you post.
+`--rotate` makes a new key and ends every link and agent session already made.
+
 ## Where things are decided
 
 The product decisions (D1–D7) are in the first issue of this repository, moved from

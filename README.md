@@ -133,7 +133,8 @@ the songs into your copy once step 9 is done.
    credentials → OAuth client ID, type *Web application*, with the authorized redirect URI
    `https://<WORKER_HOST>/auth/callback` (and `https://<PUBLIC_HOST>/auth/callback` if you set one).
 7. **`./scripts/set-worker-secrets.sh`.** It makes `SESSION_SECRET` and asks for the client id and
-   secret from step 6.
+   secret from step 6. Optional: `./scripts/agent-login.sh --setup` makes `AGENT_LOGIN_SECRET`,
+   so this host can make short read-only singer login links for agents (see AGENTS.md).
 8. **`./scripts/add-admin.sh <your Google email>`.** Sign in at `https://<WORKER_HOST>/admin`, add
    each choir's members or make its link there.
 9. **The choir app.** song-app's `.env` needs three values for your copy:

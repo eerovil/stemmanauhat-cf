@@ -34,6 +34,12 @@ describe("decideAccess", () => {
     expect(decideAccess(s, "jm", facts({ linkGeneration: null }))).toBe("refused");
     expect(decideAccess(s, "naiskuoro", facts())).toBe("refused");
   });
+  it("lets an agent's session into the choirs it names, never the test list", () => {
+    const s = { agent: ["jm"], exp: 0 };
+    expect(decideAccess(s, "jm", facts({ linkGeneration: null }))).toBe("ok");
+    expect(decideAccess(s, "naiskuoro", facts())).toBe("refused");
+    expect(decideAccess({ agent: ["testi"], exp: 0 }, "testi", facts({ choirStaging: true }))).toBe("refused");
+  });
   it("lets only admins into the test list, not its members or its link", () => {
     const admin = { email: "a@example.com", exp: 0 };
     expect(decideAccess(admin, "testi", facts({ choirStaging: true, isAdmin: true }))).toBe("ok");

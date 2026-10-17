@@ -10,6 +10,7 @@ const vars = {
   SESSION_SECRET: "test-session-secret-not-real",
   GOOGLE_CLIENT_ID: "test-client.apps.googleusercontent.com",
   GOOGLE_CLIENT_SECRET: "test-not-a-secret",
+  AGENT_LOGIN_SECRET: "test-agent-key-not-real",
   GOOGLE_AUTH_URL: `${google}/auth`,
   GOOGLE_TOKEN_URL: `${google}/token`,
 };

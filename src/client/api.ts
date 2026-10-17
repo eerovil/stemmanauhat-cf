@@ -11,6 +11,8 @@ export interface Choir {
 export interface Me {
   email: string | null;
   linked: string[];
+  /** An agent's read-only login link session (#79). */
+  agent: boolean;
   admin: boolean;
   choirs: Choir[];
   /** Choirs this browser is in only by link, which a Google sign-in would join. */
