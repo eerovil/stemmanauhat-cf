@@ -14,7 +14,8 @@
 # The key is AGENT_LOGIN_SECRET, a Worker secret of its own (not SESSION_SECRET).
 # Its only other copy is on this host, in ~/.local/share/stemmanauhat/agent-login.key
 # (or STEMMANAUHAT_AGENT_KEY=<file>), never in the repository. Deleting the
-# Worker secret turns the links off.
+# Worker secret turns the links off, and a new or deleted key ends every
+# agent session already started.
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

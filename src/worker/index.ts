@@ -1,4 +1,4 @@
-import { AGENT_SESSION_SECONDS, readAgentLink } from "./agent";
+import { AGENT_SESSION_SECONDS, agentKeyMark, agentSessionValid, readAgentLink } from "./agent";
 import { decideAccess, isAdmin, loadFacts, type Access } from "./access";
 import type { Env } from "./env";
 import { serveObject, safeSongPath } from "./files";
@@ -30,10 +30,10 @@ export default {
     if (url.pathname === "/health") return json({ ok: true });
     if (!env.SESSION_SECRET) return new Response("Not configured: SESSION_SECRET is missing", { status: 503 });
     const now = Math.floor(Date.now() / 1000);
-    const ctx: Ctx = {
-      env, request, url, now, secret: env.SESSION_SECRET,
-      session: await readSession(request, env.SESSION_SECRET, now),
-    };
+    let session = await readSession(request, env.SESSION_SECRET, now);
+    // An agent's session ends with the key that started it (#79).
+    if (session && !(await agentSessionValid(session, env.AGENT_LOGIN_SECRET))) session = null;
+    const ctx: Ctx = { env, request, url, now, secret: env.SESSION_SECRET, session };
     try {
       return await route(ctx);
     } catch (error) {
@@ -207,7 +207,8 @@ async function agentLogin(ctx: Ctx): Promise<Response> {
   const next = ctx.url.searchParams.get("next");
   const target = next ? safeNext(next) : `/c/${encodeURIComponent(choirs[0]!)}`;
   return redirect(target, {
-    "Set-Cookie": await sessionCookie(ctx.secret, { agent: choirs }, ctx.now, AGENT_SESSION_SECONDS),
+    "Set-Cookie": await sessionCookie(ctx.secret, { agent: choirs, agentKey: await agentKeyMark(secret) }, ctx.now,
+      AGENT_SESSION_SECONDS),
   });
 }
 

@@ -10,6 +10,8 @@ export interface Session {
   links?: Record<string, number>;
   /** An agent's read-only session from a login link (#79): the choirs it may open. */
   agent?: string[];
+  /** Which AGENT_LOGIN_SECRET started it (agentKeyMark): a new key ends it. */
+  agentKey?: string;
   /** Unix seconds. */
   exp: number;
 }
@@ -35,6 +37,7 @@ function isSession(value: unknown): value is Session {
   if (v.agent !== undefined) {
     if (!Array.isArray(v.agent) || !v.agent.every((c) => typeof c === "string")) return false;
   }
+  if (v.agentKey !== undefined && typeof v.agentKey !== "string") return false;
   return true;
 }
 

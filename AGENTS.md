@@ -51,7 +51,7 @@ the test list or `/admin`, and it cannot send anything (song requests, flags, ad
 changes): every POST is a 403. The key is the Worker secret `AGENT_LOGIN_SECRET`. Its only
 other copy is `~/.local/share/stemmanauhat/agent-login.key` on this host, never in the
 repository. Never paste a link into an issue, a pull request or a log you post.
-`--rotate` makes a new key and stops every link already made.
+`--rotate` makes a new key and ends every link and agent session already made.
 
 ## Where things are decided
 

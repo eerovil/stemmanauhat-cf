@@ -96,4 +96,13 @@ describe("/auth/agent", () => {
     }
     expect((await call("/auth/logout", { method: "POST", headers: { Cookie } })).status).toBe(302);
   });
+  it("ends every agent session when the key changes or is removed", async () => {
+    const login = await call(`/auth/agent?t=${await signValue(KEY, { choirs: ["jm"], exp: now() + 60 })}`);
+    const Cookie = login.headers.get("Set-Cookie")!.split(";")[0]!;
+    // Only an agent session gets "read-only"; once it has ended, the POST is anyone's.
+    const post = (env: Partial<Env>) => call("/api/requests", { method: "POST", headers: { Cookie }, body: "{}" }, env);
+    expect(await (await post({})).json()).toEqual({ error: "read-only" });
+    expect(await (await post({ AGENT_LOGIN_SECRET: "a-new-key" })).json()).toEqual({ error: "refused" });
+    expect(await (await post({ AGENT_LOGIN_SECRET: undefined })).json()).toEqual({ error: "refused" });
+  });
 });
