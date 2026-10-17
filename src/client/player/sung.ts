@@ -1,4 +1,8 @@
+import { words } from "../i18n";
 import { CEILING_DB } from "./midi";
+import { DEFAULT_OTHERS, mixLevels } from "./mix";
+import type { FromWorklet, ToWorklet } from "./sung-worklet";
+import workletUrl from "./sung-worklet?worker&url";
 
 /**
  * The sung parts' boost before the limiter: the renders peak near −2 dB and sound
@@ -6,10 +10,6 @@ import { CEILING_DB } from "./midi";
  * "make it a bit louder"). The limiter keeps the peaks under CEILING_DB.
  */
 export const SUNG_GAIN = 10 ** (6 / 20);
-import { words } from "../i18n";
-import { DEFAULT_OTHERS, mixLevels } from "./mix";
-import type { FromWorklet, ToWorklet } from "./sung-worklet";
-import workletUrl from "./sung-worklet?worker&url";
 
 /**
  * A song whose parts are sung recordings, one MP3 per part (a local test Eero
