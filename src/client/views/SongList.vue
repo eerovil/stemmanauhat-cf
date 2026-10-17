@@ -163,7 +163,7 @@ async function removeSetlist() {
 const requests = ref<SongRequest[]>([]);
 /** Open flags on this choir's songs (#41): only counted here, for the admin's link. */
 const openFlags = ref(0);
-const canRequest = computed(() => me.value?.choirs.some((c) => c.id === props.choir && !c.public) ?? false);
+const canRequest = computed(() => me.value?.choirs.some((c) => c.id === props.choir && !c.public && !c.staging) ?? false);
 const requesting = ref<{ title: string; credits: string; note: string; name: string } | null>(null);
 const requestPdf = ref<File | null>(null);
 const requestMessage = ref("");
@@ -196,6 +196,22 @@ async function sendRequest() {
     requestMessage.value = (error as Error).message;
   } finally {
     sending.value = false;
+  }
+}
+// The test list (#73): an admin moves a tried-out song to a choir's list.
+const staging = computed(() => me.value?.choirs.some((c) => c.id === props.choir && c.staging) ?? false);
+const moveTargets = computed(() => me.value?.choirs.filter((c) => !c.staging) ?? []);
+const moveMessage = ref("");
+async function moveSong(s: SongSummary, select: HTMLSelectElement) {
+  const target = moveTargets.value.find((c) => c.id === select.value);
+  select.value = "";
+  if (!target || !confirm(words().confirmMove(s.title, target.name))) return;
+  try {
+    await postJson("/api/admin/move", { choir: props.choir, slug: s.slug, to: target.id });
+    await load();
+    moveMessage.value = words().moved(s.title, target.name);
+  } catch (error) {
+    moveMessage.value = (error as Error).message;
   }
 }
 const last = computed(() => {
@@ -258,7 +274,9 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       </div>
     </section>
     <template v-else>
-      <div v-if="setlists.length || me?.admin" class="row setlists">
+      <p v-if="staging" class="hint staging-hint">{{ t.stagingHint }}</p>
+      <p v-if="moveMessage" class="hint move-message">{{ moveMessage }}</p>
+      <div v-if="!staging && (setlists.length || me?.admin)" class="row setlists">
         <select v-if="setlists.length" :value="setlist?.id ?? ''" :aria-label="t.setlist" :class="{ picked: setlist }"
           @change="pick(Number(($event.target as HTMLSelectElement).value) || null)">
           <option value="">{{ t.allSongs }}</option>
@@ -281,6 +299,11 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
             <span class="credits">{{ listCredits(s) }}</span></a>
           <span v-if="newest.has(s.slug)" class="badge">{{ t.newBadge }}</span>
           <span v-if="order === 'date' && !setlist" class="date">{{ day(s.published_at) }}</span>
+          <select v-if="staging" class="move" value="" :aria-label="t.moveSongTo(s.title)"
+            @change="moveSong(s, $event.target as HTMLSelectElement)">
+            <option value="" disabled>{{ t.moveTo }}</option>
+            <option v-for="c in moveTargets" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
         </li>
       </ul>
       <template v-if="others.length">

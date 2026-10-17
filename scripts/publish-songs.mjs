@@ -16,7 +16,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const CHOIRS = ["jm", "naiskuoro", "public"];
+export const CHOIRS = ["jm", "naiskuoro", "public", "testi"];
+/** Lists that keep their copy when the song is published elsewhere, and take it off nowhere (#73). */
+const KEEPS_COPIES = ["public", "testi"];
 const FILES = ["score.musicxml", "score.mid", "timing.json", "manifest.json"];
 
 /** `2026-10-10T12:00:00.123Z` → `20261010T120000Z`, song-app's version format. */
@@ -103,8 +105,9 @@ export function publishPlan(manifest, choir, date, partFiles = []) {
     + CREDITS.map((name) => ` ${name} = excluded.${name}`).join(",") + ";"
     // Publishing a song for another choir moves it, as song-app does, except
     // that the public list keeps its copy: a public-domain song may be in a
-    // choir's own list too. Publishing to public moves nothing.
-    + (choir === "public" ? ""
+    // choir's own list too. Publishing to public or to the test list (#73)
+    // moves nothing; publishing to a choir takes it off the test list.
+    + (KEEPS_COPIES.includes(choir) ? ""
       : `\nDELETE FROM songs WHERE slug = ${quote(slug)} AND choir NOT IN (${quote(choir)}, 'public');`);
   return { prefix, files, sql, r2Manifest };
 }

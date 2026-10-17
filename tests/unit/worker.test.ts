@@ -10,7 +10,7 @@ import { readSession, sessionCookie } from "../../src/worker/session";
 import { base64UrlEncode } from "../../src/worker/signing";
 
 const facts = (over: Partial<AccessFacts> = {}): AccessFacts => ({
-  choirExists: true, choirPublic: false, linkGeneration: 3, isMember: false, isAdmin: false, ...over,
+  choirExists: true, choirPublic: false, choirStaging: false, linkGeneration: 3, isMember: false, isAdmin: false, ...over,
 });
 
 describe("decideAccess", () => {
@@ -33,6 +33,13 @@ describe("decideAccess", () => {
     expect(decideAccess(s, "jm", facts({ linkGeneration: 4 }))).toBe("refused");
     expect(decideAccess(s, "jm", facts({ linkGeneration: null }))).toBe("refused");
     expect(decideAccess(s, "naiskuoro", facts())).toBe("refused");
+  });
+  it("lets only admins into the test list, not its members or its link", () => {
+    const admin = { email: "a@example.com", exp: 0 };
+    expect(decideAccess(admin, "testi", facts({ choirStaging: true, isAdmin: true }))).toBe("ok");
+    expect(decideAccess(admin, "testi", facts({ choirStaging: true, isMember: true }))).toBe("refused");
+    expect(decideAccess({ links: { testi: 3 }, exp: 0 }, "testi", facts({ choirStaging: true }))).toBe("refused");
+    expect(decideAccess(null, "testi", facts({ choirStaging: true }))).toBe("signin");
   });
 });
 

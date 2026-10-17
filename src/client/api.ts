@@ -4,6 +4,8 @@ export interface Choir {
   id: string;
   name: string;
   public: boolean;
+  /** The test list (#73): admins only, songs move from it to a choir. */
+  staging: boolean;
 }
 
 export interface Me {

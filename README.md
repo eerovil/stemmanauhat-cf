@@ -21,6 +21,11 @@ a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
   passphrases at `/admin`.
 - **Songs:** song-app writes each version to R2 under `songs/<choir>/<slug>/<version>/` and points
   a D1 `songs` row at it. The format is in song-app's `docs/stemmanauhat-site.md`.
+- **Test list:** `testi` ("Testilista", D1 `choirs.staging = 1`) is where a new song is tried out
+  before a choir gets it. Only admins open it: it has no members, link, requests or flags. song-app
+  publishes there like to any choir; on the list an admin picks "Siirrä…" and a choir, and the song
+  moves: its files are copied to the choir's folder, it replaces a song of the same name there, and
+  it leaves the test list.
 - **Setlists:** a choir's named song lists in their own order, such as a concert's program (D1
   `setlists`). Singers pick one from the song list's dropdown and see only its songs, numbered;
   admins make and change them on the same page ("Uusi setlista", "Muokkaa").
