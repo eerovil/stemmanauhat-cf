@@ -1,3 +1,5 @@
+import { lang, words } from "./i18n";
+
 export interface Choir {
   id: string;
   name: string;
@@ -35,7 +37,7 @@ export const VOICE_CREDITS: Record<string, string> = {
 export function sungCredit(parts: Part[]): string {
   const voice = parts.find((p) => p.voice)?.voice ?? "REMY";
   const by = VOICE_CREDITS[voice];
-  return `Tekoälyn laulama · Ääni: ${voice}${by ? `, ${by}` : ""}`;
+  return `${words().sungBy} ${voice}${by ? `, ${by}` : ""}`;
 }
 
 export interface SongSummary {
@@ -59,12 +61,14 @@ type Credited = Pick<SongSummary, "composer" | "lyricist" | "arranger">;
 
 /** "säv. X · san. Y · sov. Z", leaving out what is not known; "" when nothing is. The player's line. */
 export function credits(song: Credited): string {
-  return joinCredits([["säv.", song.composer], ["san.", song.lyricist], ["sov.", song.arranger]]);
+  const w = words();
+  return joinCredits([[w.composerAbbr, song.composer], [w.lyricistAbbr, song.lyricist], [w.arrangerAbbr, song.arranger]]);
 }
 
 /** The song lists' shorter line: "säv. X · sov. Y", never the lyricist (Eero, PR #33 review). */
 export function listCredits(song: Credited): string {
-  return joinCredits([["säv.", song.composer], ["sov.", song.arranger]]);
+  const w = words();
+  return joinCredits([[w.composerAbbr, song.composer], [w.arrangerAbbr, song.arranger]]);
 }
 
 function joinCredits(pairs: [string, string | null | undefined][]): string {
@@ -104,9 +108,13 @@ export const FLAG_PROBLEMS = {
 } as const;
 export type FlagProblem = keyof typeof FLAG_PROBLEMS;
 
+/** The problems' labels in the language shown now (FLAG_PROBLEMS is the Finnish). */
+export const flagProblems = (): Record<FlagProblem, string> => words().flagProblems;
+
 /** "Väärä nuotti, Sanat": the problems ticked, as the singer saw them. */
 export function problemLabels(problems: string[]): string {
-  return problems.map((p) => FLAG_PROBLEMS[p as FlagProblem] ?? p).join(", ");
+  const labels = flagProblems();
+  return problems.map((p) => labels[p as FlagProblem] ?? p).join(", ");
 }
 
 /** An open flag on a song (#41), as every singer sees it: without who sent it. */
@@ -132,7 +140,7 @@ export class Refused extends Error {
 }
 
 export async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { credentials: "same-origin" });
+  const response = await fetch(url, { credentials: "same-origin", headers: { "X-Lang": lang.value } });
   if (response.status === 401 || response.status === 403 || response.status === 404) {
     throw new Refused(response.status);
   }
@@ -144,7 +152,7 @@ export async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Lang": lang.value },
     body: JSON.stringify(body),
   });
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
@@ -160,7 +168,7 @@ export async function postForm<T>(url: string, form: FormData): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
     credentials: "same-origin",
-    headers: { "X-Stemmanauhat": "1" },
+    headers: { "X-Stemmanauhat": "1", "X-Lang": lang.value },
     body: form,
   });
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };

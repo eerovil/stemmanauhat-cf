@@ -2,6 +2,8 @@
 import { onMounted, reactive, ref } from "vue";
 import { getJson, postJson, problemLabels, Refused } from "../api";
 import RefusedView from "./Refused.vue";
+import LanguageSwitch from "../components/LanguageSwitch.vue";
+import { day, t, words } from "../i18n";
 
 interface AdminChoir {
   id: string;
@@ -62,38 +64,37 @@ async function run(choir: string, action: () => Promise<string>) {
 const add = (choir: string) => run(choir, async () => {
   const r = await postJson<{ added: string[] }>("/api/admin/members", { choir, add: toAdd[choir] ?? "" });
   toAdd[choir] = "";
-  return r.added.length ? `Lisätty ${r.added.length}.` : "Ei kelvollisia osoitteita.";
+  return r.added.length ? words().added(r.added.length) : words().noValidAddresses;
 });
 const remove = (choir: string, email: string) => run(choir, async () => {
-  if (!confirm(`Poistetaanko ${email}?`)) return "";
+  if (!confirm(words().confirmRemove(email))) return "";
   await postJson("/api/admin/members", { choir, remove: [email] });
-  return `Poistettu ${email}.`;
+  return words().removed(email);
 });
 const renewLink = (choir: string, had: boolean) => run(choir, async () => {
-  if (had && !confirm("Tehdäänkö uusi linkki? Vanha linkki lakkaa toimimaan.")) return "";
+  if (had && !confirm(words().confirmNewLink)) return "";
   await postJson("/api/admin/link", { choir, renew: true });
-  return had ? "Uusi linkki tehty. Vanhalla linkillä tulleet on kirjattu ulos." : "Linkki tehty.";
+  return had ? words().newLinkMade : words().linkMade;
 });
 const copy = (choir: string, url: string) => run(choir, async () => {
   await navigator.clipboard.writeText(url);
-  return "Linkki kopioitu.";
+  return words().linkCopied;
 });
 const linkOff = (choir: string) => run(choir, async () => {
-  if (!confirm("Poistetaanko linkillä kirjautuminen tästä kuorosta?")) return "";
+  if (!confirm(words().confirmLinkOff)) return "";
   await postJson("/api/admin/link", { choir, off: true });
-  return "Linkillä kirjautuminen on pois päältä.";
+  return words().linkOff;
 });
 const markDone = (choir: string, r: AdminRequest) => run(choir, async () => {
   await postJson("/api/admin/requests", { id: r.id, done: true });
-  return `Merkitty tehdyksi: ${r.title ?? "Nuotti (PDF)"}.`;
+  return words().markedDone(r.title ?? words().pdfOnly);
 });
 const removeRequest = (choir: string, r: AdminRequest) => run(choir, async () => {
-  const what = r.song ? "virheilmoitus" : "pyyntö";
-  if (!confirm(`Poistetaanko ${what} ${r.title ?? "Nuotti (PDF)"}?`)) return "";
+  const title = r.title ?? words().pdfOnly;
+  if (!confirm(r.song ? words().confirmRemoveFlag(title) : words().confirmRemoveRequest(title))) return "";
   await postJson("/api/admin/requests", { id: r.id, delete: true });
-  return r.song ? "Virheilmoitus poistettu." : "Pyyntö poistettu.";
+  return r.song ? words().flagRemoved : words().requestRemoved;
 });
-const day = (at: string) => new Date(at).toLocaleDateString("fi-FI");
 const open = (c: AdminChoir) => c.requests.filter((r) => !r.done_at);
 const done = (c: AdminChoir) => c.requests.filter((r) => r.done_at);
 </script>
@@ -101,65 +102,65 @@ const done = (c: AdminChoir) => c.requests.filter((r) => r.done_at);
 <template>
   <RefusedView v-if="refused" :status="refused" />
   <main v-else class="page admin">
-    <header class="bar"><a href="/" class="home-link">Stemmanauhat</a><h1>Ylläpito</h1></header>
+    <header class="bar"><a href="/" class="home-link">{{ t.siteName }}</a><h1>{{ t.admin }}</h1><LanguageSwitch /></header>
     <section v-for="c in choirs" :key="c.id" class="card" :data-choir="c.id">
       <h2>{{ c.name }}</h2>
       <p v-if="message[c.id]" class="hint">{{ message[c.id] }}</p>
 
-      <h3>Pyynnöt ({{ open(c).length }})</h3>
-      <p v-if="!c.requests.length" class="hint">Ei pyyntöjä.</p>
+      <h3>{{ t.requestsHeading(open(c).length) }}</h3>
+      <p v-if="!c.requests.length" class="hint">{{ t.noRequests }}</p>
       <ul class="request-list">
         <li v-for="r in [...open(c), ...done(c)]" :key="r.id" :class="{ done: r.done_at }">
           <template v-if="r.song">
-            <span class="flag-tag">Virhe:</span>
+            <span class="flag-tag">{{ t.flagTag }}</span>
             <a :href="`/c/${encodeURIComponent(c.id)}/${encodeURIComponent(r.song)}`"><strong>{{ r.title }}</strong></a>
-            <span class="flag-what">{{ [r.bar ? `tahti ${r.bar}` : "", problemLabels(r.problems),
-              r.part ? `stemma ${r.part}` : ""].filter(Boolean).join(" · ") }}</span>
+            <span class="flag-what">{{ [r.bar ? t.barLower(r.bar) : "", problemLabels(r.problems),
+              r.part ? t.partLower(r.part) : ""].filter(Boolean).join(" · ") }}</span>
           </template>
           <template v-else>
-            <strong>{{ r.title ?? "Nuotti (PDF)" }}</strong>
+            <strong>{{ r.title ?? t.pdfOnly }}</strong>
             <span v-if="r.credits"> · {{ r.credits }}</span>
           </template>
           <p v-if="r.note" class="hint">{{ r.note }}</p>
           <div class="row">
-            <span class="hint">{{ r.requester ?? "Linkillä tullut" }}, {{ day(r.created_at) }}{{ r.done_at ? ` · tehty ${day(r.done_at)}` : "" }}</span>
+            <span class="hint">{{ r.requester ?? t.viaLink }}, {{ day(r.created_at) }}{{ r.done_at ? t.doneOn(day(r.done_at)) : "" }}</span>
             <span class="row">
               <a v-if="r.pdf" :href="`/api/admin/requests/${r.id}/pdf`" target="_blank" rel="noopener">PDF</a>
-              <button v-if="!r.done_at" type="button" @click="markDone(c.id, r)">Tehty</button>
-              <button type="button" class="link" @click="removeRequest(c.id, r)">Poista</button>
+              <button v-if="!r.done_at" type="button" @click="markDone(c.id, r)">{{ t.done }}</button>
+              <button type="button" class="link" @click="removeRequest(c.id, r)">{{ t.remove }}</button>
             </span>
           </div>
         </li>
       </ul>
 
-      <h3>Jäsenet ({{ c.members.length }})</h3>
-      <textarea v-model="toAdd[c.id]" rows="3" placeholder="Liitä sähköpostiosoitteet, yksi riville"
-        :aria-label="`Lisää jäseniä: ${c.name}`"></textarea>
-      <button type="button" class="primary" @click="add(c.id)">Lisää</button>
+      <h3>{{ t.members(c.members.length) }}</h3>
+      <textarea v-model="toAdd[c.id]" rows="3" :placeholder="t.pasteEmails"
+        :aria-label="t.addMembers(c.name)"></textarea>
+      <button type="button" class="primary" @click="add(c.id)">{{ t.add }}</button>
       <ul class="members">
         <li v-for="m in c.members" :key="m.email">
           <span>{{ m.email }}</span>
-          <button type="button" class="link" @click="remove(c.id, m.email)">Poista</button>
+          <button type="button" class="link" @click="remove(c.id, m.email)">{{ t.remove }}</button>
         </li>
       </ul>
 
-      <h3>Kuoron linkki</h3>
-      <p class="hint">Linkillä pääsee kappaleisiin heti, ja Google-tilin voi lisätä jäseneksi samalla.</p>
+      <h3>{{ t.choirLink }}</h3>
+      <p class="hint">{{ t.linkHint }}</p>
       <p v-if="c.url" class="row">
-        <input :value="c.url" type="text" readonly :aria-label="`Linkki: ${c.name}`" @focus="($event.target as HTMLInputElement).select()" />
-        <button type="button" @click="copy(c.id, c.url)">Kopioi</button>
+        <input :value="c.url" type="text" readonly :aria-label="t.linkLabel(c.name)" @focus="($event.target as HTMLInputElement).select()" />
+        <button type="button" @click="copy(c.id, c.url)">{{ t.copy }}</button>
       </p>
-      <p v-else-if="c.link" class="hint">Vanha linkki on käytössä, mutta sitä ei voi näyttää. Tee uusi, jos haluat jakaa linkin täältä.</p>
-      <p v-else class="hint">Linkillä kirjautuminen on pois päältä.</p>
+      <p v-else-if="c.link" class="hint">{{ t.oldLinkHidden }}</p>
+      <p v-else class="hint">{{ t.linkOff }}</p>
       <div class="row">
-        <button type="button" @click="renewLink(c.id, c.link)">{{ c.link ? "Tee uusi linkki" : "Tee linkki" }}</button>
-        <button v-if="c.link" type="button" class="link" @click="linkOff(c.id)">Pois päältä</button>
+        <button type="button" @click="renewLink(c.id, c.link)">{{ c.link ? t.newLink : t.makeLink }}</button>
+        <button v-if="c.link" type="button" class="link" @click="linkOff(c.id)">{{ t.turnOff }}</button>
       </div>
     </section>
     <section class="card">
-      <h2>Ylläpitäjät</h2>
+      <h2>{{ t.admins }}</h2>
       <ul><li v-for="a in admins" :key="a">{{ a }}</li></ul>
-      <p class="hint">Ylläpitäjän lisää <code>scripts/add-admin.sh</code>.</p>
+      <p class="hint">{{ t.addAdminBefore }} <code>scripts/add-admin.sh</code>.</p>
     </section>
   </main>
 </template>

@@ -32,7 +32,9 @@ export default defineConfig({
     launchOptions: { args: ["--autoplay-policy=no-user-gesture-required"] },
   },
   projects: [
-    { name: "phone", use: { ...devices["Pixel 7"] } },
+    // A Finnish browser, so the tests find the Finnish words; tests/e2e/language.spec.ts
+    // sets English for its own tests.
+    { name: "phone", use: { ...devices["Pixel 7"], locale: "fi-FI" } },
   ],
   webServer: [
     {

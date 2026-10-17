@@ -6,6 +6,7 @@ import { CEILING_DB } from "./midi";
  * "make it a bit louder"). The limiter keeps the peaks under CEILING_DB.
  */
 export const SUNG_GAIN = 10 ** (6 / 20);
+import { words } from "../i18n";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import type { FromWorklet, ToWorklet } from "./sung-worklet";
 import workletUrl from "./sung-worklet?worker&url";
@@ -67,7 +68,7 @@ export class SungPlayer {
    * way); the test passes a fake one.
    */
   static async create(urls: string[], log: (m: string) => void = () => {}, context: AudioContext = new AudioContext()): Promise<SungPlayer> {
-    log("Ladataan stemmoja…");
+    log(words().loadingParts);
     const [buffers] = await Promise.all([
       Promise.all(urls.map(async (url) => {
         const r = await fetch(url);
