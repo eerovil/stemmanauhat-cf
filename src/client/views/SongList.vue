@@ -241,9 +241,11 @@ async function sendRequest() {
       requestMessage.value = words().requestSent;
     } else {
       // One upload each, one after another, so each stays under the size limits.
+      // The same note for every song, whatever happens to the form meanwhile.
+      const fields = { note: r.note, name: r.name };
       const failed = new Map<File, string>();
       for (const pdf of pdfs) {
-        const error = await sendOne({ note: r.note, name: r.name }, pdf);
+        const error = await sendOne(fields, pdf);
         if (error) failed.set(pdf, error);
       }
       if (failed.size) {
@@ -325,11 +327,11 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       <h2>{{ t.requestTrack }}</h2>
       <p class="hint">{{ t.requestHint }}</p>
       <template v-if="!several">
-        <label>{{ t.songName }}<input v-model="requesting.title" type="text" maxlength="200" /></label>
-        <label>{{ t.composerArranger }}<input v-model="requesting.credits" type="text" maxlength="200" /></label>
+        <label>{{ t.songName }}<input v-model="requesting.title" type="text" maxlength="200" :disabled="sending" /></label>
+        <label>{{ t.composerArranger }}<input v-model="requesting.credits" type="text" maxlength="200" :disabled="sending" /></label>
       </template>
-      <label>{{ t.notes }}<textarea v-model="requesting.note" rows="3" maxlength="1000"></textarea></label>
-      <label v-if="!me?.email">{{ t.yourName }}<input v-model="requesting.name" type="text" maxlength="100" /></label>
+      <label>{{ t.notes }}<textarea v-model="requesting.note" rows="3" maxlength="1000" :disabled="sending"></textarea></label>
+      <label v-if="!me?.email">{{ t.yourName }}<input v-model="requesting.name" type="text" maxlength="100" :disabled="sending" /></label>
       <label>{{ t.musicPdfOptional }}<input type="file" accept="application/pdf,.pdf" multiple :disabled="sending" @change="pickPdf" /></label>
       <p class="hint">{{ t.pdfsHint }}</p>
       <ul v-if="several || pdfErrors.size" class="pdf-list">

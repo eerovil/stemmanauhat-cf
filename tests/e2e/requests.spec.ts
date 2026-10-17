@@ -200,6 +200,7 @@ test("several PDFs at once: one request each, named after its file, with the not
   // form can be cancelled or changed, so no batch carries on unseen.
   await page.getByRole("button", { name: "Pyydä stemmanauhaa" }).click();
   await file.setInputFiles([pdf("Kolmas.pdf"), pdf("Neljäs.pdf")]);
+  await page.getByLabel("Lisätietoja").fill("Joulukonserttiin");
   let release!: () => void;
   const held = new Promise<void>((resolve) => { release = resolve; });
   await page.route("/api/requests", async (route) => { await held; await route.continue(); });
@@ -208,10 +209,14 @@ test("several PDFs at once: one request each, named after its file, with the not
   await expect(page.getByRole("button", { name: "Lähetä" })).toBeDisabled();
   await expect(file).toBeDisabled();
   await expect(page.getByRole("button", { name: "Poista Kolmas" })).toBeDisabled();
+  // Nor the note, which goes the same to every song in the batch.
+  await expect(page.getByLabel("Lisätietoja")).toBeDisabled();
   release();
   await expect(page.getByText("Kiitos! 2 pyyntöä lähetetty.")).toBeVisible();
   await page.unroute("/api/requests");
   await expect(pending).toHaveCount(4);
+  await expect(pending.filter({ hasText: "Kolmas" })).toContainText("Joulukonserttiin");
+  await expect(pending.filter({ hasText: "Neljäs" })).toContainText("Joulukonserttiin");
 
   // Leave no request behind for the other tests.
   const admin = await (await browser.newContext()).newPage();
