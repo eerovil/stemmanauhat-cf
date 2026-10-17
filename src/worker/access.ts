@@ -24,6 +24,7 @@ export function decideAccess(session: Session | null, choir: string, facts: Acce
   if (facts.choirPublic) return "ok";
   if (session === null) return "signin";
   if (facts.choirStaging) return session.email && facts.isAdmin ? "ok" : "refused";
+  if (session.agent?.includes(choir)) return "ok";
   const linked = session.links?.[choir];
   if (linked !== undefined && facts.linkGeneration !== null && linked === facts.linkGeneration) return "ok";
   if (session.email && (facts.isMember || facts.isAdmin)) return "ok";

@@ -1,3 +1,4 @@
+import { AGENT_SESSION_SECONDS, readAgentLink } from "./agent";
 import { decideAccess, isAdmin, loadFacts, type Access } from "./access";
 import type { Env } from "./env";
 import { serveObject, safeSongPath } from "./files";
@@ -49,8 +50,13 @@ async function route(ctx: Ctx): Promise<Response> {
   const method = request.method;
   let m: RegExpExecArray | null;
 
+  // An agent's session (#79) only reads: no requests, flags or admin changes.
+  if (ctx.session?.agent && method !== "GET" && method !== "HEAD" && path !== "/auth/logout") {
+    return json({ error: "read-only" }, 403);
+  }
   if (path === "/" && method === "GET") return home(ctx);
   if (path === "/auth/login" && method === "GET") return login(ctx);
+  if (path === "/auth/agent" && method === "GET") return agentLogin(ctx);
   if (path === "/auth/callback" && method === "GET") return callback(ctx);
   if (path === "/auth/logout" && method === "POST") {
     return redirect("/", { "Set-Cookie": clearSessionCookie() });
@@ -189,6 +195,23 @@ async function callback(ctx: Ctx): Promise<Response> {
 }
 
 /**
+ * An agent's login link (#79). It starts a fresh one-hour session for the
+ * choirs it names, with no email and no links, so never an admin's.
+ */
+async function agentLogin(ctx: Ctx): Promise<Response> {
+  const secret = ctx.env.AGENT_LOGIN_SECRET;
+  if (!secret) return json({ error: "not found" }, 404);
+  const choirs = await readAgentLink(secret, ctx.url.searchParams.get("t"), ctx.now);
+  if (!choirs) return redirect(signinUrl("/", "failed"));
+  console.log("agent sign-in", JSON.stringify({ choirs, until: ctx.now + AGENT_SESSION_SECONDS }));
+  const next = ctx.url.searchParams.get("next");
+  const target = next ? safeNext(next) : `/c/${encodeURIComponent(choirs[0]!)}`;
+  return redirect(target, {
+    "Set-Cookie": await sessionCookie(ctx.secret, { agent: choirs }, ctx.now, AGENT_SESSION_SECONDS),
+  });
+}
+
+/**
  * Signing in with Google while holding a choir's current link makes that
  * Google account a member, so the person stays in on every device and after
  * the link changes. Holding the link is the proof, as it is for the link itself.
@@ -236,6 +259,7 @@ async function me(ctx: Ctx): Promise<Response> {
   return json({
     email: ctx.session?.email ?? null,
     linked: Object.keys(ctx.session?.links ?? {}),
+    agent: ctx.session?.agent !== undefined,
     admin: await isAdmin(ctx.env.DB, ctx.session),
     choirs: await visibleChoirs(ctx),
     joinable: await joinableChoirs(ctx),
