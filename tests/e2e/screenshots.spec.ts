@@ -280,3 +280,12 @@ test("own staff on a phone: a very long bar wraps over several lines (#45)", asy
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${dir}/long-bar-own-staff-phone.png` });
 });
+
+test("the test list, as an admin sees it (#73)", async ({ page }) => {
+  await signInAs(page, "/c/testi", "yllapito@example.com");
+  await expect(page.getByLabel("Siirrä kuorolle: Uusi laulu")).toBeVisible();
+  await page.screenshot({ path: `${dir}/test-list-phone.png` });
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Testilista" })).toBeVisible();
+  await page.screenshot({ path: `${dir}/home-admin-phone.png` });
+});

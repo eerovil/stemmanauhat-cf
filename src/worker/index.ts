@@ -82,6 +82,7 @@ async function route(ctx: Ctx): Promise<Response> {
   if (path === "/api/admin/link" && method === "POST") return adminLink(ctx);
   if (path === "/api/admin/setlists" && method === "POST") return adminSetlists(ctx);
   if (path === "/api/admin/requests" && method === "POST") return adminRequests(ctx);
+  if (path === "/api/admin/move" && method === "POST") return adminMove(ctx);
   if ((m = /^\/api\/admin\/requests\/(\d+)\/pdf$/.exec(path)) && method === "GET") return requestPdf(ctx, Number(m[1]));
   if (path.startsWith("/api/") || path.startsWith("/auth/") || path.startsWith("/files/") || path.startsWith("/sound/")) {
     return json({ error: "not found" }, 404);
@@ -252,12 +253,14 @@ async function joinableChoirs(ctx: Ctx): Promise<string[]> {
 }
 
 /** Every choir this visitor may open, public ones included. */
-async function visibleChoirs(ctx: Ctx): Promise<{ id: string; name: string; public: boolean }[]> {
-  const { results } = await ctx.env.DB.prepare("SELECT id, name, public FROM choirs ORDER BY name").all<
-    { id: string; name: string; public: number }>();
+async function visibleChoirs(ctx: Ctx): Promise<{ id: string; name: string; public: boolean; staging: boolean }[]> {
+  const { results } = await ctx.env.DB.prepare("SELECT id, name, public, staging FROM choirs ORDER BY name").all<
+    { id: string; name: string; public: number; staging: number }>();
   const out = [];
   for (const row of results) {
-    if ((await accessTo(ctx, row.id)) === "ok") out.push({ id: row.id, name: row.name, public: row.public === 1 });
+    if ((await accessTo(ctx, row.id)) === "ok") {
+      out.push({ id: row.id, name: row.name, public: row.public === 1, staging: row.staging === 1 });
+    }
   }
   return out;
 }
@@ -355,7 +358,7 @@ async function adminState(ctx: Ctx): Promise<Response> {
   if (!(await isAdmin(ctx.env.DB, ctx.session))) return json({ error: "refused" }, 403);
   const db = ctx.env.DB;
   const [choirs, members, links, admins, requests] = await db.batch([
-    db.prepare("SELECT id, name, public FROM choirs ORDER BY name"),
+    db.prepare("SELECT id, name, public, staging FROM choirs ORDER BY name"),
     db.prepare("SELECT choir, email, added_at FROM members ORDER BY email"),
     db.prepare("SELECT choir, salt, hash, iterations, generation FROM choir_links WHERE hash IS NOT NULL"),
     db.prepare("SELECT email FROM admins ORDER BY email"),
@@ -369,7 +372,9 @@ async function adminState(ctx: Ctx): Promise<Response> {
     bar: number | null; problems: string | null; part: string | null };
   const origin = publicOrigin(ctx.url, ctx.request.headers, ctx.env);
   const out = [];
-  for (const c of (choirs!.results as { id: string; name: string; public: number }[]).filter((c) => c.public !== 1)) {
+  // The test list has no members, link or requests to manage (#73).
+  for (const c of (choirs!.results as { id: string; name: string; public: number; staging: number }[])
+    .filter((c) => c.public !== 1 && c.staging !== 1)) {
     const link = (links!.results as Link[]).find((l) => l.choir === c.id);
     // A link set by passphrase (set-passphrase.sh, or the old site's) works but
     // cannot be shown: only its hash is stored. "New link" replaces it.
@@ -406,11 +411,12 @@ async function adminBody(ctx: Ctx): Promise<Record<string, unknown> | Response> 
   return json({ error: "bad JSON" }, 400);
 }
 
+/** A choir with members of its own: not the open list, and not the test list (#73). */
 async function privateChoir(ctx: Ctx, choir: unknown): Promise<string | null> {
   if (typeof choir !== "string") return null;
-  const row = await ctx.env.DB.prepare("SELECT public FROM choirs WHERE id = ?").bind(choir)
-    .first<{ public: number }>();
-  return row && row.public !== 1 ? choir : null;
+  const row = await ctx.env.DB.prepare("SELECT public, staging FROM choirs WHERE id = ?").bind(choir)
+    .first<{ public: number; staging: number }>();
+  return row && row.public !== 1 && row.staging !== 1 ? choir : null;
 }
 
 /** Splits pasted text (one per line, commas, spaces) into emails. */
@@ -528,6 +534,76 @@ async function adminSetlists(ctx: Ctx): Promise<Response> {
   await db.prepare("UPDATE setlists SET name = ?, songs = ?, updated_at = ? WHERE id = ?")
     .bind(setlist.name, JSON.stringify(setlist.songs), at, id).run();
   return json({ id });
+}
+
+// ---------------------------------------------------------------- the test list
+
+/**
+ * Moves a tried-out song from the test list to a choir's list (#73). Its files
+ * are copied to the choir's own folder first, since song-app deletes a
+ * version's files when it publishes to the test list again; then one D1 batch
+ * points the choir at the copy and takes the song off the test list. A song the
+ * choir already has is replaced, as a new publish would, and keeps its date.
+ */
+async function adminMove(ctx: Ctx): Promise<Response> {
+  const body = await adminBody(ctx);
+  if (body instanceof Response) return body;
+  const db = ctx.env.DB;
+  const from = typeof body.choir === "string" ? body.choir : "";
+  const to = typeof body.to === "string" ? body.to : "";
+  const slug = typeof body.slug === "string" ? body.slug : "";
+  const [source, target] = await db.batch<{ staging: number }>([
+    db.prepare("SELECT staging FROM choirs WHERE id = ?").bind(from),
+    db.prepare("SELECT staging FROM choirs WHERE id = ?").bind(to),
+  ]);
+  if (source!.results[0]?.staging !== 1 || target!.results[0]?.staging !== 0) {
+    return json({ error: "unknown choir" }, 400);
+  }
+  const [song, replaced] = await db.batch<{ prefix: string }>([
+    db.prepare("SELECT prefix FROM songs WHERE choir = ? AND slug = ?").bind(from, slug),
+    db.prepare("SELECT prefix FROM songs WHERE choir = ? AND slug = ?").bind(to, slug),
+  ]);
+  const prefix = song!.results[0]?.prefix;
+  if (!prefix) return json({ error: "unknown song" }, 400);
+  const oldPrefix = replaced!.results[0]?.prefix ?? null;
+  const newPrefix = `songs/${to}/${slug}/${versionOf(prefix)}/`;
+
+  const keys = await listKeys(ctx.env.SONGS, prefix);
+  if (keys.length === 0) return json({ error: "no files" }, 409);
+  for (const key of keys) {
+    const object = await ctx.env.SONGS.get(key);
+    if (object === null) return json({ error: "no files" }, 409);
+    await ctx.env.SONGS.put(newPrefix + key.slice(prefix.length), await object.arrayBuffer(),
+      { httpMetadata: object.httpMetadata });
+  }
+  const now = new Date(ctx.now * 1000).toISOString().replace(/\.\d+Z$/, "Z");
+  await db.batch([
+    db.prepare(
+      `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, ${CREDITS})
+       SELECT ?1, slug, title, ?2, parts, duration,
+              COALESCE((SELECT published_at FROM songs WHERE choir = ?1 AND slug = ?4), ?5), ${CREDITS}
+         FROM songs WHERE choir = ?3 AND slug = ?4
+       ON CONFLICT (choir, slug) DO UPDATE SET title = excluded.title, prefix = excluded.prefix,
+         parts = excluded.parts, duration = excluded.duration, composer = excluded.composer,
+         lyricist = excluded.lyricist, arranger = excluded.arranger`,
+    ).bind(to, newPrefix, from, slug, now),
+    db.prepare("DELETE FROM songs WHERE choir = ? AND slug = ?").bind(from, slug),
+  ]);
+  // Nothing points at these any more.
+  const stale = [...keys, ...(oldPrefix && oldPrefix !== newPrefix ? await listKeys(ctx.env.SONGS, oldPrefix) : [])];
+  for (let i = 0; i < stale.length; i += 1000) await ctx.env.SONGS.delete(stale.slice(i, i + 1000));
+  return json({ moved: slug, to });
+}
+
+async function listKeys(bucket: R2Bucket, prefix: string): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ prefix, cursor });
+    keys.push(...page.objects.map((o) => o.key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return keys;
 }
 
 // ---------------------------------------------------------------- requests

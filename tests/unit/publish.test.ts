@@ -75,8 +75,9 @@ describe("publishPlan", () => {
     expect(sql).toContain("'2026-10-10T12:34:56Z'");
     expect(sql).toContain("DELETE FROM songs WHERE slug = 'kokeilu' AND choir NOT IN ('jm', 'public');");
   });
-  it("leaves the choirs' copies alone when publishing to public", () => {
+  it("leaves the choirs' copies alone when publishing to public or to the test list", () => {
     expect(publishPlan(manifest, "public", date).sql).not.toContain("DELETE");
+    expect(publishPlan(manifest, "testi", date).sql).not.toContain("DELETE");
   });
   it("keeps the date a song first came out when it is published again or moved", () => {
     const db = new DatabaseSync(":memory:");
