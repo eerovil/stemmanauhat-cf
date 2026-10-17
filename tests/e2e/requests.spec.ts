@@ -196,11 +196,21 @@ test("several PDFs at once: one request each, named after its file, with the not
   await expect(pending.filter({ hasText: "Aamulaulu" })).toContainText("Syyskonserttiin");
   await expect(pending.filter({ hasText: "Iltalaulu" })).toContainText("Syyskonserttiin");
 
-  // Sending two that both go closes the form.
+  // Sending two that both go closes the form. While they go up, nothing in the
+  // form can be cancelled or changed, so no batch carries on unseen.
   await page.getByRole("button", { name: "Pyydä stemmanauhaa" }).click();
   await file.setInputFiles([pdf("Kolmas.pdf"), pdf("Neljäs.pdf")]);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("/api/requests", async (route) => { await held; await route.continue(); });
   await page.getByRole("button", { name: "Lähetä" }).click();
+  await expect(page.getByRole("button", { name: "Peru", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Lähetä" })).toBeDisabled();
+  await expect(file).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Poista Kolmas" })).toBeDisabled();
+  release();
   await expect(page.getByText("Kiitos! 2 pyyntöä lähetetty.")).toBeVisible();
+  await page.unroute("/api/requests");
   await expect(pending).toHaveCount(4);
 
   // Leave no request behind for the other tests.

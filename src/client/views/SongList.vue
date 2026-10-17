@@ -330,18 +330,19 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       </template>
       <label>{{ t.notes }}<textarea v-model="requesting.note" rows="3" maxlength="1000"></textarea></label>
       <label v-if="!me?.email">{{ t.yourName }}<input v-model="requesting.name" type="text" maxlength="100" /></label>
-      <label>{{ t.musicPdfOptional }}<input type="file" accept="application/pdf,.pdf" multiple @change="pickPdf" /></label>
+      <label>{{ t.musicPdfOptional }}<input type="file" accept="application/pdf,.pdf" multiple :disabled="sending" @change="pickPdf" /></label>
       <p class="hint">{{ t.pdfsHint }}</p>
       <ul v-if="several || pdfErrors.size" class="pdf-list">
         <li v-for="pdf in requestPdfs" :key="pdf.name + pdf.size + pdf.lastModified">
           <span class="pdf-name">{{ pdfTitle(pdf.name) ?? pdf.name }}<span v-if="pdfErrors.get(pdf)" class="pdf-error error">{{ pdfErrors.get(pdf) }}</span></span>
-          <button type="button" class="link" :aria-label="t.removePdf(pdfTitle(pdf.name) ?? pdf.name)" @click="removePdf(pdf)">✕</button>
+          <button type="button" class="link" :aria-label="t.removePdf(pdfTitle(pdf.name) ?? pdf.name)" :disabled="sending" @click="removePdf(pdf)">✕</button>
         </li>
       </ul>
       <p v-if="requestMessage" class="hint">{{ requestMessage }}</p>
       <div class="row">
         <button type="button" class="primary" :disabled="sending" @click="sendRequest">{{ t.send }}</button>
-        <button type="button" @click="requesting = null">{{ t.cancel }}</button>
+        <!-- Not while a batch is still going up: it would carry on unseen (#77). -->
+        <button type="button" :disabled="sending" @click="requesting = null">{{ t.cancel }}</button>
       </div>
     </section>
     <template v-else>
