@@ -1,9 +1,10 @@
 """Writes tests/fixtures/uneven/: a made-up song whose bars scroll at very
 different speeds, for the bar widening in the one-line view (player/spacing.ts).
 
-4/4 at 120 bpm, six bars, two parts (Tenori, Basso). Bar 3 is sixteen
-sixteenths with a syllable under each in Tenori; the rest are half and whole
-notes. Writes score.musicxml, timing.json, score.mid and manifest.json.
+4/4 at 120 bpm, seven bars, two parts (Tenori, Basso). Bar 3 is sixteen
+sixteenths with a syllable under each in Tenori; bar 5 is a whole-bar rest in
+both parts, which OSMD draws in the middle of the bar (#75); the rest are half
+and whole notes. Writes score.musicxml, timing.json, score.mid and manifest.json.
 Run from the repo root: python3 tests/fixtures/make-uneven.py
 """
 import json
@@ -18,12 +19,15 @@ TYPES = {16: "whole", 8: "half", 4: "quarter", 1: "16th"}
 # (step, octave, length in sixteenths, syllable)
 SIXTEENTHS = [("E", 4), ("F", 4), ("G", 4), ("A", 4)] * 4
 SYLLABLES = ["ti", "ki", "ta", "ka"] * 4
+# A whole-bar rest, as MuseScore exports one.
+REST = (None, None, 16, None)
 BARS = {
     "Tenori": [
         [("E", 4, 8, "La"), ("G", 4, 8, "laa")],
         [("A", 4, 8, "lu"), ("G", 4, 8, "laa")],
         [(s, o, 1, syl) for (s, o), syl in zip(SIXTEENTHS, SYLLABLES)],
         [("G", 4, 8, "loo"), ("E", 4, 8, "laa")],
+        [REST],
         [("D", 4, 8, "lu"), ("E", 4, 8, "laa")],
         [("C", 4, 16, "loo")],
     ],
@@ -32,6 +36,7 @@ BARS = {
         [("F", 3, 16, "laa")],
         [("G", 3, 16, "taa")],
         [("C", 3, 16, "loo")],
+        [REST],
         [("G", 2, 16, "lu")],
         [("C", 3, 16, "loo")],
     ],
@@ -41,6 +46,8 @@ SECONDS_PER_QUARTER = 60 / BPM
 
 
 def note_xml(step, octave, length, syllable):
+    if step is None:
+        return f'<note><rest measure="yes"/><duration>{length}</duration></note>'
     return (f"<note><pitch><step>{step}</step><octave>{octave}</octave></pitch>"
             f"<duration>{length}</duration><type>{TYPES[length]}</type>"
             f"<lyric number=\"1\"><syllabic>single</syllabic><text>{syllable}</text></lyric></note>")
@@ -107,10 +114,15 @@ for channel, name in enumerate(names):
     events = [(0, b"\xff\x03" + vlq(len(name)) + name.encode()),
               (0, bytes([0xC0 | channel, 0])),
               (0, bytes([0xB0 | channel, 7, 100]))]
+    rest = 0
     for bar in BARS[name]:
         for step, octave, length, _ in bar:
+            if step is None:
+                rest += length * MIDI_DIV // DIV
+                continue
             pitch = 12 * (octave + 1) + STEPS[step]
-            events.append((0, bytes([0x90 | channel, pitch, 80])))
+            events.append((rest, bytes([0x90 | channel, pitch, 80])))
+            rest = 0
             events.append((length * MIDI_DIV // DIV, bytes([0x80 | channel, pitch, 0])))
     tracks.append(track(events))
 header = b"MThd" + struct.pack(">IHHH", 6, 1, 1 + len(tracks), MIDI_DIV)

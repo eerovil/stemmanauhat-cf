@@ -44,6 +44,14 @@ describe("nextFactors", () => {
   it("scales only the bars still short of their target", () => {
     close(nextFactors([1, 1, 1.5], [100, 200, 300], [150, 200, 300]), [1.5, 1, 1.5]);
   });
+
+  it("aims a bar widened once along the line through its two measurements", () => {
+    // A bar of rests: 60 of fixed room plus 40 per unit of factor. Scaling by
+    // 160 / 100 reached 124; the line through both layouts lands on 160 (#75).
+    const once = nextFactors([1], [100], [160]);
+    close(once, [1.6]);
+    close(nextFactors(once, [124], [160], { factors: [1], have: [100] }), [2.5]);
+  });
 });
 
 describe("biggestStep", () => {

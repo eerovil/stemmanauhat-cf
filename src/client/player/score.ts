@@ -177,8 +177,12 @@ export class Score {
     if (this.singleLine) {
       const want = cappedTargets(this.travels(), this.lengths());
       let factors = measures.map(() => 1);
+      let before: { factors: number[]; have: number[] } | undefined;
       while (this.widenings < 2 && needsWidening(this.travels(), want)) {
-        factors = nextFactors(factors, this.travels(), want);
+        const have = this.travels();
+        const next = nextFactors(factors, have, want, before);
+        before = { factors, have };
+        factors = next;
         measures.forEach((m, i) => { m.WidthFactor = factors[i] ?? 1; });
         this.layout();
         this.widenings++;
@@ -186,6 +190,10 @@ export class Score {
     }
     this.container.dataset.widenings = String(this.widenings);
     this.container.dataset.step = biggestStep(this.travels(), this.lengths()).toFixed(3);
+    // Each bar's drawn width per beat, for the tests: the step above is measured
+    // the way the widening measures, so it cannot catch a mistake in that (#75).
+    this.container.dataset.widths = this.bars
+      .map((bar) => (bar ? ((bar.x1 - bar.x0) / Math.max(bar.length, 1)).toFixed(1) : "")).join(" ");
   }
 
   private layout(): void {
@@ -395,7 +403,13 @@ export class Score {
         for (const entry of m.staffEntries) {
           const beat = entry.relInMeasureTimestamp.RealValue * 4;
           const x = px(entry.PositionAndShape.AbsolutePosition.x, dx);
-          byBeat.set(beat, Math.min(byBeat.get(beat) ?? x, x));
+          // A whole-bar rest is drawn in the middle of its bar, not where the bar's
+          // time begins. Counted, it made a bar of rests look half as wide as it is,
+          // so the widening doubled it (#75). A bar of only rests starts at its left
+          // edge (barAnchors), as the videos measured it.
+          const restOnly = entry.graphicalVoiceEntries.every((voice) =>
+            voice.notes.every((note) => note.sourceNote.IsWholeMeasureRest || note.sourceNote.isWholeRest()));
+          if (!restOnly) byBeat.set(beat, Math.min(byBeat.get(beat) ?? x, x));
           for (const voice of entry.graphicalVoiceEntries) {
             for (const note of voice.notes) {
               // Every VexFlow note can give its SVG group; the type only promises a GraphicalNote.

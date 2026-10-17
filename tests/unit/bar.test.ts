@@ -55,3 +55,13 @@ describe("joinBars", () => {
     expect(xOnAnchors(second.anchors, 2)).toBe(700);
   });
 });
+
+describe("a bar of only rests", () => {
+  // The whole-bar rest is drawn mid-bar and not counted: the bar starts at its left edge (#75).
+  const anchors = barAnchors(new Map(), 4, 300, 700);
+
+  it("travels the whole bar, not half of it", () => {
+    expect(xOnAnchors(anchors, 0)).toBe(308);
+    expect(xOnAnchors(anchors, 2)).toBe(503);
+  });
+});

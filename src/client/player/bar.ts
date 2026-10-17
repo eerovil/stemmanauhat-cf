@@ -9,6 +9,8 @@ export type Anchor = [beat: number, x: number];
  * how long the bar really plays: a pickup or a bar cut short before a repeat ends
  * before its time signature says, and an end anchor placed too late would slow
  * the position down through the bar's last beat and rush it across the bar line.
+ * A bar with no onsets (only whole-bar rests, which are not counted) starts just
+ * past its left bar line, as the videos measured it (#75).
  */
 export function barAnchors(onsets: Map<number, number>, length: number, x0: number, x1: number): Anchor[] {
   const anchors = [...onsets.entries()].sort((a, b) => a[0] - b[0]);
