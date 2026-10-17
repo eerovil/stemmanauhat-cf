@@ -5,6 +5,7 @@ import { getJson, hasSungParts, listCredits, postForm, postJson, Refused, rememb
 import Icon from "../components/Icon.vue";
 import LanguageSwitch from "../components/LanguageSwitch.vue";
 import { byTitle, day, t, words } from "../i18n";
+import { PDF_MAX_BYTES, pdfTitle } from "../../worker/requests";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string }>();
@@ -174,12 +175,24 @@ function startRequest() {
   requesting.value = { title: "", credits: "", note: "", name: "" };
 }
 function pickPdf(event: Event) {
+  const previous = requestPdf.value;
   requestPdf.value = (event.target as HTMLInputElement).files?.[0] ?? null;
+  // An empty song name takes the file's name, which can still be edited (#77);
+  // so does one the previous file gave, but never one typed in.
+  const r = requesting.value;
+  if (!requestPdf.value || !r) return;
+  const given = previous ? pdfTitle(previous.name) ?? "" : "";
+  if (!r.title.trim() || r.title === given) r.title = pdfTitle(requestPdf.value.name) ?? "";
 }
 async function sendRequest() {
   const r = requesting.value!;
   if (!r.title.trim() && !requestPdf.value) {
     requestMessage.value = words().needTitleOrPdf;
+    return;
+  }
+  // Said here rather than after uploading it all from a phone.
+  if (requestPdf.value && requestPdf.value.size > PDF_MAX_BYTES) {
+    requestMessage.value = words().pdfTooBig;
     return;
   }
   const form = new FormData();

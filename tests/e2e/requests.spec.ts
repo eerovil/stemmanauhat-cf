@@ -93,9 +93,15 @@ test("a singer asks for a practice track with a PDF, others see it, and an admin
 
 test("requests: who may send them, what they must hold, and who may manage them", async ({ page, browser }) => {
   await signInAs(page, "/c/jm", "laulaja@example.com");
-  // A PDF alone is a request.
+  // A PDF alone is a request, named after its file (#77); a typed name wins.
   const pdfOnly = await sendIn(page, { choir: "jm" }, PDF);
   expect(pdfOnly.status).toBe(200);
+  const named = await sendIn(page, { choir: "jm", title: "Kesäilta" }, PDF);
+  expect(named.status).toBe(200);
+  const titles = await page.evaluate(async () =>
+    ((await (await fetch("/api/songs?choir=jm")).json()) as { requests: { title: string | null }[] }).requests
+      .map((r) => r.title));
+  expect(titles).toEqual(expect.arrayContaining(["nuotti", "Kesäilta"]));
   expect((await sendIn(page, { choir: "jm", note: "jotain" }, null)).status).toBe(400);
   expect((await sendIn(page, { choir: "jm", title: "X" }, "<html>not a pdf</html>")).body.error).toBe("Liite ei ole PDF.");
   // Without the custom header (a cross-site form could send this), refused.
@@ -122,4 +128,34 @@ test("requests: who may send them, what they must hold, and who may manage them"
   expect((await getIn(admin, `/api/admin/requests/${id}/pdf`)).text).toBe(PDF);
   expect(await postIn(admin, "/api/admin/requests", { id, delete: true })).toBe(200);
   expect((await getIn(admin, `/api/admin/requests/${id}/pdf`)).status).toBe(404);
+  expect(await postIn(admin, "/api/admin/requests", { id: named.body.id, delete: true })).toBe(200);
+});
+
+test("the request form names the song after the PDF and says when it is too big (#77)", async ({ page }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await page.getByRole("button", { name: "Pyydä stemmanauhaa" }).click();
+  const file = page.getByLabel("Nuotti (PDF, vapaaehtoinen)");
+  const name = page.getByLabel("Kappaleen nimi");
+  await file.setInputFiles({ name: "Ubi Caritas et Amor.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) });
+  await expect(name).toHaveValue("Ubi Caritas et Amor");
+  // Another file replaces a name a file gave; a name typed in stays.
+  await file.setInputFiles({ name: "Iltatähti.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) });
+  await expect(name).toHaveValue("Iltatähti");
+  await name.fill("Kesäilta");
+  await file.setInputFiles({ name: "toinen.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) });
+  await expect(name).toHaveValue("Kesäilta");
+
+  // Over 20 MB: said at once, nothing sent.
+  let sent = 0;
+  await page.route("/api/requests", (route) => { sent++; return route.fulfill({ status: 413, body: "<html>413</html>" }); });
+  await file.setInputFiles({ name: "iso.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(20 * 1024 * 1024 + 1) });
+  await page.getByRole("button", { name: "Lähetä" }).click();
+  await expect(page.getByText("PDF on liian suuri (yli 20 Mt).")).toBeVisible();
+  expect(sent).toBe(0);
+  // A 413 from the proxy in front reads the same, not "HTTP 413".
+  await file.setInputFiles({ name: "valssi.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) });
+  await page.getByRole("button", { name: "Lähetä" }).click();
+  await expect.poll(() => sent).toBe(1);
+  await expect(page.getByText("PDF on liian suuri (yli 20 Mt).")).toBeVisible();
+  await expect(page.getByText("HTTP 413")).toHaveCount(0);
 });
