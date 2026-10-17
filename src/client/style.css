@@ -74,6 +74,13 @@ button.link { border: none; background: none; color: var(--accent); padding: 0.2
 .setlist-edit .songs button:disabled { opacity: 0.3; }
 .request-form label { display: block; margin: 0.6rem 0; font-size: 0.92rem; color: var(--muted); }
 .request-form label input, .request-form label textarea { display: block; margin-top: 0.25rem; color: var(--fg); }
+.pdf-list { list-style: none; padding: 0; margin: 0.4rem 0 0.8rem; border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden; }
+.pdf-list li { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.4rem 0.5rem 0.9rem; }
+.pdf-list li + li { border-top: 1px solid var(--line); }
+.pdf-list .pdf-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pdf-list .pdf-error { display: block; font-size: 0.85rem; }
+.pdf-list button { font-size: 1.1rem; padding: 0 0.6rem; text-decoration: none; }
 .requests { margin-top: 1.5rem; }
 .requests h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .requested { list-style: none; padding: 0; margin: 0 0 0.8rem; background: var(--surface); border: 1px solid var(--line);

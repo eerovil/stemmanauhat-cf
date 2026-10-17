@@ -145,6 +145,21 @@ test("the request form names the song after the PDF and says when it is too big 
   await file.setInputFiles({ name: "toinen.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) });
   await expect(name).toHaveValue("Kesäilta");
 
+  // One file is listed too, and can be removed.
+  await expect(page.locator(".pdf-list .pdf-name")).toHaveText(["toinen"]);
+  await page.getByRole("button", { name: "Poista toinen" }).click();
+  await expect(page.locator(".pdf-list")).toHaveCount(0);
+  await expect(file).toHaveValue("");
+
+  // A name typed for one file belongs to no file once several are chosen and
+  // all but one are removed: that one names it again.
+  await file.setInputFiles([
+    { name: "Aamu.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) },
+    { name: "Ilta.pdf", mimeType: "application/pdf", buffer: Buffer.from(PDF) }]);
+  await expect(name).toHaveCount(0);
+  await page.getByRole("button", { name: "Poista Aamu" }).click();
+  await expect(name).toHaveValue("Ilta");
+
   // Over 20 MB: said at once, nothing sent.
   let sent = 0;
   await page.route("/api/requests", (route) => { sent++; return route.fulfill({ status: 413, body: "<html>413</html>" }); });
@@ -158,4 +173,73 @@ test("the request form names the song after the PDF and says when it is too big 
   await expect.poll(() => sent).toBe(1);
   await expect(page.getByText("PDF on liian suuri (yli 20 Mt).")).toBeVisible();
   await expect(page.getByText("HTTP 413")).toHaveCount(0);
+});
+
+test("several PDFs at once: one request each, named after its file, with the note copied (#77)", async ({ page, browser }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await page.getByRole("button", { name: "Pyydä stemmanauhaa" }).click();
+  const file = page.getByLabel("Nuotti (PDF, vapaaehtoinen)");
+  const pdf = (name: string, size?: number) =>
+    ({ name, mimeType: "application/pdf", buffer: size ? Buffer.alloc(size) : Buffer.from(PDF) });
+
+  // More than ten: refused, none kept.
+  await file.setInputFiles(Array.from({ length: 11 }, (_, i) => pdf(`laulu ${i + 1}.pdf`)));
+  await expect(page.getByText("Enintään 10 nuottia kerrallaan.")).toBeVisible();
+  await expect(page.locator(".pdf-list")).toHaveCount(0);
+
+  // Several: the name and composer fields go, the files are listed, one can be removed.
+  await file.setInputFiles([pdf("Aamulaulu.pdf"), pdf("Iltalaulu.pdf"), pdf("Väärä.pdf"),
+    pdf("Liian iso.pdf", 20 * 1024 * 1024 + 1)]);
+  await expect(page.getByLabel("Kappaleen nimi")).toHaveCount(0);
+  await expect(page.getByLabel("Säveltäjä / sovittaja")).toHaveCount(0);
+  await expect(page.locator(".pdf-list li")).toHaveCount(4);
+  await page.getByRole("button", { name: "Poista Väärä" }).click();
+  await expect(page.locator(".pdf-list .pdf-name")).toHaveText(["Aamulaulu", "Iltalaulu", "Liian iso"]);
+  await page.getByLabel("Lisätietoja").fill("Syyskonserttiin");
+
+  // The too-big one stays behind with its reason; the others are sent.
+  await page.getByRole("button", { name: "Lähetä" }).click();
+  await expect(page.getByText("2/3 lähetetty.", { exact: false })).toBeVisible();
+  await expect(page.locator(".pdf-list li")).toHaveCount(1);
+  await expect(page.locator(".pdf-list li")).toContainText("Liian iso");
+  await expect(page.locator(".pdf-list li")).toContainText("PDF on liian suuri (yli 20 Mt).");
+  // Down to one file, the form is the single-song one again.
+  await expect(page.getByLabel("Kappaleen nimi")).toHaveValue("Liian iso");
+  await page.getByRole("button", { name: "Peru", exact: true }).click();
+  const pending = page.locator(".requested li");
+  await expect(pending).toHaveCount(2);
+  await expect(pending.filter({ hasText: "Aamulaulu" })).toContainText("Syyskonserttiin");
+  await expect(pending.filter({ hasText: "Iltalaulu" })).toContainText("Syyskonserttiin");
+
+  // Sending two that both go closes the form. While they go up, nothing in the
+  // form can be cancelled or changed, so no batch carries on unseen.
+  await page.getByRole("button", { name: "Pyydä stemmanauhaa" }).click();
+  await file.setInputFiles([pdf("Kolmas.pdf"), pdf("Neljäs.pdf")]);
+  await page.getByLabel("Lisätietoja").fill("Joulukonserttiin");
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("/api/requests", async (route) => { await held; await route.continue(); });
+  await page.getByRole("button", { name: "Lähetä" }).click();
+  await expect(page.getByRole("button", { name: "Peru", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Lähetä" })).toBeDisabled();
+  await expect(file).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Poista Kolmas" })).toBeDisabled();
+  // Nor the note, which goes the same to every song in the batch.
+  await expect(page.getByLabel("Lisätietoja")).toBeDisabled();
+  release();
+  await expect(page.getByText("Kiitos! 2 pyyntöä lähetetty.")).toBeVisible();
+  await page.unroute("/api/requests");
+  await expect(pending).toHaveCount(4);
+  await expect(pending.filter({ hasText: "Kolmas" })).toContainText("Joulukonserttiin");
+  await expect(pending.filter({ hasText: "Neljäs" })).toContainText("Joulukonserttiin");
+
+  // Leave no request behind for the other tests.
+  const admin = await (await browser.newContext()).newPage();
+  await signInAs(admin, "/admin", "yllapito@example.com");
+  for (const title of ["Aamulaulu", "Iltalaulu", "Kolmas", "Neljäs"]) {
+    admin.once("dialog", (dialog) => dialog.accept());
+    const row = admin.locator('[data-choir="jm"] .request-list li', { hasText: title });
+    await row.getByRole("button", { name: "Poista" }).click();
+    await expect(row).toHaveCount(0);
+  }
 });
