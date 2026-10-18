@@ -22,6 +22,9 @@ const TOLERANCE = 512;
 const COMPARE = 512;
 /** Frames over which the sound fades in after a start or a jump, so no click. */
 const FADE = 128;
+/** Frames over which a part fades out of and back into a unison it is left out of (12 ms at 44.1 kHz). */
+const QUIET_FADE = 512;
+const NONE: number[] = [];
 
 const WINDOW = new Float32Array(GRAIN);
 for (let i = 0; i < GRAIN; i++) WINDOW[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / GRAIN);
@@ -32,6 +35,8 @@ export class PartStretcher {
   /** The frames of the longest part: where the song ends. */
   readonly length: number;
   private gains: number[];
+  /** Per part, where it is left out (unison.ts): song frames, [start, end] pairs in order. */
+  private silences: number[][];
   /** Song frames at the last start, jump or tempo change, and output frames since: the position. */
   private base = 0;
   private emitted = 0;
@@ -52,10 +57,15 @@ export class PartStretcher {
   constructor(private readonly parts: Float32Array[]) {
     this.length = Math.max(0, ...parts.map((p) => p.length));
     this.gains = parts.map(() => 0);
+    this.silences = parts.map(() => []);
   }
 
   setGains(gains: number[]): void {
     this.gains = this.parts.map((_, i) => gains[i] ?? 0);
+  }
+
+  setSilences(silences: number[][]): void {
+    this.silences = this.parts.map((_, i) => silences[i] ?? []);
   }
 
   /** The song position, in frames: where the sound going out now comes from. */
@@ -137,8 +147,37 @@ export class PartStretcher {
       if (gain === 0) continue;
       const part = this.parts[p]!;
       const end = Math.min(n, part.length - start);
-      for (let i = Math.max(0, -start); i < end; i++) out[at + i]! += part[start + i]! * gain;
+      const quiet = this.silencesIn(p, start, start + n);
+      if (!quiet.length) {
+        for (let i = Math.max(0, -start); i < end; i++) out[at + i]! += part[start + i]! * gain;
+        continue;
+      }
+      for (let i = Math.max(0, -start); i < end; i++) {
+        const f = start + i;
+        let g = 1;
+        for (let k = 0; k < quiet.length; k += 2) {
+          const depth = Math.min(f - quiet[k]!, quiet[k + 1]! - f);
+          if (depth > 0) g = Math.min(g, 1 - Math.min(1, depth / QUIET_FADE));
+        }
+        out[at + i]! += part[start + i]! * gain * g;
+      }
     }
+  }
+
+  /** The part's silences that reach into frames [from, to). */
+  private silencesIn(p: number, from: number, to: number): number[] {
+    const s = this.silences[p]!;
+    let lo = 0;
+    let hi = s.length / 2;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (s[2 * mid + 1]! <= from) lo = mid + 1;
+      else hi = mid;
+    }
+    if (2 * lo >= s.length || s[2 * lo]! >= to) return NONE;
+    const found: number[] = [];
+    for (let k = 2 * lo; k < s.length && s[k]! < to; k += 2) found.push(s[k]!, s[k + 1]!);
+    return found;
   }
 
   /**

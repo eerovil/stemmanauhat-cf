@@ -12,7 +12,18 @@ export interface RenderedParts {
   parts: Int16Array[];
   /** The synth's effects (reverb, chorus), mono. */
   effects: Int16Array;
+  /** Each part's unison notes (unison.ts), rendered apart from `parts` so the mix can leave them out. */
+  unison?: Int16Array[];
 }
+
+/** A part's gain over the file: `gains[k]` from frame `at[k]` on (before the first, `gains[0]`). */
+export interface GainSteps {
+  at: number[];
+  gains: number[];
+}
+
+/** Frames over which a gain step slides, so it does not click. */
+const SLIDE = 64;
 
 /**
  * Sums the parts at their gains with the effects, raises the whole by
@@ -20,14 +31,34 @@ export interface RenderedParts {
  * Web Audio player's gain and limiter. Only the loud moments are turned down,
  * not the whole song, so the boost is heard in the file player too.
  */
-export function mixToWav(r: RenderedParts, gains: number[], outputGain: number, ceiling: number): ArrayBuffer {
+export function mixToWav(r: RenderedParts, gains: number[], outputGain: number, ceiling: number,
+  unisonGains: GainSteps[] = []): ArrayBuffer {
   const frames = r.effects.length;
   const mixed = new Float32Array(frames);
   for (let i = 0; i < frames; i++) {
     let v = r.effects[i]!;
     for (let p = 0; p < r.parts.length; p++) v += r.parts[p]![i]! * (gains[p] ?? 0);
-    mixed[i] = v * outputGain;
+    mixed[i] = v;
   }
+  (r.unison ?? []).forEach((track, p) => {
+    const steps = unisonGains[p] ?? { at: [], gains: [] };
+    const level = gains[p] ?? 0;
+    let g = (steps.gains[0] ?? 1) * level;
+    let from = g;
+    let to = g;
+    let slid = SLIDE;
+    let k = 0;
+    for (let i = 0; i < frames; i++) {
+      for (; k < steps.at.length && steps.at[k]! <= i; k++) {
+        from = g;
+        to = steps.gains[k]! * level;
+        slid = 0;
+      }
+      g = slid < SLIDE ? from + (to - from) * (++slid / SLIDE) : to;
+      mixed[i]! += track[i]! * g;
+    }
+  });
+  for (let i = 0; i < frames; i++) mixed[i]! *= outputGain;
   limit(mixed, ceiling * 32767, r.sampleRate);
   const out = new ArrayBuffer(44 + frames * 2);
   const view = new DataView(out);
