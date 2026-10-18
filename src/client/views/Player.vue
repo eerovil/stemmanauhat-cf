@@ -215,8 +215,12 @@ async function loadSung() {
   const load = ++sungLoad;
   switching.value = true;
   try {
-    const { SungPlayer } = await import("../player/sung");
-    const sung = await SungPlayer.create(s.parts.map((p) => s.base + (p.file ?? "")));
+    const { SungPlayer, loadNotes } = await import("../player/sung");
+    const [sung, notes] = await Promise.all([
+      SungPlayer.create(s.parts.map((p) => s.base + (p.file ?? ""))),
+      loadNotes(s.base + "score.mid", s.parts.map((p) => p.name)),
+    ]);
+    if (notes) sung.setUnisons(notes);
     if (load !== sungLoad || sound.value !== "sung" || !mixer) { sung.destroy(); return; }
     const resume = mixer.playing;
     const t = mixer.time();

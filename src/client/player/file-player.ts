@@ -152,6 +152,7 @@ export class FilePlayer {
   private request(): void {
     const message: ToWorker = {
       type: "make", id: ++this.requested, rate: this.rate, gains: this.levels(), outputGain: OUTPUT_GAIN, ceiling: CEILING,
+      master: this.master, own: this.own,
     };
     this.worker.postMessage(message);
   }

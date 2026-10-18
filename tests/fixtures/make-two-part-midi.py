@@ -3,6 +3,9 @@
 Matches score.musicxml and timing.json: 4/4 at 120 bpm, four bars of quarter
 notes, a track per part named as in manifest.json (Tenori, Basso), one channel
 each, piano. Run from the repo root: python3 tests/fixtures/make-two-part-midi.py
+
+Also writes tests/fixtures/shared-staff/score.mid, the same song with Basso
+singing bar 2 in unison with Tenori (eerovil/eeron-omat-taskit#76).
 """
 import struct
 
@@ -27,19 +30,24 @@ def track(events):
     return b"MTrk" + struct.pack(">I", len(data)) + data
 
 
-tempo = track([
-    (0, b"\xff\x51\x03" + (500000).to_bytes(3, "big")),          # 120 bpm
-    (0, b"\xff\x58\x04\x04\x02\x18\x08"),                        # 4/4
-])
-parts = []
-for channel, (name, pitches) in enumerate(NOTES.items()):
-    events = [(0, b"\xff\x03" + vlq(len(name)) + name.encode()),
-              (0, bytes([0xC0 | channel, 0])),                    # piano
-              (0, bytes([0xB0 | channel, 7, 100]))]               # volume
-    for pitch in pitches:
-        events.append((0, bytes([0x90 | channel, pitch, 80])))
-        events.append((DIV, bytes([0x80 | channel, pitch, 0])))
-    parts.append(track(events))
+def song(notes):
+    tempo = track([
+        (0, b"\xff\x51\x03" + (500000).to_bytes(3, "big")),          # 120 bpm
+        (0, b"\xff\x58\x04\x04\x02\x18\x08"),                        # 4/4
+    ])
+    parts = []
+    for channel, (name, pitches) in enumerate(notes.items()):
+        events = [(0, b"\xff\x03" + vlq(len(name)) + name.encode()),
+                  (0, bytes([0xC0 | channel, 0])),                    # piano
+                  (0, bytes([0xB0 | channel, 7, 100]))]               # volume
+        for pitch in pitches:
+            events.append((0, bytes([0x90 | channel, pitch, 80])))
+            events.append((DIV, bytes([0x80 | channel, pitch, 0])))
+        parts.append(track(events))
+    header = b"MThd" + struct.pack(">IHHH", 6, 1, 1 + len(parts), DIV)
+    return header + tempo + b"".join(parts)
 
-header = b"MThd" + struct.pack(">IHHH", 6, 1, 1 + len(parts), DIV)
-open("tests/fixtures/two-part/score.mid", "wb").write(header + tempo + b"".join(parts))
+
+open("tests/fixtures/two-part/score.mid", "wb").write(song(NOTES))
+UNISON = dict(NOTES, Basso=NOTES["Basso"][:4] + NOTES["Tenori"][4:8] + NOTES["Basso"][8:])
+open("tests/fixtures/shared-staff/score.mid", "wb").write(song(UNISON))

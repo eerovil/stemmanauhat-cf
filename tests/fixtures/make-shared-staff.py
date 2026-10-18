@@ -1,6 +1,8 @@
 """The two-part song with both parts on one staff, Tenori voice 1 and Basso voice 2,
-as musescore-choir-plugins publishes a song of more than five parts (#420).
-Its MIDI and timing are the two-part song's own. Run from the repo root."""
+as musescore-choir-plugins publishes a song of more than five parts (#420), except
+that Basso sings bar 2 in unison with Tenori (eerovil/eeron-omat-taskit#76). Its
+timing is the two-part song's own; its MIDI is written by make-two-part-midi.py.
+Run from the repo root."""
 import json
 import re
 
@@ -15,9 +17,9 @@ def voiced(measure, voice):
 
 
 measures = []
-for top, low in zip(tenor, bass):
+for bar, (top, low) in enumerate(zip(tenor, bass)):
     head, body = re.match(r"(<measure[^>]*>)(.*)</measure>", top, re.S).groups()
-    lower = re.match(r"<measure[^>]*>(.*)</measure>", low, re.S).group(1)
+    lower = re.match(r"<measure[^>]*>(.*)</measure>", top if bar == 1 else low, re.S).group(1)
     lower = re.sub(r"<attributes>.*?</attributes>", "", lower, flags=re.S)
     lower = re.sub(r"<direction.*?</direction>", "", lower, flags=re.S)
     measures.append(head + voiced(body, 1) + "<backup><duration>4</duration></backup>"

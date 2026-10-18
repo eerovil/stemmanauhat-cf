@@ -20,6 +20,17 @@ describe("mixToWav", () => {
     expect(samples(mixToWav({ sampleRate: 44100, parts, effects }, [1, 0.5], 1, 1))).toEqual([1060, 2130]);
   });
 
+  it("adds each part's unison notes at its gain, left out where the steps say", () => {
+    const unison = [new Int16Array(400).fill(1000), new Int16Array(400).fill(100)];
+    const r = { sampleRate: 44100, parts: [new Int16Array(400), new Int16Array(400)], effects: new Int16Array(400), unison };
+    const out = samples(mixToWav(r, [1, 0.5], 1, 1, [{ at: [100, 200, 300], gains: [1, 0, 1] }]));
+    expect(out[150]).toBe(1050);
+    // Sliding to nothing over 64 frames from frame 200, and back from 300.
+    expect(out[232]).toBe(534);
+    expect(out[280]).toBe(50);
+    expect(out[399]).toBe(1050);
+  });
+
   it("keeps every sample under the ceiling", () => {
     const out = samples(mixToWav({ sampleRate: 44100, parts: [Int16Array.from([20000, 10000])], effects: new Int16Array(2) }, [1], 4, 0.5));
     expect(Math.max(...out.map(Math.abs))).toBeLessThanOrEqual(16384);

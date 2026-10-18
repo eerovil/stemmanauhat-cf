@@ -32,3 +32,25 @@ test("two parts on one staff: both play, and only the singer's voice is lit as t
   await expect(page.locator(".player.one-line")).toHaveCount(0);
   await expect.poll(notes).toBe(all);
 });
+
+// Here Basso sings bar 2 with Tenori (eerovil/eeron-omat-taskit#76). The piano plays such a
+// note once, in your part: the song is loaded again without the other's copy whenever your
+// part changes, and playback must carry on from where it was.
+test("changing part while a unison song plays keeps playing from the same place", async ({ page }) => {
+  await signInAs(page, "/c/naiskuoro/jaettu", "laulaja2@example.com");
+  await choosePartIfAsked(page, "Basso");
+  const hint = page.getByRole("button", { name: "Selvä" });
+  if (await hint.count()) await hint.click();
+  await page.getByRole("button", { name: "Soita" }).click();
+  const pause = page.getByRole("button", { name: "Tauko" });
+  await expect(pause).toHaveAttribute("data-sounding", "1", { timeout: 10_000 });
+  const time = page.getByTestId("time");
+  await expect(time).toHaveText("0:01", { timeout: 10_000 });
+
+  await page.getByRole("button", { name: "Vaihda oma stemma" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Tenori", exact: true }).click();
+  await expect(gains(page)).toHaveAttribute("data-gains", "1.000 0.160");
+  await expect(pause).toBeVisible();
+  await expect(time).toHaveText("0:03", { timeout: 10_000 });
+  await expect(pause).toHaveAttribute("data-sounding", "1");
+});

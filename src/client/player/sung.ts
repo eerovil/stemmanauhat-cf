@@ -1,7 +1,9 @@
 import { words } from "../i18n";
-import { CEILING_DB } from "./midi";
+import { BasicMIDI } from "spessasynth_core";
+import { CEILING_DB, partChannels } from "./midi";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import type { FromWorklet, ToWorklet } from "./sung-worklet";
+import { findNotes, silenced, silentSpans, type Notes } from "./unison";
 import workletUrl from "./sung-worklet?worker&url";
 
 /**
@@ -35,6 +37,7 @@ export class SungPlayer {
   private reported = 0;
   private reportedAt = 0;
   private applied: number[] = [];
+  private notes: Notes | null = null;
   private readonly count: number;
   private readonly meter: AnalyserNode;
   private readonly samples = new Float32Array(1024);
@@ -90,9 +93,12 @@ export class SungPlayer {
     return [...this.applied];
   }
 
-  setMaster(index: number): void { this.master = index; this.applyGains(); }
+  setMaster(index: number): void { this.master = index; this.applyGains(); this.applyUnisons(); }
   setOthers(level: number): void { this.others = level; this.applyGains(); }
-  setOwn(on: boolean): void { this.own = on; this.applyGains(); }
+  setOwn(on: boolean): void { this.own = on; this.applyGains(); this.applyUnisons(); }
+
+  /** The song's notes from its MIDI, to sing each unison once (unison.ts). */
+  setUnisons(notes: Notes): void { this.notes = notes; this.applyUnisons(); }
   get playing(): boolean { return this.wanted; }
   get running(): boolean { return this.wanted && this.context.state === "running"; }
 
@@ -182,11 +188,35 @@ export class SungPlayer {
    * (Eero, "Lempilintu", eeron-omat-taskit#45). Where the parts sing in unison and add
    * up louder, the limiter holds the peaks.
    */
+  /** The parts left out of each unison, as stretches of song frames for the worklet. */
+  private applyUnisons(): void {
+    if (!this.notes) return;
+    const rate = this.context.sampleRate;
+    const spans = silentSpans(this.notes, silenced(this.notes, this.master, this.own));
+    this.send({ type: "silences", silences: spans.map((list) => list.flatMap(([a, b]) => [Math.round(a * rate), Math.round(b * rate)])) });
+  }
+
   private applyGains(): void {
     const levels = this.levels();
     const power = levels.reduce((a, b) => a + b * b, 0);
     const scale = power > 1 ? 1 / Math.sqrt(power) : 1;
     this.applied = levels.map((g) => g * scale);
     this.send({ type: "gains", gains: this.applied });
+  }
+}
+
+/**
+ * The song's notes from its MIDI file, for the sung player to sing each unison
+ * once; null when they cannot be read (then the parts sing every note).
+ */
+export async function loadNotes(midiUrl: string, partNames: string[]): Promise<Notes | null> {
+  try {
+    const r = await fetch(midiUrl);
+    if (!r.ok) throw new Error(`MIDI: HTTP ${r.status}`);
+    const midi = BasicMIDI.fromArrayBuffer(await r.arrayBuffer());
+    return findNotes(midi, partChannels(midi, partNames));
+  } catch (error) {
+    console.warn(`unisons not found: ${String(error)}`);
+    return null;
   }
 }
