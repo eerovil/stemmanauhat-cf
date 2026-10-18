@@ -199,50 +199,51 @@ test("the song list marks the songs that can be heard sung, and only those", asy
   await expect(row("Iltalaulu").locator(".sung-mark")).toHaveCount(0);
 });
 
-// Telling singers a song can be heard sung (#84): a dot on Säädöt, never a card over the score,
-// on at most three song opens, gone once followed or once Laulu is chosen.
-test("a dot on Säädöt tells a piano singer the song can be heard sung, and goes once followed", async ({ page }) => {
+// Telling singers a song can be heard sung (#84): a dot on Säädöt, never a card over the score.
+// It stays until Laulu has been tried once (Eero, 2026-10-18).
+test("a dot on Säädöt and on Laulu stays on every song open until Laulu is tried", async ({ page }) => {
   await page.goto("/c/public/laulettu");
   await choosePartIfAsked(page, "Tenori");
   const dot = page.getByTestId("sung-dot");
-  await expect(dot).toBeVisible();
-  await expect(gains(page)).toHaveAttribute("data-player", "midi");
   await page.getByRole("button", { name: "Selvä" }).click();
+  for (let open = 1; open <= 4; open++) {
+    if (open > 1) await page.reload();
+    await expect(gains(page)).toHaveAttribute("data-player", "midi");
+    await expect(dot).toBeVisible();
+    await page.getByRole("button", { name: "Säädöt" }).click();
+    await expect(page.locator(".setting.lit")).toContainText("Ääni");
+    await expect(page.getByRole("group", { name: "Ääni" }).getByTestId("sung-dot-choice")).toBeVisible();
+    await expect(page.locator(".sung-tip")).toHaveText("Tämän kappaleen voi kuulla myös laulettuna: valitse Laulu.");
+    // Nothing plays by itself: the piano stays until Laulu is chosen.
+    await expect(gains(page)).toHaveAttribute("data-player", "midi");
+    await page.getByRole("button", { name: "Sulje säädöt" }).click();
+    await expect(dot).toBeVisible();
+  }
   await page.getByRole("button", { name: "Säädöt" }).click();
-  await expect(page.locator(".setting.lit")).toContainText("Ääni");
-  await expect(page.getByRole("group", { name: "Ääni" }).getByTestId("sung-dot-choice")).toBeVisible();
-  await expect(page.locator(".sung-tip")).toHaveText("Tämän kappaleen voi kuulla myös laulettuna: valitse Laulu.");
-  // Nothing plays by itself: the piano stays until Laulu is chosen.
+  const sound = page.getByRole("group", { name: "Ääni" });
+  await sound.getByRole("button", { name: "Laulu" }).click();
+  await expect(gains(page)).toHaveAttribute("data-player", "sung");
+  await expect(page.locator(".setting.lit")).toHaveCount(0);
+  await expect(sound.getByTestId("sung-dot-choice")).toHaveCount(0);
+  // Back on the piano, the dot does not come back: Laulu has been tried.
+  await sound.getByRole("button", { name: "Piano" }).click();
   await expect(gains(page)).toHaveAttribute("data-player", "midi");
   await page.getByRole("button", { name: "Sulje säädöt" }).click();
-  await expect(dot).toHaveCount(0);
   await page.reload();
-  await expect(shownScore(page)).toBeVisible();
   await expect(gains(page)).toHaveAttribute("data-player", "midi");
+  await expect(shownScore(page)).toBeVisible();
   await expect(dot).toHaveCount(0);
 });
 
-test("the singing dot shows on three song opens at most, and never on a song without singing", async ({ page }) => {
+test("the singing dot never shows on a song without singing, nor to a singer who already sings", async ({ page }) => {
   await page.goto("/c/public/esittely");
   await choosePartIfAsked(page, "Tenori");
   await expect(gains(page)).toHaveAttribute("data-player", "midi");
   await expect(page.getByTestId("sung-dot")).toHaveCount(0);
-  for (let open = 1; open <= 4; open++) {
-    await page.goto("/c/public/laulettu");
-    await choosePartIfAsked(page, "Tenori");
-    await expect(gains(page)).toHaveAttribute("data-player", "midi");
-    await expect(page.getByTestId("sung-dot")).toHaveCount(open <= 3 ? 1 : 0);
-  }
-});
-
-test("choosing Laulu ends the singing dot, and a singer who already sings never sees it", async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem("stemmanauhat:settings", JSON.stringify({ sound: "sung" })));
   await page.goto("/c/public/laulettu");
   await choosePartIfAsked(page, "Tenori");
-  await page.getByRole("button", { name: "Selvä" }).click();
-  await page.evaluate(() => localStorage.removeItem("stemmanauhat:sung-dot"));
-  await page.evaluate(() => localStorage.setItem("stemmanauhat:settings", JSON.stringify({ sound: "sung" })));
-  await page.reload();
   await expect(gains(page)).toHaveAttribute("data-player", "sung");
   await expect(page.getByTestId("sung-dot")).toHaveCount(0);
-  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:sung-dot"))).toBe("done");
+  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:sung-tried"))).toBe("1");
 });

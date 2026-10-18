@@ -134,7 +134,7 @@ onMounted(async () => {
   // The settings follow the singer from song to song; the part belongs to the song.
   const carried = carriedSettings();
   if (carried.sound === "sung") endSungDot();
-  else sungDotWanted.value = sungDotShows() < SUNG_DOT_SHOWS;
+  else sungDotWanted.value = !localStorage.getItem(SUNG_TRIED_KEY);
   staffMode.value = carried.staves === "own" ? "own" : "all";
   sound.value = carried.sound === "sung" ? "sung" : "piano";
 
@@ -630,36 +630,19 @@ function dismissHint() {
 
 /**
  * Telling singers a song can be heard sung (#84): on a song with singing, a dot on
- * Säädöt for a singer who has never chosen Laulu, and the Ääni row lit up when
- * Säädöt opens. The dot shows on at most SUNG_DOT_SHOWS song opens on a device,
- * and never again once Säädöt was opened with it or Laulu was chosen. It never
- * covers the score and never plays anything by itself (Eero chose the dot over a card).
+ * Säädöt for a singer who has never chosen Laulu, and in Säädöt the Ääni row lit up
+ * with a dot on Laulu. It stays until Laulu has been tried once on this device
+ * (Eero, 2026-10-18). It never covers the score and never plays anything by itself.
  */
-const SUNG_DOT_KEY = "stemmanauhat:sung-dot";
-const SUNG_DOT_SHOWS = 3;
+const SUNG_TRIED_KEY = "stemmanauhat:sung-tried";
 const sungDotWanted = ref(false);
-/** True while Säädöt shows the Ääni row lit up, from opening it with the dot until it closes. */
-const soundLit = ref(false);
 const showSungDot = computed(() => sungDotWanted.value && hasSung.value && !loading.value && !failure.value);
-/** How many song opens have shown the dot; "done" once it has been followed or Laulu chosen. */
-function sungDotShows(): number {
-  const value = localStorage.getItem(SUNG_DOT_KEY);
-  return value === "done" ? SUNG_DOT_SHOWS : Number(value) || 0;
-}
+/** Säädöt shows the Ääni row lit up while the dot is wanted. */
+const soundLit = computed(() => sheetOpen.value && showSungDot.value);
 function endSungDot() {
   sungDotWanted.value = false;
-  localStorage.setItem(SUNG_DOT_KEY, "done");
+  localStorage.setItem(SUNG_TRIED_KEY, "1");
 }
-// A song open counts once, when the dot first shows on it.
-const stopCounting = watch(showSungDot, (shown) => {
-  if (!shown) return;
-  stopCounting();
-  if (localStorage.getItem(SUNG_DOT_KEY) !== "done") localStorage.setItem(SUNG_DOT_KEY, String(sungDotShows() + 1));
-});
-watch(sheetOpen, (open) => {
-  if (open && showSungDot.value) { soundLit.value = true; endSungDot(); }
-  else if (!open) soundLit.value = false;
-});
 
 function closePanels() {
   sheetOpen.value = false;
@@ -782,11 +765,11 @@ function onPointerUp(event: PointerEvent) {
               <button type="button" :class="{ on: shownSound === 'piano' }" :aria-pressed="shownSound === 'piano'"
                 @click="setSound('piano')">{{ t.piano }}</button>
               <button type="button" :class="{ on: shownSound === 'sung' }" :aria-pressed="shownSound === 'sung'"
-                @click="setSound('sung')">{{ t.sung }}<span v-if="soundLit && shownSound === 'piano'" class="sung-dot"
+                @click="setSound('sung')">{{ t.sung }}<span v-if="soundLit" class="sung-dot"
                   data-testid="sung-dot-choice"></span></button>
             </div>
           </div>
-          <div v-if="soundLit && shownSound === 'piano' && !switching" class="mode-hint sung-tip">{{ t.sungTip }}</div>
+          <div v-if="soundLit" class="mode-hint sung-tip">{{ t.sungTip }}</div>
           <div v-if="switching" class="mode-hint">{{ t.loadingSinging }}</div>
           <div v-else-if="sound === 'sung' && playerKind !== 'sung'" class="mode-hint">{{ t.singingFailed }}</div>
         </template>
