@@ -32,4 +32,16 @@ describe("renderParts", () => {
     expect(energy(rendered.unison![1]!)).toBeGreaterThan(0);
     expect(energy(rendered.parts[0]!)).toBe(0);
   });
+
+  it("rings a unison copy held longer to its end", async () => {
+    // S1b holds the second note a beat longer than S1: its reverb must last as long.
+    const held: N[] = [[1, 60, 0, 480], [1, 64, 480, 1440]];
+    const song = BasicMIDI.fromArrayBuffer(smf([["S1", tune(0)], ["S1b", held]]));
+    const notes = findNotes(song, partChannels(song, ["S1", "S1b"]));
+    const rendered = await renderParts(setupFor(2), song, notes, 1);
+    const alone = await renderSong(setupFor(2), BasicMIDI.fromArrayBuffer(smf([["S1", []], ["S1b", held]])), 1,
+      rendered.effects.length);
+    expect(energy(alone.effects)).toBeGreaterThan(0);
+    expect([...rendered.effects]).toEqual([...alone.effects]);
+  });
 });
