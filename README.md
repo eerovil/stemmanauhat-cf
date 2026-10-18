@@ -60,6 +60,19 @@ a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
   it caches the icons and that page, never a song, a page or the API, so access checks and new
   versions work as before.
 
+### Usage events
+
+To see whether singers find the singing and which settings they use
+(eerovil/eeron-omat-taskit#72), the player sends a few events to `/api/events`:
+opening a song, opening Säädöt, choosing Piano or Laulu, each settings change
+(sliders once, with the value they end on), and every listen of 3 seconds or
+more, with its length, the sound and the six settings it played with. A listen
+still playing is saved again each minute. They go to the `events` table in D1
+with the signed-in Google email, or for anyone without one only a random id
+the device keeps; no IP. Admins' own visits are kept, marked, and left out of the
+counts. The admin page shows the last 30 days and the latest 50 listens, and
+deletes events over a year old. Nothing is shown to singers about it.
+
 ## Running it
 
 With Node 22 or newer:

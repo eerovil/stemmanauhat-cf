@@ -328,3 +328,30 @@ test("requests (#77): several PDFs at once", async ({ page }) => {
   await page.getByLabel("Notes").fill("For the Christmas concert");
   await page.screenshot({ path: `${dir}/request-several-pdfs-phone.png` });
 });
+
+test("usage: the admin's card of who found the singing and which settings they use", async ({ page, browser }) => {
+  // Made-up visitors on the open list: a dozen people, fewer at each step towards the singing.
+  await page.goto("/c/public");
+  await page.evaluate(async () => {
+    const send = (body: object) => fetch("/api/events", { method: "POST", body: JSON.stringify(body) });
+    const base = { choir: "public", song: "laulettu", part: "Tenori", sung: 1 };
+    const settings = (over: object) => ({ mode: "focus", others: "0.4", rate: "1", staves: "all", zoom: "1", sound: "piano", ...over });
+    for (let i = 0; i < 12; i++) {
+      const visitor = crypto.randomUUID();
+      await send({ ...base, visitor, name: "song_open" });
+      if (i < 7) await send({ ...base, visitor, name: "settings_open" });
+      if (i < 3) await send({ ...base, visitor, name: "setting", setting: "rate", value: "0.85" });
+      if (i < 4) await send({ ...base, visitor, name: "sound_choice", value: "sung" });
+      if (i < 4) await send({ ...base, visitor, name: "setting", setting: "sound", value: "sung" });
+      if (i < 3) await send({ ...base, visitor, name: "listen", value: "sung", seconds: i ? 45 : 130, listen: crypto.randomUUID(), settings: settings({ sound: "sung", rate: i < 2 ? "0.85" : "1" }) });
+      await send({ ...base, visitor, name: "listen", value: "piano", seconds: 60 + i * 20, listen: crypto.randomUUID(), settings: settings({ staves: i % 3 ? "all" : "own" }) });
+    }
+  });
+  const admin = await (await browser.newContext({ viewport: { width: 1000, height: 1100 } })).newPage();
+  await signInAs(admin, "/admin", "yllapito@example.com");
+  const card = admin.locator(".card.usage");
+  await expect(card.locator('[data-usage="public"]')).toBeVisible();
+  await card.getByText("Asetukset (30 pv)").click();
+  await card.getByText("Viimeisimmät kuuntelut").click();
+  await card.screenshot({ path: `${dir}/usage-admin.png` });
+});
