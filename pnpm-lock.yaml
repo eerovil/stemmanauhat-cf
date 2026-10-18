@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@fontsource/tinos':
+        specifier: 5.3.0
+        version: 5.3.0
       opensheetmusicdisplay:
         specifier: ^2.2.0
         version: 2.2.0
@@ -276,6 +279,9 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fontsource/tinos@5.3.0':
+    resolution: {integrity: sha512-VVDyyZdbcsLKxo/W7rClAvacD/7DsGc7J5xzzp51Tndib8kDkEe/0bqbb3Xb3iH6+IUjt07aRsvtQ9MGeGGi4w==}
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -1459,6 +1465,8 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
+
+  '@fontsource/tinos@5.3.0': {}
 
   '@img/colour@1.1.0': {}
 

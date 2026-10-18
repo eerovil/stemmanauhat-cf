@@ -30,3 +30,30 @@ test("the one-line view widens the bars around a crowded one, as the videos do",
 
   await playAndSeeCursorMove(page);
 });
+
+test("the score is laid out alike on a phone without Times New Roman (#86)", async ({ page }) => {
+  await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  const widthsOn = async () => {
+    await page.goto("/c/jm/epatasainen");
+    await choosePartIfAsked(page, "Tenori");
+    const score = page.getByTestId("score");
+    await expect(score).toHaveAttribute("data-widths", /\d/);
+    return score.getAttribute("data-widths");
+  };
+  const here = await widthsOn();
+  const lyric = page.locator("[data-testid=score] svg:not(.highlights) text", { hasText: /^laa$/ }).first();
+  await expect(lyric).toHaveAttribute("font-family", "Tinos");
+
+  // Android has no Times New Roman and drew OSMD's lyrics in Noto Serif, about
+  // 18 % wider; OSMD then widened bars with lyrics up to 2.5 times. The site's
+  // own font is the same on every device, so a wider Times changes nothing.
+  await page.addInitScript(() => {
+    const measure = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function (text: string) {
+      const metrics = measure.call(this, text);
+      if (!this.font.includes("Times New Roman")) return metrics;
+      return new Proxy(metrics, { get: (m, key) => (key === "width" ? m.width * 1.18 : Reflect.get(m, key)) });
+    };
+  });
+  expect(await widthsOn()).toBe(here);
+});
