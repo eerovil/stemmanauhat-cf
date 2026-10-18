@@ -239,7 +239,7 @@ function listenLine(l: Listen): string {
       <p class="hint">{{ t.usageHint }}</p>
       <p v-if="!usage.length" class="hint">{{ t.noUsage }}</p>
       <div v-for="u in usage" :key="u.id" :data-usage="u.id">
-        <h3>{{ u.name }}</h3>
+        <p class="usage-choir">{{ u.name }}</p>
         <ul class="usage-lines">
           <li v-for="[label, key] in USAGE_LINES" :key="key" :data-line="key"><span>{{ t[label] }}</span><b>{{ u[key] }}</b></li>
         </ul>

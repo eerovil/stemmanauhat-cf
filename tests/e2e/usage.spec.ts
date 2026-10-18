@@ -34,8 +34,10 @@ test("a singer's way to the singing, their listens and their settings show on th
   await expect(admin.getByRole("heading", { name: "Ylläpito" })).toBeVisible();
   const before = await adminState(admin);
 
-  await signInAs(page, "/c/jm", "laulaja@example.com");
-  await expect(page).toHaveURL(/\/c\/jm/);
+  // A Google account no other test uses, so every count grows by exactly one. The open list
+  // needs no membership: signing in on a choir page refuses the choir but keeps the account.
+  await signInAs(page, "/c/jm", "kuuntelija@example.com");
+  await expect(page.getByText("kuuntelija@example.com")).toBeVisible();
   await page.goto("/c/public/laulettu");
   await choosePartIfAsked(page, "Tenori");
   await page.getByRole("button", { name: "Selvä" }).click();
@@ -72,7 +74,7 @@ test("a singer's way to the singing, their listens and their settings show on th
   }
   expect(changedBy(after, "sound")).toBe(changedBy(before, "sound") + 1);
   expect(after.usage.find((u) => u.id === "naiskuoro")).toEqual(before.usage.find((u) => u.id === "naiskuoro"));
-  const mine = after.listens.filter((l) => l.email === "laulaja@example.com");
+  const mine = after.listens.filter((l) => l.email === "kuuntelija@example.com");
   expect(mine.map((l) => [l.song, l.value, l.admin])).toEqual([["laulettu", "sung", false], ["laulettu", "sung", false]]);
   expect(mine.map((l) => l.seconds).sort((a, b) => a - b)).toEqual([expect.any(Number), 75]);
   expect(mine.some((l) => l.seconds >= 3 && l.seconds < 60)).toBe(true);
@@ -85,7 +87,7 @@ test("a singer's way to the singing, their listens and their settings show on th
   await expect(admin.locator('[data-usage="public"] [data-line="playedSungMinute"]')).toContainText(String(now.playedSungMinute));
   expect(publicUsage(await adminState(admin)).songOpens).toBe(now.songOpens);
   await admin.getByText("Viimeisimmät kuuntelut").click();
-  await expect(admin.locator(".latest-listens li").filter({ hasText: "laulaja@example.com" }).first())
+  await expect(admin.locator(".latest-listens li").filter({ hasText: "kuuntelija@example.com" }).first())
     .toContainText("Laulettu laulu · Tenori · Laulu");
   await adminContext.close();
 });

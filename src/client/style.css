@@ -262,6 +262,7 @@ footer { margin-top: 1.5rem; }
 /* The admin page's usage card (eeron-omat-taskit#72). */
 .usage-lines { list-style: none; padding: 0; margin: 0; }
 .usage-lines li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.2rem 0; border-bottom: 1px solid var(--line); }
+.usage .usage-choir { font-weight: 600; margin: 0.8rem 0 0.2rem; }
 .usage details { margin-top: 0.8rem; }
 .usage summary { font-weight: 600; cursor: pointer; }
 .usage details ul { padding-left: 1.1rem; }
