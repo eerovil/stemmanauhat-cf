@@ -105,9 +105,10 @@ export function withoutNotes(midi: BasicMIDI, notes: Set<UnisonNote>): BasicMIDI
 }
 
 /**
- * Where each sung part is left out, in seconds: its silenced notes, a run of
- * them back to back as one stretch. Starts `lead` early, for the consonant a
- * singer starts before the beat.
+ * Where each sung part is left out, in seconds: its silenced notes, those that
+ * follow on without a gap as one stretch. Starts `lead` early, for the
+ * consonant a singer starts before the beat. A rest between two of them stays
+ * heard (the last note's ring, a breath).
  */
 export function silentSpans(notes: Notes, gone: Set<UnisonNote>, lead = 0.05): [number, number][][] {
   return notes.parts.map((list) => {
@@ -115,8 +116,9 @@ export function silentSpans(notes: Notes, gone: Set<UnisonNote>, lead = 0.05): [
     let run: [number, number] | null = null;
     for (const n of list) {
       if (!gone.has(n)) { run = null; continue; }
-      if (run) run[1] = Math.max(run[1], n.end);
-      else { run = [Math.max(0, n.start - lead), n.end]; spans.push(run); }
+      const start = Math.max(0, n.start - lead);
+      if (run && start <= run[1]) run[1] = Math.max(run[1], n.end);
+      else { run = [start, n.end]; spans.push(run); }
     }
     return spans;
   });

@@ -76,6 +76,17 @@ describe("unisons", () => {
     expect(spans[2]).toEqual([]);
   });
 
+  it("leave a rest between two left-out notes heard, and join notes that follow on", () => {
+    // S1b doubles S1 on C4, rests, doubles it on E4, then straight on with F4.
+    const midi = BasicMIDI.fromArrayBuffer(smf([
+      ["S1", [[0, 60, 0, 480], [0, 64, 1920, 2400], [0, 65, 2400, 2880]]],
+      ["S1b", [[1, 60, 0, 480], [1, 64, 1920, 2400], [1, 65, 2400, 2880]]],
+    ]));
+    const notes = findNotes(midi, partChannels(midi, ["S1", "S1b"]));
+    const spans = silentSpans(notes, silenced(notes, 0, true));
+    expect(spans[1]).toEqual([[0, 0.5], [1.95, 3]]);
+  });
+
   it("set the file player's gains at each part's unison notes", () => {
     const steps = unisonSteps(notes, silenced(notes, 1, true), 1000, 2);
     expect(steps[0]).toEqual({ at: [0, 500], gains: [0, 0] });
