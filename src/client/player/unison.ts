@@ -130,26 +130,29 @@ export function withoutNotes(midi: BasicMIDI, drop: Iterable<UnisonNote>, notes?
  * Where each sung part is left out, in seconds: its silenced notes (until the
  * note that sings it instead ends), those that
  * follow on without a gap as one stretch. Starts `lead` early, for the
- * consonant a singer starts before the beat. A rest between two of them stays
- * heard (the last note's ring, a breath). A part's recording is all its notes
+ * consonant a singer starts before the beat, and ends `tail` late, for the
+ * voice's release. A rest between two of them stays heard (a breath). A part's recording is all its notes
  * in one, so a note sounding at the same time as one of the part's own notes
  * that stays (a chord within the part) is not left out: that would take the
  * other note with it.
  */
-export function silentSpans(notes: Notes, gone: Map<UnisonNote, UnisonNote>, lead = 0.05): [number, number][][] {
+export function silentSpans(notes: Notes, gone: Map<UnisonNote, UnisonNote>, lead = 0.05, tail = 0.15): [number, number][][] {
   return notes.parts.map((list) => {
     const spans: [number, number][] = [];
     let run: [number, number] | null = null;
     const kept = list.filter((m) => !gone.has(m));
     const alongside = (n: UnisonNote) => kept.some((m) => m.start < n.end - EPS && m.end > n.start + EPS);
-    for (const n of list) {
-      if (!gone.has(n) || alongside(n)) { run = null; continue; }
-      // Held longer than the note that sings it, the voice comes back in for the rest of it.
-      const end = Math.min(n.end, gone.get(n)!.end);
+    list.forEach((n, i) => {
+      if (!gone.has(n) || alongside(n)) { run = null; return; }
+      const by = gone.get(n)!;
+      // Held longer than the note that sings it, the voice comes back in for the rest of it;
+      // else it stays out for its release too, up to the part's next note.
+      const next = list[i + 1];
+      const end = n.end > by.end + EPS ? by.end : Math.min(n.end + tail, next ? Math.max(n.end, next.start - lead) : Infinity);
       const start = Math.max(0, n.start - lead);
       if (run && start <= run[1]) run[1] = Math.max(run[1], end);
       else { run = [start, end]; spans.push(run); }
-    }
+    });
     return spans;
   });
 }

@@ -62,9 +62,10 @@ describe("unisons", () => {
     expect([...silenced(notes, 2, true).keys()].map((n) => [n.part, n.start])).toEqual([[1, 0], [1, 1]]);
   });
 
-  it("leave a sung part out from a little before the note to its end", () => {
+  it("leave a sung part out from a little before the note through its release", () => {
+    // C4's release would run into S1's next note (D4 at 0.5 s): it stops there. E4 is S1's last.
     const spans = silentSpans(notes, silenced(notes, 1, true));
-    expect(spans[0]).toEqual([[0, 0.5], [0.95, 1.5]]);
+    expect(spans[0]).toEqual([[0, 0.5], [0.95, 1.65]]);
     expect(spans[1]).toEqual([]);
     expect(spans[2]).toEqual([]);
   });
@@ -82,7 +83,7 @@ describe("unisons", () => {
     ]));
     const notes = findNotes(midi, partChannels(midi, ["S1", "S1b"]));
     const spans = silentSpans(notes, silenced(notes, 0, true));
-    expect(spans[1]).toEqual([[0, 0.5], [1.95, 3]]);
+    expect(spans[1]).toEqual([[0, 0.65], [1.95, 3.15]]);
   });
 
   it("keep a sung part in when it holds another note of its own across the left-out one", () => {
@@ -94,7 +95,7 @@ describe("unisons", () => {
     const notes = findNotes(midi, partChannels(midi, ["S1", "S1b"]));
     const gone = silenced(notes, 0, true);
     expect(gone.size).toBe(2);
-    expect(silentSpans(notes, gone)[1]).toEqual([[1.95, 2.5]]);
+    expect(silentSpans(notes, gone)[1]).toEqual([[1.95, 2.65]]);
   });
 
   it("set the file player's gains at each part's unison notes", () => {
