@@ -79,35 +79,56 @@ export function carrier(unison: Unison, master: number, own: boolean): UnisonNot
 }
 
 /**
- * The notes left out for this part and mix: every unison note but the carrier's,
- * unless it is held longer than the carrier's (then it would stop too early).
+ * The notes left out for this part and mix, each with the note that sings it
+ * instead: every unison note but the carrier's.
  */
-export function silenced(notes: Notes, master: number, own: boolean): Set<UnisonNote> {
-  const out = new Set<UnisonNote>();
+export function silenced(notes: Notes, master: number, own: boolean): Map<UnisonNote, UnisonNote> {
+  const out = new Map<UnisonNote, UnisonNote>();
   for (const u of notes.unisons) {
     const keep = carrier(u, master, own);
-    for (const n of u) if (n !== keep && n.end <= keep.end + 1e-6) out.add(n);
+    for (const n of u) if (n !== keep) out.set(n, keep);
   }
   return out;
 }
 
-/** A copy of the song without the silenced notes, for the piano. */
-export function withoutNotes(midi: BasicMIDI, notes: Set<UnisonNote>): BasicMIDI {
+/**
+ * A copy of the song without the notes in `drop`, for the piano. With `notes`,
+ * every unison note is held until the unison's longest copy ends (Eero, #76:
+ * one note, held longest), so the copy that is kept rings as long as any did;
+ * never into the part's own next strike of that key.
+ */
+export function withoutNotes(midi: BasicMIDI, drop: Iterable<UnisonNote>, notes?: Notes): BasicMIDI {
   const copy = BasicMIDI.copyFrom(midi);
-  const drop = copy.tracks.map(() => [] as number[]);
-  for (const n of notes) {
-    drop[n.track]!.push(n.on);
-    if (n.off >= 0) drop[n.track]!.push(n.off);
+  if (notes) {
+    const key = (n: UnisonNote) => midi.tracks[n.track]!.events[n.on]!.data[0];
+    const tick = (t: number, i: number) => midi.tracks[t]!.events[i]!.ticks;
+    for (const u of notes.unisons) {
+      const last = Math.max(...u.map((n) => (n.off >= 0 ? tick(n.track, n.off) : 0)));
+      for (const n of u) {
+        if (n.off < 0) continue;
+        const list = notes.parts[n.part]!;
+        const next = list.slice(list.indexOf(n) + 1).find((m) => m.track === n.track && key(m) === key(n));
+        const until = next ? Math.min(last, tick(next.track, next.on)) : last;
+        const off = copy.tracks[n.track]!.events[n.off]!;
+        off.ticks = Math.max(off.ticks, until);
+      }
+    }
   }
-  drop.forEach((indexes, t) => {
-    for (const i of indexes.sort((a, b) => b - a)) copy.tracks[t]!.deleteEvent(i);
+  const indexes = copy.tracks.map(() => [] as number[]);
+  for (const n of drop) {
+    indexes[n.track]!.push(n.on);
+    if (n.off >= 0) indexes[n.track]!.push(n.off);
+  }
+  indexes.forEach((list, t) => {
+    for (const i of list.sort((a, b) => b - a)) copy.tracks[t]!.deleteEvent(i);
   });
-  copy.flush();
+  copy.flush(true);
   return copy;
 }
 
 /**
- * Where each sung part is left out, in seconds: its silenced notes, those that
+ * Where each sung part is left out, in seconds: its silenced notes (until the
+ * note that sings it instead ends), those that
  * follow on without a gap as one stretch. Starts `lead` early, for the
  * consonant a singer starts before the beat. A rest between two of them stays
  * heard (the last note's ring, a breath). A part's recording is all its notes
@@ -115,7 +136,7 @@ export function withoutNotes(midi: BasicMIDI, notes: Set<UnisonNote>): BasicMIDI
  * that stays (a chord within the part) is not left out: that would take the
  * other note with it.
  */
-export function silentSpans(notes: Notes, gone: Set<UnisonNote>, lead = 0.05): [number, number][][] {
+export function silentSpans(notes: Notes, gone: Map<UnisonNote, UnisonNote>, lead = 0.05): [number, number][][] {
   return notes.parts.map((list) => {
     const spans: [number, number][] = [];
     let run: [number, number] | null = null;
@@ -123,9 +144,11 @@ export function silentSpans(notes: Notes, gone: Set<UnisonNote>, lead = 0.05): [
     const alongside = (n: UnisonNote) => kept.some((m) => m.start < n.end - EPS && m.end > n.start + EPS);
     for (const n of list) {
       if (!gone.has(n) || alongside(n)) { run = null; continue; }
+      // Held longer than the note that sings it, the voice comes back in for the rest of it.
+      const end = Math.min(n.end, gone.get(n)!.end);
       const start = Math.max(0, n.start - lead);
-      if (run && start <= run[1]) run[1] = Math.max(run[1], n.end);
-      else { run = [start, n.end]; spans.push(run); }
+      if (run && start <= run[1]) run[1] = Math.max(run[1], end);
+      else { run = [start, end]; spans.push(run); }
     }
     return spans;
   });
@@ -141,7 +164,7 @@ export function unisonNotes(notes: Notes): Set<UnisonNote> {
  * part's gain over them, 0 from a silenced note's start to the part's next
  * unison note, so the left-out note's ring is gone too.
  */
-export function unisonSteps(notes: Notes, gone: Set<UnisonNote>, sampleRate: number, rate: number): GainSteps[] {
+export function unisonSteps(notes: Notes, gone: Map<UnisonNote, UnisonNote>, sampleRate: number, rate: number): GainSteps[] {
   const all = unisonNotes(notes);
   return notes.parts.map((list) => {
     const steps: GainSteps = { at: [], gains: [] };

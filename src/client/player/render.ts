@@ -15,7 +15,7 @@ export interface Setup {
 /**
  * The song three times: without the unison notes; only them, so a mix can
  * leave out any part's copy of a unison without rendering again; and only
- * the longest copy of each, for their effects (reverb, chorus), which are one track
+ * one copy of each, for their effects (reverb, chorus), which are one track
  * for all parts and so cannot be left out by part: a unison then rings as
  * one part's note does. `progress` gets 0 to 1.
  */
@@ -23,15 +23,14 @@ export async function renderParts(setup: Setup, song: BasicMIDI, notes: Notes, r
   progress: (fraction: number) => void = () => {}): Promise<RenderedParts> {
   const unison = unisonNotes(notes);
   const rest = new Set(notes.parts.flat().filter((n) => !unison.has(n)));
-  // The longest copy, so a held one (which the mix keeps, unison.ts) rings to its end.
-  const longest = (u: UnisonNote[]) => u.reduce((a, b) => (b.end > a.end ? b : a));
-  const copies = new Set<UnisonNote>([...rest, ...notes.unisons.flatMap((u) => u.filter((n) => n !== longest(u)))]);
+  const copies = new Set<UnisonNote>([...rest, ...notes.unisons.flatMap((u) => u.slice(1))]);
   // Two seconds past the last note, for the piano and the reverb to ring out.
   const frames = Math.ceil((song.duration / rate + 2) * setup.sampleRate);
   const step = (done: number) => (f: number) => progress((done + f) / 3);
   const apart = await renderSong(setup, withoutNotes(song, unison), rate, frames, step(0));
-  const together = await renderSong(setup, withoutNotes(song, rest), rate, frames, step(1));
-  const once = await renderSong(setup, withoutNotes(song, copies), rate, frames, step(2));
+  // Every copy held as long as the longest, as the piano plays the one that is kept (unison.ts).
+  const together = await renderSong(setup, withoutNotes(song, rest, notes), rate, frames, step(1));
+  const once = await renderSong(setup, withoutNotes(song, copies, notes), rate, frames, step(2));
   const effects = apart.effects.map((v, i) => Math.max(-32767, Math.min(32767, v + once.effects[i]!)));
   return { sampleRate: setup.sampleRate, parts: apart.parts, effects, unison: together.parts };
 }

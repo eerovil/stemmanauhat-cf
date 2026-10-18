@@ -11,6 +11,10 @@ const song = () => BasicMIDI.fromArrayBuffer(smf([
   ["A", [[2, 48, 0, 1920]]],
 ]));
 
+/** The tick of the first note-off of `key` on channel `ch`. */
+const offTick = (midi: BasicMIDI, ch: number, key: number) => midi.tracks.flatMap((t) => t.events)
+  .find((e) => ((e.statusByte === (0x80 | ch)) || (e.statusByte === (0x90 | ch) && e.data[1] === 0)) && e.data[0] === key)?.ticks;
+
 const keys = (midi: BasicMIDI, ch: number) => midi.tracks.flatMap((t) => t.events)
   .filter((e) => e.statusByte === (0x90 | ch) && e.data[1]! > 0).map((e) => e.data[0]);
 
@@ -25,21 +29,37 @@ describe("unisons", () => {
   it("sound once, in your part when it is one of them", () => {
     const gone = silenced(notes, 1, true);
     // S1b sings both; S1 drops C4 and E4 (S1b holds E4 longer, so S1's ends first).
-    expect([...gone].map((n) => [n.part, n.start])).toEqual([[0, 0], [0, 1]]);
-    const played = withoutNotes(midi, gone);
+    expect([...gone.keys()].map((n) => [n.part, n.start])).toEqual([[0, 0], [0, 1]]);
+    const played = withoutNotes(midi, gone.keys(), notes);
     expect(keys(played, 0)).toEqual([62]);
     expect(keys(played, 1)).toEqual([60, 65, 64]);
     expect(keys(midi, 0)).toEqual([60, 62, 64]);
   });
 
-  it("keep a note held longer than the one that sings it", () => {
-    // S1 sings; S1b's E4 outlasts it, so S1b keeps that one and drops only C4.
-    expect([...silenced(notes, 0, true)].map((n) => [n.part, n.start])).toEqual([[1, 0]]);
+  it("sound as one note held as long as the longest copy", () => {
+    // S1 sings both; S1b's E4 is held a beat longer, so S1's is held with it (Eero, #76).
+    const gone = silenced(notes, 0, true);
+    expect([...gone.keys()].map((n) => [n.part, n.start])).toEqual([[1, 0], [1, 1]]);
+    const played = withoutNotes(midi, gone.keys(), notes);
+    expect(keys(played, 1)).toEqual([65]);
+    expect(offTick(played, 0, 64)).toBe(1920);
+    expect(offTick(midi, 0, 64)).toBe(1440);
+  });
+
+  it("never hold a note into its own part's next strike of that key", () => {
+    const midi = BasicMIDI.fromArrayBuffer(smf([
+      ["S1", [[0, 64, 0, 480], [0, 64, 480, 960]]],
+      ["S1b", [[1, 64, 0, 960]]],
+    ]));
+    const notes = findNotes(midi, partChannels(midi, ["S1", "S1b"]));
+    const played = withoutNotes(midi, silenced(notes, 0, true).keys(), notes);
+    expect(keys(played, 0)).toEqual([64, 64]);
+    expect(offTick(played, 0, 64)).toBe(480);
   });
 
   it("go to another part when yours is silent or not one of them", () => {
-    expect([...silenced(notes, 1, false)].map((n) => [n.part, n.start])).toEqual([[1, 0]]);
-    expect([...silenced(notes, 2, true)].map((n) => [n.part, n.start])).toEqual([[1, 0]]);
+    expect([...silenced(notes, 1, false).keys()].map((n) => [n.part, n.start])).toEqual([[1, 0], [1, 1]]);
+    expect([...silenced(notes, 2, true).keys()].map((n) => [n.part, n.start])).toEqual([[1, 0], [1, 1]]);
   });
 
   it("leave a sung part out from a little before the note to its end", () => {
@@ -47,6 +67,11 @@ describe("unisons", () => {
     expect(spans[0]).toEqual([[0, 0.5], [0.95, 1.5]]);
     expect(spans[1]).toEqual([]);
     expect(spans[2]).toEqual([]);
+  });
+
+  it("bring a sung part held longer back in when the note that sings it ends", () => {
+    // S1 sings; S1b holds E4 to 2 s and is heard again from S1's end at 1.5 s.
+    expect(silentSpans(notes, silenced(notes, 0, true))[1]).toEqual([[0, 0.5], [0.95, 1.5]]);
   });
 
   it("leave a rest between two left-out notes heard, and join notes that follow on", () => {

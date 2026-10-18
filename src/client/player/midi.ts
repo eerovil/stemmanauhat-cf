@@ -64,7 +64,7 @@ export class MidiPlayer {
   private readonly meter: AnalyserNode;
   private readonly samples = new Float32Array(1024);
   /** The notes left out of the song now playing (unison.ts). */
-  private gone = new Set<UnisonNote>();
+  private gone = new Map<UnisonNote, UnisonNote>();
   private reloads = Promise.resolve();
   /** While the song loads again: where it was and when (the context's clock). */
   private reloading: { from: number; at: number } | null = null;
@@ -205,11 +205,11 @@ export class MidiPlayer {
   private applyUnisons(): void {
     this.reloads = this.reloads.then(async () => {
       const gone = silenced(this.notes, this.master, this.own);
-      if (gone.size === this.gone.size && [...gone].every((n) => this.gone.has(n))) return;
+      if (gone.size === this.gone.size && [...gone.keys()].every((n) => this.gone.has(n))) return;
       this.gone = gone;
       this.reloading = { from: this.time(), at: this.context.currentTime };
       try {
-        await load(this.seq, withoutNotes(this.midi, gone));
+        await load(this.seq, withoutNotes(this.midi, gone.keys(), this.notes));
         const t = this.time();
         this.seq.currentTime = t;
         if (this.wanted) this.seq.play();
