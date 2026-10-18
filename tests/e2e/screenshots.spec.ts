@@ -355,3 +355,14 @@ test("usage: the admin's card of who found the singing and which settings they u
   await card.getByText("Viimeisimmät kuuntelut").click();
   await card.screenshot({ path: `${dir}/usage-admin.png` });
 });
+
+test("player on a phone: the dot that says a song can be heard sung (#84)", async ({ page }) => {
+  await page.goto("/c/public/laulettu");
+  await choosePartIfAsked(page, "Tenori");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await expect(page.getByTestId("sung-dot")).toBeVisible();
+  await page.screenshot({ path: `${dir}/player-sung-dot-phone.png` });
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.locator(".sung-tip")).toBeVisible();
+  await page.screenshot({ path: `${dir}/player-sung-dot-settings-phone.png` });
+});

@@ -133,6 +133,8 @@ onMounted(async () => {
   showHint.value = !localStorage.getItem("stemmanauhat:hint-seen");
   // The settings follow the singer from song to song; the part belongs to the song.
   const carried = carriedSettings();
+  if (carried.sound === "sung") endSungDot();
+  else sungDotWanted.value = sungDotShows() < SUNG_DOT_SHOWS;
   staffMode.value = carried.staves === "own" ? "own" : "all";
   sound.value = carried.sound === "sung" ? "sung" : "piano";
 
@@ -525,6 +527,7 @@ async function setSound(next: "piano" | "sung") {
   if (!song.value || !mixer || next === sound.value && (switching.value || next === shownSound.value)) return;
   sound.value = next;
   carrySettings({ sound: next });
+  if (next === "sung") endSungDot();
   track("sound_choice", { ...where(), value: next });
   noteSetting("sound", () => next);
   if (next === "sung") { await loadSung(); return; }
@@ -624,6 +627,39 @@ function dismissHint() {
   showHint.value = false;
   localStorage.setItem("stemmanauhat:hint-seen", "1");
 }
+
+/**
+ * Telling singers a song can be heard sung (#84): on a song with singing, a dot on
+ * Säädöt for a singer who has never chosen Laulu, and the Ääni row lit up when
+ * Säädöt opens. The dot shows on at most SUNG_DOT_SHOWS song opens on a device,
+ * and never again once Säädöt was opened with it or Laulu was chosen. It never
+ * covers the score and never plays anything by itself (Eero chose the dot over a card).
+ */
+const SUNG_DOT_KEY = "stemmanauhat:sung-dot";
+const SUNG_DOT_SHOWS = 3;
+const sungDotWanted = ref(false);
+/** True while Säädöt shows the Ääni row lit up, from opening it with the dot until it closes. */
+const soundLit = ref(false);
+const showSungDot = computed(() => sungDotWanted.value && hasSung.value && !loading.value && !failure.value);
+/** How many song opens have shown the dot; "done" once it has been followed or Laulu chosen. */
+function sungDotShows(): number {
+  const value = localStorage.getItem(SUNG_DOT_KEY);
+  return value === "done" ? SUNG_DOT_SHOWS : Number(value) || 0;
+}
+function endSungDot() {
+  sungDotWanted.value = false;
+  localStorage.setItem(SUNG_DOT_KEY, "done");
+}
+// A song open counts once, when the dot first shows on it.
+const stopCounting = watch(showSungDot, (shown) => {
+  if (!shown) return;
+  stopCounting();
+  if (localStorage.getItem(SUNG_DOT_KEY) !== "done") localStorage.setItem(SUNG_DOT_KEY, String(sungDotShows() + 1));
+});
+watch(sheetOpen, (open) => {
+  if (open && showSungDot.value) { soundLit.value = true; endSungDot(); }
+  else if (!open) soundLit.value = false;
+});
 
 function closePanels() {
   sheetOpen.value = false;
@@ -740,15 +776,17 @@ function onPointerUp(event: PointerEvent) {
         </div>
         <div class="mode-hint">{{ MODES.find((m) => m.id === mode)?.hint }}</div>
         <template v-if="hasSung">
-          <div class="setting">
+          <div class="setting" :class="{ lit: soundLit }">
             <span class="row-label">{{ t.sound }}</span>
             <div class="segmented two" role="group" :aria-label="t.sound">
               <button type="button" :class="{ on: shownSound === 'piano' }" :aria-pressed="shownSound === 'piano'"
                 @click="setSound('piano')">{{ t.piano }}</button>
               <button type="button" :class="{ on: shownSound === 'sung' }" :aria-pressed="shownSound === 'sung'"
-                @click="setSound('sung')">{{ t.sung }}</button>
+                @click="setSound('sung')">{{ t.sung }}<span v-if="soundLit && shownSound === 'piano'" class="sung-dot"
+                  data-testid="sung-dot-choice"></span></button>
             </div>
           </div>
+          <div v-if="soundLit && shownSound === 'piano' && !switching" class="mode-hint sung-tip">{{ t.sungTip }}</div>
           <div v-if="switching" class="mode-hint">{{ t.loadingSinging }}</div>
           <div v-else-if="sound === 'sung' && playerKind !== 'sung'" class="mode-hint">{{ t.singingFailed }}</div>
         </template>
@@ -821,7 +859,8 @@ function onPointerUp(event: PointerEvent) {
             :data-sounding="sounding ? '1' : '0'" @click="togglePlay"><Icon :name="playing ? 'pause' : 'play'" :size="24" /></button>
           <button type="button" class="settings" :class="{ on: sheetOpen }" :aria-expanded="sheetOpen"
             :aria-label="sheetOpen ? t.closeSettings : t.settings" @click="sheetOpen = !sheetOpen">
-            <Icon :name="sheetOpen ? 'close' : 'more'" :size="22" /></button>
+            <Icon :name="sheetOpen ? 'close' : 'more'" :size="22" />
+            <span v-if="showSungDot && !sheetOpen" class="sung-dot" data-testid="sung-dot"></span></button>
         </div>
       </section>
 

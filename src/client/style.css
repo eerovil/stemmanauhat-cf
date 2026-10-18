@@ -172,10 +172,16 @@ footer { margin-top: 1.5rem; }
 .own-name { font-size: 16px; font-weight: 700; }
 .dock .play { width: 52px; height: 52px; flex: none; border-radius: 50%; background: var(--accent); color: #fff;
   display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(42, 95, 171, 0.35); }
-.dock .settings { width: 44px; height: 44px; flex: none; border-radius: 50%; color: var(--muted);
+.dock .settings { position: relative; width: 44px; height: 44px; flex: none; border-radius: 50%; color: var(--muted);
   display: flex; align-items: center; justify-content: center; }
 .dock .settings:hover { background: var(--chip); }
 .dock .settings.on { background: var(--accent-soft); color: var(--accent); }
+/* This song can be heard sung (#84): a dot on Säädöt, and the Ääni row lit up once it opens. */
+.sung-dot { position: absolute; top: 7px; right: 7px; width: 10px; height: 10px; border-radius: 50%;
+  background: #e0457b; box-shadow: 0 0 0 2px #fff; }
+.setting.lit .segmented button { position: relative; }
+.setting.lit .sung-dot { top: 4px; right: 4px; }
+.setting.lit { border-radius: 12px; box-shadow: 0 0 0 2px var(--accent); background: var(--accent-soft); padding: 4px 6px; margin: 0 -6px; }
 
 /* ---------- Player: Säädöt ---------- */
 .backdrop { position: fixed; inset: 0; z-index: 2; background: rgba(15, 20, 30, 0.16); }

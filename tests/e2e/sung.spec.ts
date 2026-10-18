@@ -198,3 +198,51 @@ test("the song list marks the songs that can be heard sung, and only those", asy
   await expect(row("Iltalaulu")).toBeVisible();
   await expect(row("Iltalaulu").locator(".sung-mark")).toHaveCount(0);
 });
+
+// Telling singers a song can be heard sung (#84): a dot on Säädöt, never a card over the score,
+// on at most three song opens, gone once followed or once Laulu is chosen.
+test("a dot on Säädöt tells a piano singer the song can be heard sung, and goes once followed", async ({ page }) => {
+  await page.goto("/c/public/laulettu");
+  await choosePartIfAsked(page, "Tenori");
+  const dot = page.getByTestId("sung-dot");
+  await expect(dot).toBeVisible();
+  await expect(gains(page)).toHaveAttribute("data-player", "midi");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await expect(page.locator(".setting.lit")).toContainText("Ääni");
+  await expect(page.getByRole("group", { name: "Ääni" }).getByTestId("sung-dot-choice")).toBeVisible();
+  await expect(page.locator(".sung-tip")).toHaveText("Tämän kappaleen voi kuulla myös laulettuna: valitse Laulu.");
+  // Nothing plays by itself: the piano stays until Laulu is chosen.
+  await expect(gains(page)).toHaveAttribute("data-player", "midi");
+  await page.getByRole("button", { name: "Sulje säädöt" }).click();
+  await expect(dot).toHaveCount(0);
+  await page.reload();
+  await expect(shownScore(page)).toBeVisible();
+  await expect(gains(page)).toHaveAttribute("data-player", "midi");
+  await expect(dot).toHaveCount(0);
+});
+
+test("the singing dot shows on three song opens at most, and never on a song without singing", async ({ page }) => {
+  await page.goto("/c/public/esittely");
+  await choosePartIfAsked(page, "Tenori");
+  await expect(gains(page)).toHaveAttribute("data-player", "midi");
+  await expect(page.getByTestId("sung-dot")).toHaveCount(0);
+  for (let open = 1; open <= 4; open++) {
+    await page.goto("/c/public/laulettu");
+    await choosePartIfAsked(page, "Tenori");
+    await expect(gains(page)).toHaveAttribute("data-player", "midi");
+    await expect(page.getByTestId("sung-dot")).toHaveCount(open <= 3 ? 1 : 0);
+  }
+});
+
+test("choosing Laulu ends the singing dot, and a singer who already sings never sees it", async ({ page }) => {
+  await page.goto("/c/public/laulettu");
+  await choosePartIfAsked(page, "Tenori");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.evaluate(() => localStorage.removeItem("stemmanauhat:sung-dot"));
+  await page.evaluate(() => localStorage.setItem("stemmanauhat:settings", JSON.stringify({ sound: "sung" })));
+  await page.reload();
+  await expect(gains(page)).toHaveAttribute("data-player", "sung");
+  await expect(page.getByTestId("sung-dot")).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:sung-dot"))).toBe("done");
+});
