@@ -15,6 +15,7 @@ import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
 import { buildCurve, curveAt, JUMP_FRACTION, SmoothClock, timeAtX, type ScrollCurve } from "../player/scroll";
 import { barLengths, nearest, parseTiming, positionAt, startsOf, timeOf, type Timing } from "../player/timing";
+import { ListenTimer, SettleTimer, settingValue, track, type SettingName, type Settings } from "../track";
 import RefusedView from "./Refused.vue";
 
 const props = defineProps<{ choir: string; slug: string }>();
@@ -153,8 +154,10 @@ onMounted(async () => {
     const carriedRate = validRate(carried.rate);
     const oldRate = validRate(memory.rate);
     if (carriedRate) setRate(carriedRate, false);
-    else if (oldRate) setRate(oldRate);
+    else if (oldRate) { setRate(oldRate, false); carrySettings({ rate: oldRate }); }
     loading.value = false;
+    track("song_open", where());
+    window.addEventListener("pagehide", leaving);
     if (sound.value === "sung" && hasSung.value) void loadSung();
     // The score box exists only once loading is false.
     await new Promise(requestAnimationFrame);
@@ -229,6 +232,8 @@ async function loadSung() {
 }
 
 onBeforeUnmount(() => {
+  leaving();
+  window.removeEventListener("pagehide", leaving);
   cancelAnimationFrame(frame);
   dockObserver.disconnect();
   window.removeEventListener("resize", onResize);
@@ -253,6 +258,45 @@ watch(playing, (on) => { void keepAwake(on); });
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && playing.value) void keepAwake(true);
 });
+
+// ---------------------------------------------------------------- usage events (eeron-omat-taskit#72)
+
+/** Which song, part and kind of song an event is about. */
+function where() {
+  return { choir: props.choir, song: props.slug, part: song.value?.parts[myPart.value]?.name, sung: hasSung.value };
+}
+/** What is playing now: the piano also when singing was chosen but has not loaded. */
+const playingSound = (): "piano" | "sung" => (playerKind.value === "sung" ? "sung" : "piano");
+function settingsNow(): Settings {
+  return {
+    mode: mode.value, others: settingValue(others.value), rate: settingValue(rate.value), staves: staffMode.value,
+    zoom: settingValue(zoom.value), sound: playingSound(),
+  };
+}
+const listens = new ListenTimer<"piano" | "sung">((id, seconds, played) =>
+  track("listen", { ...where(), value: played, seconds, listen: id, settings: { ...settingsNow(), sound: played } }));
+watch(playing, (on) => { if (on) listens.start(playingSound()); else listens.stop(); });
+// Piano and singing are separate listens.
+watch(playerKind, () => {
+  if (!listens.running) return;
+  listens.stop();
+  if (playing.value) listens.start(playingSound());
+});
+let settingsSeen = false;
+watch(sheetOpen, (open) => {
+  if (!open || settingsSeen) return;
+  settingsSeen = true;
+  track("settings_open", where());
+});
+const settles = new SettleTimer();
+/** A setting the singer changed; sliders and steppers send the value they end on. */
+function noteSetting(setting: SettingName, value: () => string, settle = false) {
+  settles.note(setting, () => track("setting", { ...where(), setting, value: value() }), settle);
+}
+function leaving() {
+  listens.stop();
+  settles.flush();
+}
 
 function reload() {
   location.reload();
@@ -392,6 +436,7 @@ function changeZoom(step: number) {
   if (next === zoom.value) return;
   zoom.value = next;
   remembered.setZoom(next);
+  noteSetting("zoom", () => settingValue(zoom.value), true);
   score?.setZoom(next);
   lastTop = -1;
 }
@@ -407,6 +452,7 @@ async function setStaffMode(next: StaffMode) {
   // Laid out once the page is in the new view: the one-line view's box is as wide as its content.
   await nextTick();
   carrySettings({ staves: next });
+  noteSetting("staves", () => next);
   const wrap = scrollBox.value?.firstElementChild as HTMLElement | null;
   if (wrap) wrap.style.transform = "";
   leavePieces(wrap);
@@ -449,17 +495,24 @@ function setMode(next: MixMode, save = true) {
   mixer?.setOwn(next !== "minus");
   const level = { focus: DEFAULT_OTHERS, equal: 1, minus: 1, solo: 0 }[next];
   setOthers(level, false);
-  if (save) carrySettings({ mode: next, others: level });
+  if (save) {
+    carrySettings({ mode: next, others: level });
+    noteSetting("mode", () => next);
+  }
 }
 
 function onOthersSlider(value: number) {
   if (mode.value === "solo" && value > 0) setMode("focus");
   setOthers(value);
+  noteSetting("others", () => settingValue(others.value), true);
 }
 
 function setRate(value: number, save = true) {
   rate.value = value;
-  if (save) carrySettings({ rate: value });
+  if (save) {
+    carrySettings({ rate: value });
+    noteSetting("rate", () => settingValue(rate.value), true);
+  }
   mixer?.setRate(value);
 }
 
@@ -468,6 +521,8 @@ async function setSound(next: "piano" | "sung") {
   if (!song.value || !mixer || next === sound.value && (switching.value || next === shownSound.value)) return;
   sound.value = next;
   carrySettings({ sound: next });
+  track("sound_choice", { ...where(), value: next });
+  noteSetting("sound", () => next);
   if (next === "sung") { await loadSung(); return; }
   // Piano: a sung load still under way is dropped, and singing that plays hands back.
   sungLoad++;

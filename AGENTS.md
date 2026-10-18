@@ -28,6 +28,11 @@ D1 for the per-choir email allow-lists, Google sign-in). Read README.md first.
   songs, LYSE for the women's, named per song by the manifest's `"voice"`) visible whenever the sung parts play (it is in
   the dock's info, under the bar and time).
 
+- **Usage events** (eerovil/eeron-omat-taskit#72) are the `events` table: who listened to what,
+  for how long and with which settings (README, "Usage events"). It holds members' emails, so
+  never commit rows from it. Read it with `./scripts/run.sh --cloudflare corepack pnpm exec
+  wrangler d1 execute stemmanauhat --remote --json --command "SELECT ... FROM events"`.
+
 ## Tests
 
 Run everything through `./scripts/run.sh` (there is no node on the host); the suite is

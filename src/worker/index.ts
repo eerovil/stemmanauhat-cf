@@ -1,6 +1,7 @@
 import { AGENT_SESSION_SECONDS, agentKeyMark, agentSessionValid, readAgentLink } from "./agent";
 import { decideAccess, isAdmin, loadFacts, type Access } from "./access";
 import type { Env } from "./env";
+import { EVENT_MAX_BYTES, parseEvent, SETTING_DEFAULTS, SETTING_NAMES } from "./events";
 import { serveObject, safeSongPath } from "./files";
 import { AUTHORIZE_URL, TOKEN_URL, authorizeUrl, exchangeCode, normalizeEmail, readEmail } from "./google";
 import { joinUrl, linkKey } from "./links";
@@ -82,6 +83,7 @@ async function route(ctx: Ctx): Promise<Response> {
     return choirPage(ctx, decodeURIComponent(m[1]!));
   }
   if (path === "/api/requests" && method === "POST") return sendRequest(ctx);
+  if (path === "/api/events" && method === "POST") return recordEvent(ctx);
   if (path === "/admin" && method === "GET") return adminPage(ctx);
   if (path === "/api/admin" && method === "GET") return adminState(ctx);
   if (path === "/api/admin/members" && method === "POST") return adminMembers(ctx);
@@ -419,7 +421,71 @@ async function adminState(ctx: Ctx): Promise<Response> {
   return json({
     choirs: out,
     admins: (admins!.results as { email: string }[]).map((a) => a.email),
+    ...(await usage(ctx)),
   });
+}
+
+/** How a usage event's person is counted: the Google email, else the device. */
+const PERSON = "COALESCE(email, visitor)";
+const USAGE_DAYS = 30;
+const EVENT_KEEP_DAYS = 365;
+const LATEST_LISTENS = 50;
+
+/**
+ * The admin page's usage numbers (eerovil/eeron-omat-taskit#72): per choir, the
+ * last 30 days' people at each step towards the singing; site-wide, how each
+ * setting is used; and the latest listens. Events over a year old go first.
+ */
+async function usage(ctx: Ctx) {
+  const db = ctx.env.DB;
+  const since = (days: number) => new Date((ctx.now - days * 24 * 60 * 60) * 1000).toISOString();
+  const from = since(USAGE_DAYS);
+  const person = "COALESCE(e.email, e.visitor)";
+  const sung = (where: string) => `COUNT(DISTINCT CASE WHEN e.sung = 1 AND ${where} THEN ${person} END)`;
+  const [, choirs, changed, listened, latest] = await db.batch([
+    db.prepare("DELETE FROM events WHERE at < ?").bind(since(EVENT_KEEP_DAYS)),
+    db.prepare(`SELECT e.choir AS id, COALESCE(c.name, e.choir) AS name,
+                       COUNT(DISTINCT ${person}) AS people,
+                       ${sung("e.name = 'song_open'")} AS songOpens,
+                       ${sung("e.name = 'settings_open'")} AS settingsOpens,
+                       ${sung("e.name = 'sound_choice' AND e.value = 'sung'")} AS choseSung,
+                       ${sung("e.name = 'listen' AND e.value = 'sung'")} AS playedSung,
+                       ${sung("e.name = 'listen' AND e.value = 'sung' AND e.seconds >= 60")} AS playedSungMinute
+                  FROM events e LEFT JOIN choirs c ON c.id = e.choir
+                 WHERE e.admin = 0 AND e.at >= ? GROUP BY e.choir ORDER BY name`).bind(from),
+    db.prepare(`SELECT setting, COUNT(DISTINCT ${PERSON}) AS people FROM events
+                 WHERE admin = 0 AND name = 'setting' AND at >= ? GROUP BY setting`).bind(from),
+    db.prepare(`SELECT json_each.key AS setting, json_each.value AS value, SUM(events.seconds) AS seconds
+                  FROM events, json_each(events.settings)
+                 WHERE events.admin = 0 AND events.name = 'listen' AND events.at >= ?
+                 GROUP BY json_each.key, json_each.value`).bind(from),
+    db.prepare(`SELECT e.at, e.choir, e.email, e.admin, e.song, s.title, e.part, e.value, e.seconds
+                  FROM events e LEFT JOIN songs s ON s.choir = e.choir AND s.slug = e.song
+                 WHERE e.name = 'listen' ORDER BY e.at DESC, e.id DESC LIMIT ?`).bind(LATEST_LISTENS),
+  ]);
+  const people = new Map((changed!.results as { setting: string; people: number }[]).map((r) => [r.setting, r.people]));
+  const time = listened!.results as { setting: string; value: string; seconds: number }[];
+  const settings = SETTING_NAMES.map((setting) => {
+    const rows = time.filter((r) => r.setting === setting);
+    const total = rows.reduce((sum, r) => sum + r.seconds, 0);
+    const others = rows.filter((r) => r.value !== SETTING_DEFAULTS[setting]).sort((a, b) => b.seconds - a.seconds);
+    const atDefault = total - others.reduce((sum, r) => sum + r.seconds, 0);
+    return {
+      setting,
+      default: SETTING_DEFAULTS[setting],
+      changedBy: people.get(setting) ?? 0,
+      /** The share of listening time at the default, 0–1; null with no listens yet. */
+      defaultShare: total ? atDefault / total : null,
+      topOther: others[0]?.value ?? null,
+    };
+  });
+  type Listen = { at: string; choir: string; email: string | null; admin: number; song: string | null;
+    title: string | null; part: string | null; value: string; seconds: number };
+  return {
+    usage: choirs!.results,
+    settings,
+    listens: (latest!.results as Listen[]).map((l) => ({ ...l, admin: l.admin === 1 })),
+  };
 }
 
 async function adminBody(ctx: Ctx): Promise<Record<string, unknown> | Response> {
@@ -717,6 +783,32 @@ async function sendFlag(ctx: Ctx, choir: string, slug: string): Promise<Response
   ).bind(choir, song.title, flag.note, ctx.session?.email ?? flag.name, new Date(ctx.now * 1000).toISOString(),
     slug, flag.bar, flag.problems.join(",") || null, flag.part).first<{ id: number }>();
   return json({ id: row!.id });
+}
+
+/**
+ * One usage event from the player (eerovil/eeron-omat-taskit#72), sent with
+ * sendBeacon. Always 204: a bad event is dropped, and the player shows nothing.
+ * Kept only for a choir this visitor can open; the email comes from the session.
+ */
+async function recordEvent(ctx: Ctx): Promise<Response> {
+  const done = new Response(null, { status: 204 });
+  if (Number(ctx.request.headers.get("Content-Length") ?? 0) > EVENT_MAX_BYTES) return done;
+  const event = parseEvent(await ctx.request.text());
+  if (!event || (await accessTo(ctx, event.choir)) !== "ok") return done;
+  const session = ctx.session;
+  // Admins' visits are kept for checking that tracking works, but not counted. (An
+  // agent's session sends nothing: it only reads, #79.)
+  const admin = await isAdmin(ctx.env.DB, session);
+  // A listen is sent again at each full minute (D9): the same row grows.
+  await ctx.env.DB.prepare(
+    `INSERT INTO events (at, visitor, email, admin, choir, song, part, name, sung, setting, value, settings, seconds, listen)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (listen) DO UPDATE SET seconds = MAX(events.seconds, excluded.seconds), settings = excluded.settings
+       WHERE events.visitor = excluded.visitor`,
+  ).bind(new Date(ctx.now * 1000).toISOString(), event.visitor, session?.email ?? null, admin ? 1 : 0, event.choir,
+    event.song, event.part, event.name, event.sung ? 1 : 0, event.setting, event.value, event.settings, event.seconds,
+    event.listen).run();
+  return done;
 }
 
 function problemList(problems: string | null): string[] {

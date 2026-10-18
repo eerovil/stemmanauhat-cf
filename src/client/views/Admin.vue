@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { getJson, postJson, problemLabels, Refused } from "../api";
+import { getJson, postJson, problemLabels, Refused, type MixMode } from "../api";
+import { gainOf } from "../player/mix";
 import RefusedView from "./Refused.vue";
 import LanguageSwitch from "../components/LanguageSwitch.vue";
-import { day, t, words } from "../i18n";
+import { day, sortLocale, t, words } from "../i18n";
 
 interface AdminChoir {
   id: string;
@@ -34,7 +35,44 @@ interface AdminRequest {
   part: string | null;
 }
 
+/** One choir's last 30 days, in people (eeron-omat-taskit#72). */
+interface Usage {
+  id: string;
+  name: string;
+  people: number;
+  songOpens: number;
+  settingsOpens: number;
+  choseSung: number;
+  playedSung: number;
+  playedSungMinute: number;
+}
+
+type SettingName = "mode" | "others" | "rate" | "staves" | "zoom" | "sound";
+interface SettingUse {
+  setting: SettingName;
+  default: string;
+  changedBy: number;
+  /** The share of listening time at the default, 0–1; null with no listens yet. */
+  defaultShare: number | null;
+  topOther: string | null;
+}
+
+interface Listen {
+  at: string;
+  choir: string;
+  email: string | null;
+  admin: boolean;
+  song: string | null;
+  title: string | null;
+  part: string | null;
+  value: "piano" | "sung";
+  seconds: number;
+}
+
 const choirs = ref<AdminChoir[]>([]);
+const usage = ref<Usage[]>([]);
+const settingsUse = ref<SettingUse[]>([]);
+const listens = ref<Listen[]>([]);
 const admins = ref<string[]>([]);
 const refused = ref<number | null>(null);
 const toAdd = reactive<Record<string, string>>({});
@@ -42,9 +80,13 @@ const message = reactive<Record<string, string>>({});
 
 async function load() {
   try {
-    const data = await getJson<{ choirs: AdminChoir[]; admins: string[] }>("/api/admin");
+    const data = await getJson<{ choirs: AdminChoir[]; admins: string[]; usage: Usage[]; settings: SettingUse[];
+      listens: Listen[] }>("/api/admin");
     choirs.value = data.choirs;
     admins.value = data.admins;
+    usage.value = data.usage;
+    settingsUse.value = data.settings;
+    listens.value = data.listens;
   } catch (error) {
     if (error instanceof Refused) refused.value = error.status;
     else throw error;
@@ -97,6 +139,41 @@ const removeRequest = (choir: string, r: AdminRequest) => run(choir, async () =>
 });
 const open = (c: AdminChoir) => c.requests.filter((r) => !r.done_at);
 const done = (c: AdminChoir) => c.requests.filter((r) => r.done_at);
+
+const USAGE_LINES = [
+  ["usagePeople", "people"], ["usageSongOpens", "songOpens"], ["usageSettingsOpens", "settingsOpens"],
+  ["usageChoseSung", "choseSung"], ["usagePlayedSung", "playedSung"], ["usagePlayedSungMinute", "playedSungMinute"],
+] as const;
+const SETTING_LABELS = { mode: "listening", others: "otherParts", rate: "tempo", staves: "staves", zoom: "scoreSize", sound: "sound" } as const;
+/** A setting's value as Säädöt shows it. */
+function settingText(setting: SettingName, value: string): string {
+  const w = t.value;
+  const n = Number(value);
+  switch (setting) {
+    case "mode": return w.modes[value as MixMode]?.label ?? value;
+    case "others": return `${Math.round(gainOf(n) * 100)} %`;
+    case "rate": case "zoom": return `${Math.round(n * 100)} %`;
+    case "staves": return value === "own" ? w.ownStaff : w.allStaves;
+    case "sound": return value === "sung" ? w.sung : w.piano;
+  }
+}
+function settingLine(s: SettingUse): string {
+  const w = t.value;
+  return [
+    w.settingDefault(settingText(s.setting, s.default)),
+    w.settingChangedBy(s.changedBy),
+    s.defaultShare === null ? "" : w.settingAtDefault(Math.round(s.defaultShare * 100)),
+    s.topOther === null ? "" : w.settingTopOther(settingText(s.setting, s.topOther)),
+  ].filter(Boolean).join(" · ");
+}
+const when = (at: string) => new Date(at).toLocaleString(sortLocale(), { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+function listenLine(l: Listen): string {
+  const w = t.value;
+  return [
+    l.email ?? w.noAccount, l.title ?? l.song ?? "", l.part ?? "", l.value === "sung" ? w.sung : w.piano,
+    w.listenLength(Math.floor(l.seconds / 60), l.seconds % 60), when(l.at),
+  ].filter(Boolean).join(" · ") + (l.admin ? ` ${w.adminMark}` : "");
+}
 </script>
 
 <template>
@@ -156,6 +233,33 @@ const done = (c: AdminChoir) => c.requests.filter((r) => r.done_at);
         <button type="button" @click="renewLink(c.id, c.link)">{{ c.link ? t.newLink : t.makeLink }}</button>
         <button v-if="c.link" type="button" class="link" @click="linkOff(c.id)">{{ t.turnOff }}</button>
       </div>
+    </section>
+    <section class="card usage">
+      <h2>{{ t.usageHeading }}</h2>
+      <p class="hint">{{ t.usageHint }}</p>
+      <p v-if="!usage.length" class="hint">{{ t.noUsage }}</p>
+      <div v-for="u in usage" :key="u.id" :data-usage="u.id">
+        <h3>{{ u.name }}</h3>
+        <ul class="usage-lines">
+          <li v-for="[label, key] in USAGE_LINES" :key="key" :data-line="key"><span>{{ t[label] }}</span><b>{{ u[key] }}</b></li>
+        </ul>
+      </div>
+      <details class="settings-use">
+        <summary>{{ t.settingsUseHeading }}</summary>
+        <p class="hint">{{ t.settingsUseHint }}</p>
+        <ul>
+          <li v-for="s in settingsUse" :key="s.setting" :data-setting="s.setting">
+            <strong>{{ t[SETTING_LABELS[s.setting]] }}</strong> · {{ settingLine(s) }}
+          </li>
+        </ul>
+      </details>
+      <details class="latest-listens">
+        <summary>{{ t.latestListens }}</summary>
+        <p v-if="!listens.length" class="hint">{{ t.noListens }}</p>
+        <ul>
+          <li v-for="(l, i) in listens" :key="i">{{ listenLine(l) }}</li>
+        </ul>
+      </details>
     </section>
     <section class="card">
       <h2>{{ t.admins }}</h2>
