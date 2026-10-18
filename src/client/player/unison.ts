@@ -30,6 +30,8 @@ export interface Notes {
 }
 
 const NOTE_ON = 0x90;
+/** Seconds: notes closer than this (a legato join) do not count as sounding together. */
+const EPS = 0.001;
 const NOTE_OFF = 0x80;
 
 export function findNotes(midi: BasicMIDI, partChannels: number[][]): Notes {
@@ -108,14 +110,19 @@ export function withoutNotes(midi: BasicMIDI, notes: Set<UnisonNote>): BasicMIDI
  * Where each sung part is left out, in seconds: its silenced notes, those that
  * follow on without a gap as one stretch. Starts `lead` early, for the
  * consonant a singer starts before the beat. A rest between two of them stays
- * heard (the last note's ring, a breath).
+ * heard (the last note's ring, a breath). A part's recording is all its notes
+ * in one, so a note sounding at the same time as one of the part's own notes
+ * that stays (a chord within the part) is not left out: that would take the
+ * other note with it.
  */
 export function silentSpans(notes: Notes, gone: Set<UnisonNote>, lead = 0.05): [number, number][][] {
   return notes.parts.map((list) => {
     const spans: [number, number][] = [];
     let run: [number, number] | null = null;
+    const kept = list.filter((m) => !gone.has(m));
+    const alongside = (n: UnisonNote) => kept.some((m) => m.start < n.end - EPS && m.end > n.start + EPS);
     for (const n of list) {
-      if (!gone.has(n)) { run = null; continue; }
+      if (!gone.has(n) || alongside(n)) { run = null; continue; }
       const start = Math.max(0, n.start - lead);
       if (run && start <= run[1]) run[1] = Math.max(run[1], n.end);
       else { run = [start, n.end]; spans.push(run); }

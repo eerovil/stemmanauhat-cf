@@ -60,6 +60,18 @@ describe("unisons", () => {
     expect(spans[1]).toEqual([[0, 0.5], [1.95, 3]]);
   });
 
+  it("keep a sung part in when it holds another note of its own across the left-out one", () => {
+    // S1b holds G3 under the unison C4 (a chord within the part): muting S1b would take the G3.
+    const midi = BasicMIDI.fromArrayBuffer(smf([
+      ["S1", [[0, 60, 480, 960], [0, 62, 1920, 2400]]],
+      ["S1b", [[1, 55, 0, 1440], [1, 60, 480, 960], [1, 62, 1920, 2400]]],
+    ]));
+    const notes = findNotes(midi, partChannels(midi, ["S1", "S1b"]));
+    const gone = silenced(notes, 0, true);
+    expect(gone.size).toBe(2);
+    expect(silentSpans(notes, gone)[1]).toEqual([[1.95, 2.5]]);
+  });
+
   it("set the file player's gains at each part's unison notes", () => {
     const steps = unisonSteps(notes, silenced(notes, 1, true), 1000, 2);
     expect(steps[0]).toEqual({ at: [0, 500], gains: [0, 0] });
