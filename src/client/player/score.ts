@@ -1,3 +1,7 @@
+import "@fontsource/tinos/400.css";
+import "@fontsource/tinos/400-italic.css";
+import "@fontsource/tinos/700.css";
+import "@fontsource/tinos/700-italic.css";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import type { Focus } from "./part";
 import { barAnchors, joinBars, xOnAnchors, type Anchor } from "./bar";
@@ -6,8 +10,24 @@ import { BarMap, splitLongBars } from "./split";
 
 /** OSMD lays out in units of 10 px at zoom 1. */
 const UNIT = 10;
+/**
+ * The score's text font: Tinos, drawn with Times New Roman's widths, shipped with
+ * the site. OSMD asks for Times New Roman, which Android does not have: it used
+ * Noto Serif, about 18 % wider, and OSMD widened every bar whose lyrics then sat
+ * a little tight, up to 2.5 times (#86). With the same font everywhere, a song is
+ * laid out alike on every device.
+ */
+const SCORE_FONT = "Tinos";
+
 /** About one notehead, in OSMD units. The cursor band is two of them, as in the videos. */
 const NOTEHEAD = 1.3;
+
+/** Loads the score font's four faces, with the Latin and Latin Extended letters songs use. */
+async function loadScoreFont(): Promise<void> {
+  const sample = "Aa\u00e4\u00f6\u00e5\u0161\u017e\u0151";
+  await Promise.all(["", "italic ", "bold ", "italic bold "].map((style) =>
+    document.fonts.load(`${style}16px ${SCORE_FONT}`, sample).catch(() => [])));
+}
 
 interface Sounding {
   /** Index of the part (MusicXML instrument) the note belongs to. */
@@ -74,6 +94,7 @@ export class Score {
       drawLyricist: false,
       drawCredits: false,
       drawingParameters: "compacttight",
+      defaultFontFamily: SCORE_FONT,
       // One graphical bar per bar in the file, so timing.json's indexes line up.
       autoGenerateMultipleRestMeasuresFromRestMeasures: false,
     });
@@ -83,7 +104,8 @@ export class Score {
     const { xml, starts } = splitLongBars(musicXml);
     this.pieces = new BarMap(starts);
     this.container.dataset.pieces = String(this.pieces.pieces);
-    await this.osmd.load(xml);
+    // OSMD measures the lyrics as it lays out: the font has to be there by then.
+    await Promise.all([this.osmd.load(xml), loadScoreFont()]);
     if (visible) this.applyVisible(visible);
     this.render();
   }
