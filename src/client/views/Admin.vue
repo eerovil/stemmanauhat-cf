@@ -45,6 +45,8 @@ interface Usage {
   choseSung: number;
   playedSung: number;
   playedSungMinute: number;
+  sawInstall: number;
+  installed: number;
 }
 
 type SettingName = "mode" | "others" | "rate" | "staves" | "zoom" | "sound";
@@ -143,6 +145,7 @@ const done = (c: AdminChoir) => c.requests.filter((r) => r.done_at);
 const USAGE_LINES = [
   ["usagePeople", "people"], ["usageSongOpens", "songOpens"], ["usageSettingsOpens", "settingsOpens"],
   ["usageChoseSung", "choseSung"], ["usagePlayedSung", "playedSung"], ["usagePlayedSungMinute", "playedSungMinute"],
+  ["usageSawInstall", "sawInstall"], ["usageInstalled", "installed"],
 ] as const;
 const SETTING_LABELS = { mode: "listening", others: "otherParts", rate: "tempo", staves: "staves", zoom: "scoreSize", sound: "sound" } as const;
 /** A setting's value as Säädöt shows it. */

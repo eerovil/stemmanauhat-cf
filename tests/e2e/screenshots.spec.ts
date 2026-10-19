@@ -367,3 +367,21 @@ test("player on a phone: the dot that says a song can be heard sung (#84)", asyn
   await expect(page.locator(".sung-tip")).toBeVisible();
   await page.screenshot({ path: `${dir}/player-sung-dot-settings-phone.png` });
 });
+
+test("song list: the notice to install the site as an app, on Android and on an iPhone (#91)", async ({ page, browser }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await expect(page.getByRole("searchbox")).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event("beforeinstallprompt"),
+    { prompt: async () => {}, userChoice: Promise.resolve({ outcome: "dismissed" }) })));
+  await expect(page.locator(".install")).toBeVisible();
+  await page.screenshot({ path: `${dir}/song-list-install-android.png` });
+
+  const iphone = await browser.newContext({ locale: "fi-FI", viewport: { width: 390, height: 844 }, deviceScaleFactor: 3,
+    isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) "
+      + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" });
+  const phone = await iphone.newPage();
+  await phone.goto("/c/public");
+  await expect(phone.locator(".install")).toBeVisible();
+  await phone.screenshot({ path: `${dir}/song-list-install-iphone.png` });
+  await iphone.close();
+});
