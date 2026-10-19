@@ -73,6 +73,12 @@ the device keeps; no IP. Admins' own visits are kept, marked, and left out of th
 counts. The admin page shows the last 30 days and the latest 50 listens, and
 deletes events over a year old. Nothing is shown to singers about it.
 
+The song list's notice that the site can be installed as an app (#91) sends
+`install_shown`, `install_dismiss` and `install_accept`, and the installed app sends
+`app_open` once per visit (iPhones never say they installed); the admin page counts
+who saw the notice and who installed or used the app. The notice shows on at most
+three song list pages, and never again once dismissed or installed.
+
 ## Running it
 
 With Node 22 or newer:

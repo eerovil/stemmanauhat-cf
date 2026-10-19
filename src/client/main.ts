@@ -1,6 +1,7 @@
 import { createApp } from "vue";
 import App from "./App.vue";
 import { forgetSongLists } from "./api";
+import { listenForInstall } from "./install";
 import "./style.css";
 
 // Signing out, or landing on sign-in, forgets the song lists this tab kept (#43).
@@ -9,6 +10,7 @@ document.addEventListener("submit", (event) => {
 });
 if (location.pathname.startsWith("/signin")) forgetSongLists();
 
+listenForInstall();
 createApp(App).mount("#app");
 
 // Installable as an app (public/manifest.webmanifest); sw.js only adds an offline page.

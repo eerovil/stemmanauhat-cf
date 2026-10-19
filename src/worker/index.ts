@@ -454,7 +454,8 @@ const LATEST_LISTENS = 50;
 
 /**
  * The admin page's usage numbers (eerovil/eeron-omat-taskit#72): per choir, the
- * last 30 days' people at each step towards the singing; site-wide, how each
+ * last 30 days' people at each step towards the singing and who saw the install
+ * notice and who use the installed app (#91); site-wide, how each
  * setting is used; and the latest listens. Events over a year old go first.
  */
 async function usage(ctx: Ctx) {
@@ -471,7 +472,9 @@ async function usage(ctx: Ctx) {
                        ${sung("e.name = 'settings_open'")} AS settingsOpens,
                        ${sung("e.name = 'sound_choice' AND e.value = 'sung'")} AS choseSung,
                        ${sung("e.name = 'listen' AND e.value = 'sung'")} AS playedSung,
-                       ${sung("e.name = 'listen' AND e.value = 'sung' AND e.seconds >= 60")} AS playedSungMinute
+                       ${sung("e.name = 'listen' AND e.value = 'sung' AND e.seconds >= 60")} AS playedSungMinute,
+                       COUNT(DISTINCT CASE WHEN e.name = 'install_shown' THEN ${person} END) AS sawInstall,
+                       COUNT(DISTINCT CASE WHEN e.name IN ('install_accept', 'app_open') THEN ${person} END) AS installed
                   FROM events e LEFT JOIN choirs c ON c.id = e.choir
                  WHERE e.admin = 0 AND e.at >= ? GROUP BY e.choir ORDER BY name`).bind(from),
     db.prepare(`SELECT setting, COUNT(DISTINCT ${PERSON}) AS people FROM events

@@ -32,7 +32,10 @@ export function visitorId(): string {
   return id;
 }
 
-export function track(name: "song_open" | "settings_open" | "sound_choice" | "setting" | "listen", fields: EventFields): void {
+export type EventName = "song_open" | "settings_open" | "sound_choice" | "setting" | "listen"
+  | "install_shown" | "install_dismiss" | "install_accept" | "app_open";
+
+export function track(name: EventName, fields: EventFields): void {
   try {
     navigator.sendBeacon("/api/events", JSON.stringify({ ...fields, name, visitor: visitorId(), sung: fields.sung ? 1 : 0 }));
   } catch { /* no storage or no beacon: this visit is not counted */ }
