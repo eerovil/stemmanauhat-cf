@@ -1,6 +1,7 @@
 import { createApp } from "vue";
 import App from "./App.vue";
 import { forgetSongLists } from "./api";
+import { isIOS, preventDoubleTapZoom } from "./no-double-tap-zoom";
 import "./style.css";
 
 // Signing out, or landing on sign-in, forgets the song lists this tab kept (#43).
@@ -10,6 +11,7 @@ document.addEventListener("submit", (event) => {
 if (location.pathname.startsWith("/signin")) forgetSongLists();
 
 createApp(App).mount("#app");
+if (isIOS()) preventDoubleTapZoom();
 
 // Installable as an app (public/manifest.webmanifest); sw.js only adds an offline page.
 if ("serviceWorker" in navigator && window.isSecureContext) {

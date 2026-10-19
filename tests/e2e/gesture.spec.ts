@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { devices, expect, test, type Page } from "@playwright/test";
 import { choosePartIfAsked } from "./helpers";
 
 /**
@@ -99,5 +99,55 @@ test.describe("on a phone", () => {
     expect(await zoomable(page)).toEqual([]);
     await page.getByRole("button", { name: "Sulje säädöt" }).tap();
     expect(await zoomable(page)).toEqual([]);
+  });
+});
+
+// iOS Safari zooms on a double tap despite touch-action: manipulation (WebKit bug 319664), so on
+// an iPhone the page cancels the second quick tap itself and sends it on as a click.
+test.describe("on an iPhone", () => {
+  test.use({ userAgent: devices["iPhone 14"].userAgent });
+
+  test("the second of two quick taps cannot zoom, and still counts (#92)", async ({ page }) => {
+    await page.addInitScript(() => {
+      const cancelled: boolean[] = [];
+      (window as unknown as { cancelled: boolean[] }).cancelled = cancelled;
+      // Listening on window, so the page's own listener on document has run.
+      window.addEventListener("touchend", (event) => cancelled.push(event.defaultPrevented));
+    });
+    const cancelled = () => page.evaluate(() => (window as unknown as { cancelled: boolean[] }).cancelled.splice(0));
+    await page.goto("/c/public/esittely");
+    await choosePartIfAsked(page, "Tenori");
+    await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+    await page.getByRole("button", { name: "Säädöt" }).tap();
+    await cancelled();
+    for (const [group, button] of [["Tempo", "Nopeammin"], ["Nuotin koko", "Pienennä nuottia"]] as const) {
+      const start = await percent(page, group);
+      const target = page.getByRole("group", { name: group }).getByRole("button", { name: button });
+      await page.waitForTimeout(400);
+      await cancelled();
+      await target.tap();
+      await target.tap();
+      expect(await cancelled()).toEqual([false, true]);
+      const twice = await percent(page, group);
+      // One more tap, well after, gives the size of one step.
+      await page.waitForTimeout(400);
+      await target.tap();
+      const step = (await percent(page, group)) - twice;
+      expect(step).not.toBe(0);
+      expect(twice).toBe(start + 2 * step);
+    }
+
+    // In "Oma", a quick second tap on a note still moves there: bar 3's third beat is 5 s in.
+    await page.getByRole("group", { name: "Viivastot" }).getByRole("button", { name: "Oma" }).tap();
+    await page.getByRole("button", { name: "Sulje säädöt" }).tap();
+    await page.waitForTimeout(400);
+    await cancelled();
+    const note = page.getByTestId("score").locator("svg:not(.highlights) g.vf-stavenote").nth(10);
+    const box = (await note.boundingBox())!;
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    expect(await cancelled()).toEqual([false, true]);
+    await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
+    await expect(page.getByTestId("time")).toHaveText("0:05");
   });
 });
