@@ -7,6 +7,7 @@
  * the site runs as the installed app, and never again once dismissed or installed.
  */
 import { ref } from "vue";
+import { track } from "./track";
 
 /** Chrome's install prompt event; not in TypeScript's DOM types. */
 interface InstallPromptEvent extends Event {
@@ -24,7 +25,17 @@ export const installPrompt = ref<InstallPromptEvent | null>(null);
 /** Installed from this tab: the notice goes. */
 export const installed = ref(false);
 
-/** Called once at start, so a prompt offered before the song list mounts is kept. */
+/** The choir of this page (/c/<choir> or /c/<choir>/<song>), which usage events need. */
+export function pageChoir(): string | null {
+  const parts = location.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  return parts[0] === "c" && parts[1] ? parts[1] : null;
+}
+
+/**
+ * Called once at start, so a prompt offered before the song list mounts is kept,
+ * an install from the browser's own menu is counted too, and every page of the
+ * installed app (a song list or a player) counts it as used.
+ */
 export function listenForInstall(): void {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault(); // The notice offers it, not the browser's own bar.
@@ -34,7 +45,14 @@ export function listenForInstall(): void {
     installPrompt.value = null;
     markDone();
     installed.value = true;
+    const choir = pageChoir();
+    if (choir) track("install_accept", { choir });
   });
+  const choir = pageChoir();
+  if (choir && standalone()) {
+    markDone();
+    if (firstThisVisit(`stemmanauhat:app-open:${choir}`)) track("app_open", { choir });
+  }
 }
 
 /** Running as the installed app. */
@@ -69,7 +87,7 @@ export function noticeAllowed(): boolean {
   }
 }
 
-/** True once per tab session for `key`: an event sent once per visit. */
+/** True once per tab session for `key`: an event sent once per visit (per choir, as the admin page counts). */
 export function firstThisVisit(key: string): boolean {
   try {
     if (sessionStorage.getItem(key)) return false;

@@ -311,13 +311,7 @@ const installNotice = computed(() => installWay.value && installAllowed.value ? 
 watch(installWay, (way) => {
   if (!way || installAllowed.value !== null) return;
   installAllowed.value = noticeAllowed();
-  if (installAllowed.value && firstThisVisit("stemmanauhat:install-shown")) track("install_shown", { choir: props.choir, value: way });
-}, { immediate: true });
-watch(ready, (now) => {
-  if (now && inApp && !refused.value && firstThisVisit("stemmanauhat:app-open")) {
-    markDone();
-    track("app_open", { choir: props.choir });
-  }
+  if (installAllowed.value && firstThisVisit(`stemmanauhat:install-shown:${props.choir}`)) track("install_shown", { choir: props.choir, value: way });
 }, { immediate: true });
 async function install() {
   const prompt = installPrompt.value;
@@ -326,6 +320,8 @@ async function install() {
   await prompt.prompt();
   const { outcome } = await prompt.userChoice;
   if (outcome === "accepted") {
+    // Chrome also says appinstalled, which counts it again (install.ts): the
+    // admin page counts people, so one install is still one.
     markDone();
     installed.value = true;
     track("install_accept", { choir: props.choir });

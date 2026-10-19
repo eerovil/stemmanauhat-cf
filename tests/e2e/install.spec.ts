@@ -22,6 +22,17 @@ async function offerInstall(page: Page, outcome: "accepted" | "dismissed" = "acc
   }, outcome);
 }
 
+/** The usage events the page sends, as name and choir. */
+function recordEvents(page: Page): { name: string; choir: string }[] {
+  const events: { name: string; choir: string }[] = [];
+  page.on("request", (r) => {
+    if (!r.url().endsWith("/api/events")) return;
+    const { name, choir } = JSON.parse(r.postData() ?? "{}");
+    events.push({ name, choir });
+  });
+  return events;
+}
+
 async function usage(page: Page): Promise<{ sawInstall: number; installed: number }> {
   const data = await page.evaluate(async () => (await fetch("/api/admin")).json()) as
     { usage: { id: string; sawInstall: number; installed: number }[] };
@@ -123,14 +134,49 @@ test("the installed app never shows the notice", async ({ browser }) => {
     const context = await browser.newContext({ locale: "fi-FI", userAgent: IPHONE });
     await context.addInitScript(standalone);
     const page = await context.newPage();
-    const events: string[] = [];
-    page.on("request", (r) => { if (r.url().endsWith("/api/events")) events.push(JSON.parse(r.postData() ?? "{}").name); });
+    const events = recordEvents(page);
+    // The installed app starts on the front page; a song opened from there, with no song
+    // list on the way, counts as using the app.
+    await page.goto("/");
+    await page.getByRole("link", { name: "Esittelylaulu" }).click();
+    await expect(page).toHaveURL(/\/c\/public\/esittely/);
+    await expect.poll(() => events).toContainEqual({ name: "app_open", choir: "public" });
     await page.goto("/c/public");
     await offerInstall(page);
-    await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Esittelylaulu/ })).toBeVisible();
     await expect(page.locator(".install")).toHaveCount(0);
-    // An open of the installed app tells it was installed, where iPhones say nothing else.
-    await expect.poll(() => events).toContain("app_open");
+    // Once per visit for each choir.
+    expect(events.filter((e) => e.name === "app_open")).toHaveLength(1);
     await context.close();
   }
+});
+
+test("an install from the browser's own menu is counted too", async ({ page, browser }) => {
+  const adminContext = await browser.newContext();
+  const admin = await adminContext.newPage();
+  await signInAs(admin, "/admin", "yllapito@example.com");
+  await expect(admin.getByRole("heading", { name: "Ylläpito" })).toBeVisible();
+  const before = await usage(admin);
+
+  await signInAs(page, "/c/jm", "valikkoasentaja@example.com");
+  await expect(page.getByText("valikkoasentaja@example.com")).toBeVisible();
+  await page.goto("/c/public");
+  await offerInstall(page);
+  await expect(page.locator(".install")).toBeVisible();
+  // Installed from Chrome's menu, not the card's button.
+  await page.evaluate(() => window.dispatchEvent(new Event("appinstalled")));
+  await expect(page.locator(".install")).toHaveCount(0);
+  await expect.poll(async () => usage(admin)).toEqual({ sawInstall: before.sawInstall + 1, installed: before.installed + 1 });
+  await adminContext.close();
+});
+
+test("each choir's list counts its own showing, also in one tab", async ({ page }) => {
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  const events = recordEvents(page);
+  await offerInstall(page);
+  await expect(page.locator(".install")).toBeVisible();
+  await page.goto("/c/public");
+  await offerInstall(page);
+  await expect(page.locator(".install")).toBeVisible();
+  await expect.poll(() => events.filter((e) => e.name === "install_shown").map((e) => e.choir)).toEqual(["jm", "public"]);
 });
