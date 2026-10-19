@@ -14,6 +14,10 @@ export const EVENT_MAX_BYTES = 1024;
 /** A listen shorter than this is a tap on play and pause, not listening. */
 export const LISTEN_MIN_SECONDS = 3;
 const LISTEN_MAX_SECONDS = 7200;
+/** The song list's "Suositut" (#89): songs ranked by how many people listened in this many days… */
+export const POPULAR_DAYS = 30;
+/** …counting only listens at least this long. */
+export const POPULAR_MIN_SECONDS = 30;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SETTING_VALUE = /^[a-z0-9.]{1,10}$/;
 

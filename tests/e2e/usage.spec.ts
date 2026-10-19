@@ -91,3 +91,43 @@ test("a singer's way to the singing, their listens and their settings show on th
     .toContainText("Laulettu laulu · Tenori · Laulu");
   await adminContext.close();
 });
+
+test("the song list puts the songs most people listened to lately first, by default (#89)", async ({ page, browser }) => {
+  // On the open list, as link visitors do: each visitor id is one person.
+  await page.goto("/c/public");
+  await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();
+  const listen = (song: string, seconds: number) => ({ visitor: crypto.randomUUID(), choir: "public", song,
+    part: "Tenori", sung: 0, name: "listen", value: "piano", listen: crypto.randomUUID(), seconds,
+    settings: { mode: "focus", others: "0.4", rate: "1", staves: "all", zoom: "1", sound: "piano" } });
+  // Five people for Vapaa rytmi; two for Laulettu laulu (the other test adds one more).
+  for (let i = 0; i < 5; i++) expect(await post(page, listen("vapaa-rytmi", 40))).toBe(204);
+  expect(await post(page, listen("laulettu", 30))).toBe(204);
+  // One person replaying Laulettu laulu is still one person.
+  const again = listen("laulettu", 30);
+  for (let i = 0; i < 3; i++) expect(await post(page, { ...again, listen: crypto.randomUUID() })).toBe(204);
+  // Plays under 30 seconds and an admin's listens don't count.
+  for (let i = 0; i < 5; i++) expect(await post(page, listen("esittely", 29))).toBe(204);
+  const adminContext = await browser.newContext();
+  const admin = await adminContext.newPage();
+  await signInAs(admin, "/admin", "yllapito@example.com");
+  await expect(admin.getByRole("heading", { name: "Ylläpito" })).toBeVisible();
+  for (let i = 0; i < 5; i++) expect(await post(admin, listen("esittely", 600))).toBe(204);
+  await adminContext.close();
+
+  // The list tells only the order: no counts, no names.
+  const body = await page.evaluate(async () => (await fetch("/api/songs?choir=public")).json() as Promise<{ popular: string[][] }>);
+  expect(body.popular.slice(0, 2)).toEqual([["vapaa-rytmi"], ["laulettu"]]);
+  expect(body.popular.flat()).not.toContain("esittely");
+
+  await page.reload();
+  const order = page.getByRole("group", { name: "Järjestys" });
+  await expect(order.getByRole("button", { name: "Suositut" })).toHaveAttribute("aria-pressed", "true");
+  const titles = page.locator(".songs .song-title");
+  await expect(titles).toHaveText(["Vapaa rytmi", "Laulettu laulu", "Esittelylaulu"]);
+  await order.getByRole("button", { name: "Nimi" }).click();
+  await expect(titles).toHaveText(["Esittelylaulu", "Laulettu laulu", "Vapaa rytmi"]);
+  await page.reload();
+  await expect(order.getByRole("button", { name: "Nimi" })).toHaveAttribute("aria-pressed", "true");
+  await order.getByRole("button", { name: "Suositut" }).click();
+  await expect(titles).toHaveText(["Vapaa rytmi", "Laulettu laulu", "Esittelylaulu"]);
+});

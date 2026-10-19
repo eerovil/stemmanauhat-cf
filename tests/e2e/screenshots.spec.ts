@@ -61,7 +61,7 @@ test("a split-part singer (Tenorib) starts on Tenori without being asked", async
   await page.screenshot({ path: `${dir}/split-part-fallback-phone.png` });
 });
 
-test("song list sorted newest first", async ({ page }) => {
+test("song list sorted popular lately and newest first", async ({ page }) => {
   await page.route("**/api/songs?choir=jm", async (route) => {
     const data = await (await route.fetch()).json();
     const song = data.songs[0];
@@ -72,11 +72,12 @@ test("song list sorted newest first", async ({ page }) => {
       // Rows with no credits and with credits too long for one line, to show they keep one height.
       ...(i % 3 === 1 ? { composer: null, lyricist: null, arranger: null } : {}),
       ...(i === 2 ? { composer: "Aino Esimerkki-Hyvinpitkänimi", arranger: "Sulo Sovittaja-Pitkänimi" } : {}) }));
+    data.popular = [["s5"], ["s2"], ["s4"]];
     await route.fulfill({ json: data });
   });
   await signInAs(page, "/c/jm", "laulaja@example.com");
-  await expect(page.locator(".songs .song-title").first()).toHaveText("Aamulaulu");
-  await page.screenshot({ path: `${dir}/song-list-by-name-phone.png` });
+  await expect(page.locator(".songs .song-title").first()).toHaveText("Suvivirsi");
+  await page.screenshot({ path: `${dir}/song-list-popular-phone.png` });
   await page.getByRole("group", { name: "Järjestys" }).getByRole("button", { name: "Uusimmat" }).click();
   await expect(page.locator(".songs .song-title").first()).toHaveText("Kotimaani");
   await page.screenshot({ path: `${dir}/song-list-newest-phone.png` });

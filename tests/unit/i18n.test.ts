@@ -26,7 +26,7 @@ describe("the phrase table", () => {
     const fi = MESSAGES.fi;
     expect(fi.siteName).toBe("Stemmanauhat");
     expect(fi.searchSongs).toBe("Hae kappaletta");
-    expect([fi.byName, fi.newest]).toEqual(["Nimi", "Uusimmat"]);
+    expect([fi.popular, fi.byName, fi.newest]).toEqual(["Suositut", "Nimi", "Uusimmat"]);
     expect(fi.noSongs).toBe("Ei vielä kappaleita.");
     expect(fi.requestTrack).toBe("Pyydä stemmanauhaa");
     expect(fi.signOut).toBe("Kirjaudu ulos");
