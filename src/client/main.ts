@@ -1,6 +1,7 @@
 import { createApp } from "vue";
 import App from "./App.vue";
 import { forgetSongLists } from "./api";
+import { listenForInstall } from "./install";
 import { isIOS, preventDoubleTapZoom } from "./no-double-tap-zoom";
 import "./style.css";
 
@@ -10,6 +11,7 @@ document.addEventListener("submit", (event) => {
 });
 if (location.pathname.startsWith("/signin")) forgetSongLists();
 
+listenForInstall();
 createApp(App).mount("#app");
 if (isIOS()) preventDoubleTapZoom();
 

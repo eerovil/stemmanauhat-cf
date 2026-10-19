@@ -3,7 +3,10 @@
  * /api/events, checked here. Anything off is dropped without an answer that
  * says why: the player never shows a singer anything about tracking.
  */
-export const EVENT_NAMES = ["song_open", "settings_open", "sound_choice", "setting", "listen"] as const;
+export const EVENT_NAMES = ["song_open", "settings_open", "sound_choice", "setting", "listen",
+  // The song list's install notice (#91): shown, dismissed, installed from it, and
+  // an open of the installed app (iPhones never say they installed).
+  "install_shown", "install_dismiss", "install_accept", "app_open"] as const;
 export const SETTING_NAMES = ["mode", "others", "rate", "staves", "zoom", "sound"] as const;
 export type SettingName = (typeof SETTING_NAMES)[number];
 /** The defaults the admin page measures settings against (Player.vue, player/mix.ts). */
@@ -60,6 +63,9 @@ export function parseEvent(text: string): UsageEvent | null {
   if (name === "sound_choice" || name === "listen") {
     if (b.value !== "piano" && b.value !== "sung") return null;
     event.value = b.value;
+  }
+  if ((name === "install_shown" || name === "install_dismiss") && (b.value === "prompt" || b.value === "ios")) {
+    event.value = b.value; // Which notice: the browser's prompt, or the iPhone's how-to.
   }
   if (name === "setting") {
     const setting = SETTING_NAMES.find((n) => n === b.setting);
