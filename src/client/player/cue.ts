@@ -84,9 +84,13 @@ export class StartingNote {
     this.changed();
   }
 
+  /** The time left is folded in at the old tempo and timed again at the new one. */
   setRate(rate: number): void {
-    if (this.cue) this.fold();
+    if (!this.cue) { this.rate = rate; return; }
+    this.fold();
+    this.clear();
     this.rate = rate;
+    this.wait();
   }
 
   private fold(): void {

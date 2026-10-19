@@ -78,6 +78,18 @@ describe("the starting note's timer", () => {
     expect(starting.on).toBe(false);
   });
 
+  it("ends on time when the tempo goes up just before the note's end", () => {
+    const { starting } = setup();
+    starting.start(part, 0);
+    vi.advanceTimersByTime(400);
+    // 0.1 s of the note left; at 1.5 that is under 0.07 s, not the 0.1 s timed before.
+    starting.setRate(1.5);
+    vi.advanceTimersByTime(60);
+    expect(starting.on).toBe(true);
+    vi.advanceTimersByTime(10);
+    expect(starting.on).toBe(false);
+  });
+
   it("ends early or late by its shift", () => {
     const { starting } = setup(-0.1);
     starting.start(part, 0);
