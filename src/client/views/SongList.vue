@@ -20,6 +20,8 @@ function sortBy(value: SongOrder) {
   remembered.setOrder(value);
 }
 
+/** Slugs of the songs listened to lately, most popular first; the rest are not in it. */
+const popular = ref<string[]>([]);
 const setlists = ref<Setlist[]>([]);
 const picked = ref<number | null>(remembered.setlist(props.choir));
 function pick(id: number | null) {
@@ -30,7 +32,7 @@ function pick(id: number | null) {
 const setlist = computed(() => setlists.value.find((l) => l.id === picked.value) ?? null);
 
 type ListData = { choir: { name: string }; songs: SongSummary[]; setlists: Setlist[]; requests: SongRequest[];
-  openFlags: number };
+  openFlags: number; popular?: string[] };
 // The page shows nothing until it has both answers, then all of it at once. Coming
 // back from a song, the last answers (kept for this tab) show at once and are then
 // refreshed, so the list does not pop in piece by piece or lose its scroll (#43).
@@ -43,6 +45,7 @@ function show(data: ListData) {
   setlists.value = data.setlists;
   requests.value = data.requests;
   openFlags.value = data.openFlags;
+  popular.value = data.popular ?? [];
 }
 async function load() {
   const data = await getJson<ListData>(listUrl);
@@ -90,9 +93,13 @@ const shown = computed((): (SongSummary & { place?: number })[] => {
       .map((s, i) => ({ ...s, place: i + 1 }))
       .filter(matches);
   }
+  // Songs with no listens lately come after the popular ones, by name.
+  const rank = new Map(popular.value.map((slug, i) => [slug, i]));
+  const rankOf = (s: SongSummary) => rank.get(s.slug) ?? rank.size;
   return [...songs.value]
     .filter(matches)
-    .sort((a, b) => (order.value === "date" ? b.published_at.localeCompare(a.published_at) : 0)
+    .sort((a, b) => (order.value === "date" ? b.published_at.localeCompare(a.published_at)
+      : order.value === "popular" ? rankOf(a) - rankOf(b) : 0)
       || byTitle(a, b));
 });
 /** With a setlist picked, a search also finds the songs outside it, so a remembered
@@ -366,7 +373,8 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       </div>
       <p v-if="editMessage" class="hint">{{ editMessage }}</p>
       <input v-model="query" class="search" type="search" :placeholder="t.searchSongs" :aria-label="t.searchSongs" />
-      <div v-if="!setlist" class="segmented two order" role="group" :aria-label="t.order">
+      <div v-if="!setlist" class="segmented order" role="group" :aria-label="t.order">
+        <button type="button" :class="{ on: order === 'popular' }" :aria-pressed="order === 'popular'" @click="sortBy('popular')">{{ t.popular }}</button>
         <button type="button" :class="{ on: order === 'name' }" :aria-pressed="order === 'name'" @click="sortBy('name')">{{ t.byName }}</button>
         <button type="button" :class="{ on: order === 'date' }" :aria-pressed="order === 'date'" @click="sortBy('date')">{{ t.newest }}</button>
       </div>

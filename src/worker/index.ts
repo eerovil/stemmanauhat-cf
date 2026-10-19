@@ -1,7 +1,7 @@
 import { AGENT_SESSION_SECONDS, agentKeyMark, agentSessionValid, readAgentLink } from "./agent";
 import { decideAccess, isAdmin, loadFacts, type Access } from "./access";
 import type { Env } from "./env";
-import { EVENT_MAX_BYTES, parseEvent, SETTING_DEFAULTS, SETTING_NAMES } from "./events";
+import { EVENT_MAX_BYTES, parseEvent, POPULAR_DAYS, POPULAR_MIN_SECONDS, SETTING_DEFAULTS, SETTING_NAMES } from "./events";
 import { serveObject, safeSongPath } from "./files";
 import { AUTHORIZE_URL, TOKEN_URL, authorizeUrl, exchangeCode, normalizeEmail, readEmail } from "./google";
 import { joinUrl, linkKey } from "./links";
@@ -321,6 +321,14 @@ async function songList(ctx: Ctx, choir: string): Promise<Response> {
   const flags = await ctx.env.DB.prepare(
     "SELECT COUNT(*) AS n FROM song_requests WHERE choir = ? AND done_at IS NULL AND song IS NOT NULL",
   ).bind(choir).first<{ n: number }>();
+  // Songs popular lately (#89), most listened first: by people, then listening time. Only
+  // the order leaves here, never counts or names, so singers can't see who practised what.
+  const since = new Date((ctx.now - POPULAR_DAYS * 24 * 60 * 60) * 1000).toISOString();
+  const popular = await ctx.env.DB.prepare(
+    `SELECT song FROM events
+      WHERE choir = ? AND name = 'listen' AND admin = 0 AND song IS NOT NULL AND seconds >= ? AND at >= ?
+      GROUP BY song ORDER BY COUNT(DISTINCT ${PERSON}) DESC, SUM(seconds) DESC`,
+  ).bind(choir, POPULAR_MIN_SECONDS, since).all<{ song: string }>();
   // A song that has left the choir is skipped; the next save drops it for good.
   const slugs = new Set(results.map((r) => r.slug));
   return json({
@@ -331,6 +339,7 @@ async function songList(ctx: Ctx, choir: string): Promise<Response> {
     })),
     requests: requests.results.map((r) => ({ ...r, pdf: r.pdf === 1 })),
     openFlags: flags?.n ?? 0,
+    popular: popular.results.map((r) => r.song).filter((slug) => slugs.has(slug)),
   });
 }
 
