@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { choosePartIfAsked } from "./helpers";
 
 /**
@@ -43,35 +43,61 @@ test("a song whose MIDI fails to load says so and offers a retry", async ({ page
 });
 
 /** Elements on the page that a double tap could still zoom: any whose touch-action is not set. */
-const zoomable = (page: import("@playwright/test").Page) => page.evaluate(() =>
+const zoomable = (page: Page) => page.evaluate(() =>
   [...document.querySelectorAll("*")]
     .filter((el) => !["manipulation", "none"].includes(getComputedStyle(el).touchAction))
     .map((el) => el.tagName + (el.className ? "." + String(el.className) : "")));
 
-test.describe("on a phone", () => {
-  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 800 } });
+/** The percentage a −/+ group shows ("Normaali" is the normal tempo, 100 %). */
+const percent = async (page: Page, group: string) =>
+  Number((await page.getByRole("group", { name: group }).innerText()).match(/(\d+) %/)?.[1] ?? 100);
 
-  test("a double tap zooms nowhere, and quick taps on − and + each count (#92)", async ({ page }) => {
+/** Two quick taps on a stepper button: each one counts, none is taken for a zoom. */
+async function tapTwice(page: Page, group: string, button: string) {
+  const start = await percent(page, group);
+  const target = page.getByRole("group", { name: group }).getByRole("button", { name: button });
+  await target.tap();
+  const step = (await percent(page, group)) - start;
+  expect(step).not.toBe(0);
+  await target.tap();
+  await expect.poll(() => percent(page, group)).toBe(start + 2 * step);
+}
+
+// Headless Chromium does no zooming of its own, not even for a pinch, so these tests check what
+// decides it: the touch-action of every element (iOS Safari honours it too), and that pinch-zoom
+// is still allowed by the page.
+test.describe("on a phone", () => {
+  test("a double tap zooms nowhere, pinch-zoom stays, and quick taps on − and + each count (#92)", async ({ page }) => {
     await page.goto("/c/public");
     await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();
+    // Pinch-zoom stays for people who need bigger text.
+    expect(await page.locator('meta[name="viewport"]').getAttribute("content"))
+      .not.toMatch(/user-scalable\s*=\s*(no|0)|maximum-scale/);
+    // The song list.
     expect(await zoomable(page)).toEqual([]);
 
+    // The player in "Kaikki", one line: the dock and the score.
     await page.getByRole("link", { name: "Esittelylaulu" }).click();
     await choosePartIfAsked(page, "Tenori");
     await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+    await expect(page.locator(".dock")).toBeVisible();
     expect(await zoomable(page)).toEqual([]);
     // The one-line score keeps its own gestures.
     await expect(page.locator(".score-scroll.single-line")).toHaveCSS("touch-action", "none");
 
-    await page.getByRole("button", { name: "Säädöt" }).click();
+    // Säädöt, and its −/+ buttons for tempo and score size.
+    await page.getByRole("button", { name: "Säädöt" }).tap();
     expect(await zoomable(page)).toEqual([]);
-    const faster = page.getByRole("button", { name: "Nopeammin" });
-    await faster.tap();
-    await faster.tap();
-    await expect(page.getByRole("group", { name: "Tempo" })).toContainText("110 %");
+    await tapTwice(page, "Tempo", "Nopeammin");
+    await tapTwice(page, "Tempo", "Hitaammin");
+    await tapTwice(page, "Nuotin koko", "Suurenna nuottia");
+    await tapTwice(page, "Nuotin koko", "Pienennä nuottia");
 
-    await page.getByRole("group", { name: "Viivastot" }).getByRole("button", { name: "Oma" }).click();
+    // The "Oma" page view.
+    await page.getByRole("group", { name: "Viivastot" }).getByRole("button", { name: "Oma" }).tap();
     await expect(page.locator(".player.one-line")).toHaveCount(0);
+    expect(await zoomable(page)).toEqual([]);
+    await page.getByRole("button", { name: "Sulje säädöt" }).tap();
     expect(await zoomable(page)).toEqual([]);
   });
 });
