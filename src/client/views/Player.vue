@@ -109,9 +109,9 @@ let frame = 0;
 let lastTop = -1;
 let lastBottom = 0;
 let resizeTimer: number | undefined;
-/** The window's height before this resize, and whether the sung line showed in it. */
+/** The window's height now, and before the resizes waiting in `resizeTimer` (0 if none wait). */
 let windowHeight = 0;
-let lineShowed = false;
+let heightBefore = 0;
 /** The width the score was last laid out for: only a new width needs a new layout. */
 let laidOutWidth = 0;
 
@@ -326,11 +326,12 @@ function reload() {
  */
 function onResize() {
   window.clearTimeout(resizeTimer);
-  lineShowed ||= lastTop >= 0 && lineInView(lastTop, lastBottom, windowHeight);
+  heightBefore ||= windowHeight;
   windowHeight = window.innerHeight;
   resizeTimer = window.setTimeout(() => {
-    if (lineShowed) lastTop = -1;
-    lineShowed = false;
+    // Asked as the page is scrolled now, so scrolling on while the bar moves counts too.
+    if (lastTop >= 0 && lineInView(lastTop, lastBottom, heightBefore)) lastTop = -1;
+    heightBefore = 0;
     if (window.innerWidth === laidOutWidth) return;
     laidOutWidth = window.innerWidth;
     lastTop = -1;

@@ -67,6 +67,16 @@ test("page view: the toolbar showing and hiding leaves the page where the singer
     expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(500);
     expect(await dockGap(page)).toBe(0);
   }
+  // The toolbar starts to move while the line shows, and the singer scrolls on before the player looks again.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(600);
+  const resized = page.evaluate(() => new Promise((done) => window.addEventListener("resize", done, { once: true })));
+  await page.setViewportSize({ width: 393, height: HIDDEN });
+  await resized;
+  await page.evaluate(() => window.scrollTo(0, 500));
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(500);
+  await toolbar(page, SHOWN);
   // Playing still brings the line being sung into view.
   await page.getByRole("button", { name: "Soita" }).click();
   await expect.poll(() => page.evaluate(() => Math.round(window.scrollY)), { timeout: 10_000 }).not.toBe(500);
