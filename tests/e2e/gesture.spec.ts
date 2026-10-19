@@ -42,10 +42,10 @@ test("a song whose MIDI fails to load says so and offers a retry", async ({ page
   await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
 });
 
-/** Elements on the page that a double tap could still zoom: any whose touch-action is not set. */
+/** Elements on the page that a double tap or a pinch could still zoom: any whose touch-action allows it. */
 const zoomable = (page: Page) => page.evaluate(() =>
   [...document.querySelectorAll("*")]
-    .filter((el) => !["manipulation", "none"].includes(getComputedStyle(el).touchAction))
+    .filter((el) => !["pan-x pan-y", "none"].includes(getComputedStyle(el).touchAction))
     .map((el) => el.tagName + (el.className ? "." + String(el.className) : "")));
 
 /** The percentage a −/+ group shows ("Normaali" is the normal tempo, 100 %). */
@@ -63,16 +63,15 @@ async function tapTwice(page: Page, group: string, button: string) {
   await expect.poll(() => percent(page, group)).toBe(start + 2 * step);
 }
 
-// Headless Chromium does no zooming of its own, not even for a pinch, so these tests check what
-// decides it: the touch-action of every element (iOS Safari honours it too), and that pinch-zoom
-// is still allowed by the page.
+// The page never zooms (Eero, 2026-10-19). Headless Chromium does no zooming of its own, not
+// even for a pinch, so these tests check what decides it: the touch-action of every element and
+// the viewport tag.
 test.describe("on a phone", () => {
-  test("a double tap zooms nowhere, pinch-zoom stays, and quick taps on − and + each count (#92)", async ({ page }) => {
+  test("neither a double tap nor a pinch zooms, and quick taps on − and + each count (#92)", async ({ page }) => {
     await page.goto("/c/public");
     await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();
-    // Pinch-zoom stays for people who need bigger text.
     expect(await page.locator('meta[name="viewport"]').getAttribute("content"))
-      .not.toMatch(/user-scalable\s*=\s*(no|0)|maximum-scale/);
+      .toMatch(/maximum-scale=1, user-scalable=no/);
     // The song list.
     expect(await zoomable(page)).toEqual([]);
 
@@ -102,12 +101,13 @@ test.describe("on a phone", () => {
   });
 });
 
-// iOS Safari zooms on a double tap despite touch-action: manipulation (WebKit bug 319664), so on
-// an iPhone the page cancels the second quick tap itself and sends it on as a click.
+// iOS Safari ignores user-scalable=no and zooms on a double tap unless touch-action is none
+// (WebKit bug 319664), so on an iPhone the page cancels pinches and the second quick tap itself,
+// sending that tap on as a click.
 test.describe("on an iPhone", () => {
   test.use({ userAgent: devices["iPhone 14"].userAgent });
 
-  test("the second of two quick taps cannot zoom, and still counts (#92)", async ({ page }) => {
+  test("a pinch is cancelled, and the second of two quick taps cannot zoom but still counts (#92)", async ({ page }) => {
     await page.addInitScript(() => {
       const cancelled: boolean[] = [];
       (window as unknown as { cancelled: boolean[] }).cancelled = cancelled;
@@ -149,5 +149,12 @@ test.describe("on an iPhone", () => {
     expect(await cancelled()).toEqual([false, true]);
     await expect(page.getByRole("button", { name: "Soita" })).toBeVisible();
     await expect(page.getByTestId("time")).toHaveText("0:05");
+
+    // Safari's pinch events are cancelled.
+    expect(await page.evaluate(() => ["gesturestart", "gesturechange"].map((type) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      document.body.dispatchEvent(event);
+      return event.defaultPrevented;
+    }))).toEqual([true, true]);
   });
 });

@@ -6,9 +6,10 @@
   background: var(--bg);
 }
 * { box-sizing: border-box; }
-/* No double-tap zoom anywhere: the player is tapped all the time (#92). Pinch-zoom stays.
-   Set on every element, not just the root, as browsers stop looking up the tree at a scrolling box. */
-* { touch-action: manipulation; }
+/* No zooming at all, by double tap or by pinch: the player is tapped all the time, and bigger
+   notes come from Säädöt › Nuotin koko (Eero, 2026-10-19, #92). Set on every element, not just
+   the root, as browsers stop looking up the tree at a scrolling box. */
+* { touch-action: pan-x pan-y; }
 body { margin: 0; }
 a { color: var(--accent); }
 h1 { font-size: 1.35rem; margin: 0.2rem 0; letter-spacing: -0.01em; }

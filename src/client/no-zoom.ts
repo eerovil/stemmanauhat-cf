@@ -1,8 +1,9 @@
 /**
- * iOS Safari zooms on a double tap even under `touch-action: manipulation` (only `none` stops
- * it, until WebKit's fix ships: https://bugs.webkit.org/show_bug.cgi?id=319664). There, the
- * second of two quick taps has its default cancelled, which stops the zoom, and is sent on as
- * the click it would have been, so quick taps on −/+ still each count (#92). Pinch-zoom stays.
+ * The page never zooms (Eero, 2026-10-19, #92). iOS Safari ignores `user-scalable=no` and,
+ * until WebKit's fix ships (https://bugs.webkit.org/show_bug.cgi?id=319664), lets only
+ * `touch-action: none` stop a double-tap zoom. So on iOS a pinch is cancelled here, and the
+ * second of two quick taps has its default cancelled and is sent on as the click it would have
+ * been, so quick taps on −/+ still each count.
  */
 const DOUBLE_TAP_MS = 350;
 const TAP_SLOP = 10;
@@ -21,7 +22,11 @@ function typesText(el: Element): boolean {
   return el instanceof HTMLElement && el.isContentEditable;
 }
 
-export function preventDoubleTapZoom(doc: Document = document): void {
+export function preventZoom(doc: Document = document): void {
+  // Safari's own pinch events.
+  for (const type of ["gesturestart", "gesturechange"]) {
+    doc.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+  }
   let start: { x: number; y: number } | null = null;
   let lastTap: { at: number; x: number; y: number } | null = null;
   doc.addEventListener("touchstart", (event) => {
