@@ -155,6 +155,7 @@ onMounted(async () => {
     mixer = await createPiano(s);
     mixer.setMaster(myPart.value);
     mixer.onEnded = () => { playing.value = false; };
+    mixer.onLevels = showLevels;
     setMode(carried.mode ?? "focus", false);
     if (carried.others !== undefined && carried.mode !== "minus" && carried.mode !== "solo") setOthers(carried.others, false);
     // Before tempo carried, each song kept its own: the first song opened after
@@ -195,11 +196,17 @@ async function createPiano(s: Song): Promise<MidiPlayer | FilePlayer> {
   return piano;
 }
 
+/** The gains the player plays at now, for the dock (they change by themselves in "Ilman omaa"). */
+function showLevels() {
+  if (mixer) levels.value = mixer.effectiveLevels();
+}
+
 /** Hand the song to another player at the same place, with the same part, mix and tempo. */
 async function takeOver(next: MidiPlayer | FilePlayer | SungPlayer, t: number, resume: boolean) {
   mixer = next;
   mixer.setMaster(myPart.value);
   mixer.onEnded = () => { playing.value = false; };
+  mixer.onLevels = showLevels;
   setMode(mode.value, false);
   if (mode.value !== "minus" && mode.value !== "solo") setOthers(others.value, false);
   mixer.setRate(rate.value);

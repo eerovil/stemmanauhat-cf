@@ -2,6 +2,7 @@ import { BasicMIDI } from "spessasynth_core";
 import { Sequencer, WorkletSynthesizer } from "spessasynth_lib";
 import processorUrl from "spessasynth_lib/dist/spessasynth_processor.min.js?url";
 import { words } from "../i18n";
+import { StartingNote } from "./cue";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import { findNotes, silenced, withoutNotes, type Notes, type UnisonNote } from "./unison";
 
@@ -49,8 +50,13 @@ export function partChannels(midi: BasicMIDI, partNames: string[]): number[][] {
   });
 }
 
+/** Seconds before its written end the piano's starting note goes quiet (cue.ts). */
+const CUE_EARLY = 0.02;
+
 export class MidiPlayer {
   onEnded: () => void = () => {};
+  /** The parts' gains changed by themselves (the starting note in "Ilman omaa", cue.ts). */
+  onLevels: () => void = () => {};
   private master = 0;
   private others = DEFAULT_OTHERS;
   private own = true;
@@ -68,6 +74,7 @@ export class MidiPlayer {
   private reloads = Promise.resolve();
   /** While the song loads again: where it was and when (the context's clock). */
   private reloading: { from: number; at: number } | null = null;
+  private readonly starting: StartingNote;
 
   private constructor(
     private readonly context: AudioContext,
@@ -77,8 +84,10 @@ export class MidiPlayer {
     private readonly midi: BasicMIDI,
     private readonly notes: Notes,
   ) {
+    this.starting = new StartingNote(() => context.currentTime, () => { this.applyGains(); this.onLevels(); }, -CUE_EARLY);
     seq.eventHandler.addEvent("songEnded", "stemmanauhat", () => {
       this.wanted = false;
+      this.starting.stop();
       this.position = seq.duration;
       this.onEnded();
     });
@@ -133,7 +142,7 @@ export class MidiPlayer {
   }
 
   levels(): number[] {
-    return mixLevels(this.channels.length, this.master, this.others, this.own);
+    return mixLevels(this.channels.length, this.master, this.others, this.own || this.starting.on);
   }
 
   /** The gain each part's channels actually carry in the synth. */
@@ -142,10 +151,10 @@ export class MidiPlayer {
       chs.length ? (this.synth.midiChannels[chs[0]!]?.systemParameters.gain ?? 0) : this.levels()[i]!);
   }
 
-  setMaster(index: number): void { this.master = index; this.applyGains(); this.applyUnisons(); }
+  setMaster(index: number): void { this.master = index; this.applyGains(); this.applyUnisons(); this.cue(this.time()); }
   setOthers(level: number): void { this.others = level; this.applyGains(); }
-  /** Whether your own part sounds ("Ilman omaa" turns it off). */
-  setOwn(on: boolean): void { this.own = on; this.applyGains(); this.applyUnisons(); }
+  /** Whether your own part sounds ("Ilman omaa" turns it off, but for the starting note). */
+  setOwn(on: boolean): void { this.own = on; this.applyGains(); this.applyUnisons(); this.cue(this.time()); }
   get playing(): boolean { return this.wanted; }
   get running(): boolean { return this.wanted && !this.seq.paused; }
   time(): number {
@@ -164,6 +173,7 @@ export class MidiPlayer {
     if (this.reloading) this.reloading = { from: this.position, at: this.context.currentTime };
     this.seq.currentTime = this.position;
     this.seq.play();
+    this.cue(this.position);
     await resumed;
   }
 
@@ -172,15 +182,18 @@ export class MidiPlayer {
     if (this.reloading) this.reloading = { from: this.position, at: this.context.currentTime };
     this.wanted = false;
     this.seq.pause();
+    this.starting.stop();
   }
 
   seek(seconds: number): void {
     this.position = Math.max(0, seconds);
     if (this.reloading) this.reloading = { from: this.position, at: this.context.currentTime };
     this.seq.currentTime = this.position;
+    this.cue(this.position);
   }
 
   setRate(rate: number): void {
+    this.starting.setRate(rate);
     this.seq.playbackRate = rate;
   }
 
@@ -193,9 +206,16 @@ export class MidiPlayer {
   }
 
   destroy(): void {
+    this.starting.stop();
     this.seq.pause();
     this.synth.destroy();
     void this.context.close();
+  }
+
+  /** While playing in "Ilman omaa", your part's starting note from `from`; else none. */
+  private cue(from: number): void {
+    if (this.wanted && !this.own) this.starting.start(this.notes.parts[this.master], from);
+    else this.starting.stop();
   }
 
   /**
