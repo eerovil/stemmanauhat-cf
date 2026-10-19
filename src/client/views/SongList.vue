@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { getJson, hasSungParts, listCredits, postForm, postJson, Refused, remembered, type Me, type Setlist, type SongOrder, type SongRequest,
   songListKey, type SongSummary } from "../api";
 import Icon from "../components/Icon.vue";
 import LanguageSwitch from "../components/LanguageSwitch.vue";
 import { byTitle, day, t, words } from "../i18n";
+import { firstThisVisit, installed, installPrompt, ios, markDone, noticeAllowed, standalone } from "../install";
+import { track } from "../track";
 import { PDF_MAX_BYTES, pdfTitle } from "../../worker/requests";
 import RefusedView from "./Refused.vue";
 
@@ -294,6 +296,46 @@ const last = computed(() => {
   const slug = remembered.last(props.choir);
   return songs.value.find((s) => s.slug === slug) ?? null;
 });
+// Installing as an app (#91): a quiet card on the song list, never in the player.
+// Not beside the card asking to add a Google account, and not on the test list.
+const inApp = standalone();
+const dismissed = ref(false);
+const installWay = computed((): "prompt" | "ios" | null => {
+  if (inApp || installed.value || dismissed.value || !ready.value || refused.value || staging.value
+    || me.value?.joinable.includes(props.choir)) return null;
+  return ios() ? "ios" : installPrompt.value ? "prompt" : null;
+});
+// Asked only once there is a way to install, so a browser with none uses up no visit.
+const installAllowed = ref<boolean | null>(null);
+const installNotice = computed(() => installWay.value && installAllowed.value ? installWay.value : null);
+watch(installWay, (way) => {
+  if (!way || installAllowed.value !== null) return;
+  installAllowed.value = noticeAllowed();
+  if (installAllowed.value && firstThisVisit("stemmanauhat:install-shown")) track("install_shown", { choir: props.choir, value: way });
+}, { immediate: true });
+watch(ready, (now) => {
+  if (now && inApp && !refused.value && firstThisVisit("stemmanauhat:app-open")) {
+    markDone();
+    track("app_open", { choir: props.choir });
+  }
+}, { immediate: true });
+async function install() {
+  const prompt = installPrompt.value;
+  if (!prompt) return;
+  installPrompt.value = null; // A prompt can be shown only once.
+  await prompt.prompt();
+  const { outcome } = await prompt.userChoice;
+  if (outcome === "accepted") {
+    markDone();
+    installed.value = true;
+    track("install_accept", { choir: props.choir });
+  }
+}
+function dismissInstall() {
+  markDone();
+  dismissed.value = true;
+  track("install_dismiss", { choir: props.choir, value: installWay.value ?? undefined });
+}
 const joinUrl = computed(() => `/auth/login?next=${encodeURIComponent(`/c/${props.choir}`)}`);
 const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encodeURIComponent(slug)}`;
 </script>
@@ -309,6 +351,13 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
     <aside v-if="me?.joinable.includes(choir)" class="join card">
       <p>{{ t.joinText }}</p>
       <a class="button primary" :href="joinUrl">{{ t.joinButton }}</a>
+    </aside>
+    <aside v-if="installNotice" class="install card">
+      <p>{{ installNotice === "ios" ? t.installIosText : t.installText }}</p>
+      <div class="row">
+        <button v-if="installNotice === 'prompt'" type="button" class="primary" @click="install">{{ t.installButton }}</button>
+        <button type="button" :class="{ link: installNotice === 'prompt' }" @click="dismissInstall">{{ installNotice === "ios" ? t.gotIt : t.notNow }}</button>
+      </div>
     </aside>
     <a v-if="last" class="button primary continue" :href="songUrl(last.slug)">▶ {{ t.continueFrom }}: {{ last.title }}</a>
     <section v-if="editing" class="card setlist-edit">

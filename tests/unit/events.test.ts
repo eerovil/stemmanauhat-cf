@@ -18,6 +18,13 @@ describe("parseEvent", () => {
     expect(parseEvent(event({ name: "listen", value: "sung", seconds: 75, listen: LISTEN, settings: SETTINGS })))
       .toMatchObject({ seconds: 75, listen: LISTEN, settings: JSON.stringify(SETTINGS) });
   });
+  it("reads the install notice's events (#91), with which notice it was", () => {
+    expect(parseEvent(event({ name: "install_shown", value: "ios" }))).toMatchObject({ name: "install_shown", value: "ios" });
+    expect(parseEvent(event({ name: "install_dismiss", value: "prompt" }))?.value).toBe("prompt");
+    expect(parseEvent(event({ name: "install_shown", value: "<b>" }))?.value).toBeNull();
+    expect(parseEvent(event({ name: "install_accept" }))?.name).toBe("install_accept");
+    expect(parseEvent(event({ name: "app_open" }))?.name).toBe("app_open");
+  });
   it("drops anything else", () => {
     expect(parseEvent("not json")).toBeNull();
     expect(parseEvent(event({ name: "page_view" }))).toBeNull();
