@@ -115,9 +115,9 @@ test("the song list puts the songs most people listened to lately first, by defa
   await adminContext.close();
 
   // The list tells only the order: no counts, no names.
-  const body = await page.evaluate(async () => (await fetch("/api/songs?choir=public")).json() as Promise<{ popular: string[] }>);
-  expect(body.popular.slice(0, 2)).toEqual(["vapaa-rytmi", "laulettu"]);
-  expect(body.popular).not.toContain("esittely");
+  const body = await page.evaluate(async () => (await fetch("/api/songs?choir=public")).json() as Promise<{ popular: string[][] }>);
+  expect(body.popular.slice(0, 2)).toEqual([["vapaa-rytmi"], ["laulettu"]]);
+  expect(body.popular.flat()).not.toContain("esittely");
 
   await page.reload();
   const order = page.getByRole("group", { name: "Järjestys" });

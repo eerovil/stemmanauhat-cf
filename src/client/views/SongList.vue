@@ -20,8 +20,8 @@ function sortBy(value: SongOrder) {
   remembered.setOrder(value);
 }
 
-/** Slugs of the songs listened to lately, most popular first; the rest are not in it. */
-const popular = ref<string[]>([]);
+/** The songs listened to lately, most popular first, tied songs in one group; the rest are not in it. */
+const popular = ref<string[][]>([]);
 const setlists = ref<Setlist[]>([]);
 const picked = ref<number | null>(remembered.setlist(props.choir));
 function pick(id: number | null) {
@@ -32,7 +32,7 @@ function pick(id: number | null) {
 const setlist = computed(() => setlists.value.find((l) => l.id === picked.value) ?? null);
 
 type ListData = { choir: { name: string }; songs: SongSummary[]; setlists: Setlist[]; requests: SongRequest[];
-  openFlags: number; popular?: string[] };
+  openFlags: number; popular?: string[][] };
 // The page shows nothing until it has both answers, then all of it at once. Coming
 // back from a song, the last answers (kept for this tab) show at once and are then
 // refreshed, so the list does not pop in piece by piece or lose its scroll (#43).
@@ -45,7 +45,8 @@ function show(data: ListData) {
   setlists.value = data.setlists;
   requests.value = data.requests;
   openFlags.value = data.openFlags;
-  popular.value = data.popular ?? [];
+  // A list kept from before the groups (#89) had plain slugs.
+  popular.value = (data.popular ?? []).map((group) => (Array.isArray(group) ? group : [group]));
 }
 async function load() {
   const data = await getJson<ListData>(listUrl);
@@ -93,9 +94,9 @@ const shown = computed((): (SongSummary & { place?: number })[] => {
       .map((s, i) => ({ ...s, place: i + 1 }))
       .filter(matches);
   }
-  // Songs with no listens lately come after the popular ones, by name.
-  const rank = new Map(popular.value.map((slug, i) => [slug, i]));
-  const rankOf = (s: SongSummary) => rank.get(s.slug) ?? rank.size;
+  // Tied songs, and those with no listens lately (after the popular ones), go by name.
+  const rank = new Map(popular.value.flatMap((group, i) => group.map((slug) => [slug, i] as const)));
+  const rankOf = (s: SongSummary) => rank.get(s.slug) ?? popular.value.length;
   return [...songs.value]
     .filter(matches)
     .sort((a, b) => (order.value === "date" ? b.published_at.localeCompare(a.published_at)

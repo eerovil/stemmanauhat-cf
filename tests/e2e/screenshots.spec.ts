@@ -72,7 +72,7 @@ test("song list sorted popular lately and newest first", async ({ page }) => {
       // Rows with no credits and with credits too long for one line, to show they keep one height.
       ...(i % 3 === 1 ? { composer: null, lyricist: null, arranger: null } : {}),
       ...(i === 2 ? { composer: "Aino Esimerkki-Hyvinpitkänimi", arranger: "Sulo Sovittaja-Pitkänimi" } : {}) }));
-    data.popular = ["s5", "s2", "s4"];
+    data.popular = [["s5"], ["s2"], ["s4"]];
     await route.fulfill({ json: data });
   });
   await signInAs(page, "/c/jm", "laulaja@example.com");

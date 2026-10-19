@@ -246,6 +246,24 @@ test("the song list sorts by name or newest first, and remembers the choice", as
   await expect(titles).toHaveText(["Aamulaulu", "Bassojen laulu", "Iltalaulu"]);
 });
 
+test("Suositut puts songs tied on listeners and listening time in name order (#89)", async ({ page }) => {
+  await page.route("**/api/songs?choir=jm", async (route) => {
+    const data = await (await route.fetch()).json();
+    const song = data.songs[0];
+    data.songs = [["d", "Ävemaria"], ["b", "Bassojen laulu"], ["a", "Aamulaulu"], ["c", "Iltalaulu"], ["e", "Zeta"]]
+      .map(([slug, title]) => ({ ...song, slug, title }));
+    // Iltalaulu first; Zeta, Ävemaria and Bassojen laulu tied; the rest not listened to.
+    data.popular = [["c"], ["e", "d", "b"]];
+    await route.fulfill({ json: data });
+  });
+  await signInAs(page, "/c/jm", "laulaja@example.com");
+  await expect(page.getByRole("group", { name: "Järjestys" }).getByRole("button", { name: "Suositut" }))
+    .toHaveAttribute("aria-pressed", "true");
+  // Finnish puts Ä after Z.
+  await expect(page.locator(".songs .song-title"))
+    .toHaveText(["Iltalaulu", "Bassojen laulu", "Zeta", "Ävemaria", "Aamulaulu"]);
+});
+
 test("the old passphrase link gets in without a Google account", async ({ page }) => {
   await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
   await expect(page).toHaveURL(/\/c\/jm$/);

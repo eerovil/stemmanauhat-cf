@@ -299,6 +299,17 @@ interface SongRow {
   composer: string | null; lyricist: string | null; arranger: string | null;
 }
 
+/** Songs in popularity order, those tied on people and listening time in one group. */
+export function popularGroups(rows: { song: string; people: number; seconds: number }[]): string[][] {
+  const groups: string[][] = [];
+  rows.forEach((r, i) => {
+    const prev = rows[i - 1];
+    if (prev && prev.people === r.people && prev.seconds === r.seconds) groups.at(-1)!.push(r.song);
+    else groups.push([r.song]);
+  });
+  return groups;
+}
+
 async function songList(ctx: Ctx, choir: string): Promise<Response> {
   const access = await accessTo(ctx, choir);
   if (access !== "ok") return json({ error: access }, statusOf(access));
@@ -323,12 +334,13 @@ async function songList(ctx: Ctx, choir: string): Promise<Response> {
   ).bind(choir).first<{ n: number }>();
   // Songs popular lately (#89), most listened first: by people, then listening time. Only
   // the order leaves here, never counts or names, so singers can't see who practised what.
+  // Songs tied on both share a group, which the list sorts by name in the singer's language.
   const since = new Date((ctx.now - POPULAR_DAYS * 24 * 60 * 60) * 1000).toISOString();
   const popular = await ctx.env.DB.prepare(
-    `SELECT song FROM events
+    `SELECT song, COUNT(DISTINCT ${PERSON}) AS people, SUM(seconds) AS seconds FROM events
       WHERE choir = ? AND name = 'listen' AND admin = 0 AND song IS NOT NULL AND seconds >= ? AND at >= ?
-      GROUP BY song ORDER BY COUNT(DISTINCT ${PERSON}) DESC, SUM(seconds) DESC`,
-  ).bind(choir, POPULAR_MIN_SECONDS, since).all<{ song: string }>();
+      GROUP BY song ORDER BY people DESC, seconds DESC`,
+  ).bind(choir, POPULAR_MIN_SECONDS, since).all<{ song: string; people: number; seconds: number }>();
   // A song that has left the choir is skipped; the next save drops it for good.
   const slugs = new Set(results.map((r) => r.slug));
   return json({
@@ -339,7 +351,7 @@ async function songList(ctx: Ctx, choir: string): Promise<Response> {
     })),
     requests: requests.results.map((r) => ({ ...r, pdf: r.pdf === 1 })),
     openFlags: flags?.n ?? 0,
-    popular: popular.results.map((r) => r.song).filter((slug) => slugs.has(slug)),
+    popular: popularGroups(popular.results.filter((r) => slugs.has(r.song))),
   });
 }
 

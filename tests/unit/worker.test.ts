@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decideAccess, type AccessFacts } from "../../src/worker/access";
 import { parseRange, safeSongPath } from "../../src/worker/files";
 import { readEmail } from "../../src/worker/google";
-import { parseEmails, parseSetlist, safeNext, versionOf } from "../../src/worker/index";
+import { parseEmails, parseSetlist, popularGroups, safeNext, versionOf } from "../../src/worker/index";
 import { joinUrl, linkKey } from "../../src/worker/links";
 import { publicOrigin } from "../../src/worker/origin";
 import { newPassphraseRecord, passphraseMatches } from "../../src/worker/passphrase";
@@ -190,5 +190,15 @@ describe("parseSetlist", () => {
     expect(parseSetlist({ name: "A", songs: ["kokeilu", "kokeilu"] }, slugs)).toHaveProperty("error");
     expect(parseSetlist({ name: "A", songs: "kokeilu" }, slugs)).toHaveProperty("error");
     expect(parseSetlist({ name: "A", songs: [1] }, slugs)).toHaveProperty("error");
+  });
+});
+
+describe("popularGroups", () => {
+  it("keeps the order and puts songs tied on people and listening time in one group (#89)", () => {
+    expect(popularGroups([
+      { song: "a", people: 3, seconds: 200 }, { song: "b", people: 2, seconds: 90 },
+      { song: "c", people: 2, seconds: 90 }, { song: "d", people: 2, seconds: 60 },
+    ])).toEqual([["a"], ["b", "c"], ["d"]]);
+    expect(popularGroups([])).toEqual([]);
   });
 });
