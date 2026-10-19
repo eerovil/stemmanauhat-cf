@@ -41,3 +41,37 @@ test("a song whose MIDI fails to load says so and offers a retry", async ({ page
   await alert.getByRole("button", { name: "Yritä uudelleen" }).click();
   await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
 });
+
+/** Elements on the page that a double tap could still zoom: any whose touch-action is not set. */
+const zoomable = (page: import("@playwright/test").Page) => page.evaluate(() =>
+  [...document.querySelectorAll("*")]
+    .filter((el) => !["manipulation", "none"].includes(getComputedStyle(el).touchAction))
+    .map((el) => el.tagName + (el.className ? "." + String(el.className) : "")));
+
+test.describe("on a phone", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 800 } });
+
+  test("a double tap zooms nowhere, and quick taps on − and + each count (#92)", async ({ page }) => {
+    await page.goto("/c/public");
+    await expect(page.getByRole("link", { name: "Esittelylaulu" })).toBeVisible();
+    expect(await zoomable(page)).toEqual([]);
+
+    await page.getByRole("link", { name: "Esittelylaulu" }).click();
+    await choosePartIfAsked(page, "Tenori");
+    await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+    expect(await zoomable(page)).toEqual([]);
+    // The one-line score keeps its own gestures.
+    await expect(page.locator(".score-scroll.single-line")).toHaveCSS("touch-action", "none");
+
+    await page.getByRole("button", { name: "Säädöt" }).click();
+    expect(await zoomable(page)).toEqual([]);
+    const faster = page.getByRole("button", { name: "Nopeammin" });
+    await faster.tap();
+    await faster.tap();
+    await expect(page.getByRole("group", { name: "Tempo" })).toContainText("110 %");
+
+    await page.getByRole("group", { name: "Viivastot" }).getByRole("button", { name: "Oma" }).click();
+    await expect(page.locator(".player.one-line")).toHaveCount(0);
+    expect(await zoomable(page)).toEqual([]);
+  });
+});

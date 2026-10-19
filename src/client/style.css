@@ -6,6 +6,9 @@
   background: var(--bg);
 }
 * { box-sizing: border-box; }
+/* No double-tap zoom anywhere: the player is tapped all the time (#92). Pinch-zoom stays.
+   Set on every element, not just the root, as browsers stop looking up the tree at a scrolling box. */
+* { touch-action: manipulation; }
 body { margin: 0; }
 a { color: var(--accent); }
 h1 { font-size: 1.35rem; margin: 0.2rem 0; letter-spacing: -0.01em; }
