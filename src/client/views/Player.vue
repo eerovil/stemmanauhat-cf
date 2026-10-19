@@ -68,6 +68,8 @@ const firstAsk = ref(false);
 const showHint = ref(false);
 
 const scrollBox = ref<HTMLElement | null>(null);
+/** As tall as the window with the phone's address bar shown (`100svh`). */
+const smallViewport = ref<HTMLElement | null>(null);
 const scoreBox = ref<HTMLElement | null>(null);
 const cursor = ref<HTMLElement | null>(null);
 const dock = ref<HTMLElement | null>(null);
@@ -105,7 +107,11 @@ let score: Score | null = null;
 let timing: Timing | null = null;
 let frame = 0;
 let lastTop = -1;
+let lastBottom = 0;
 let resizeTimer: number | undefined;
+/** The window's height now, and before the resizes waiting in `resizeTimer` (0 if none wait). */
+let windowHeight = 0;
+let heightBefore = 0;
 /** The width the score was last laid out for: only a new width needs a new layout. */
 let laidOutWidth = 0;
 
@@ -172,6 +178,7 @@ onMounted(async () => {
     score.zoom = zoom.value;
     await score.load(xml, visibleParts());
     laidOutWidth = window.innerWidth;
+    windowHeight = window.innerHeight;
     window.addEventListener("resize", onResize);
     frame = requestAnimationFrame(tick);
   } catch (error) {
@@ -312,14 +319,22 @@ function reload() {
  * Laid out again only for a new width (page lines re-wrap, a phone turns). A
  * phone's address bar showing or hiding changes just the height: laying out
  * then made the one-line view jump in the middle of a song.
+ *
+ * The page view checks again that the line being sung is in view only if it
+ * showed before: Safari shows and hides its bar as the singer scrolls, and
+ * checking every time scrolled the page back while they read ahead (#93).
  */
 function onResize() {
   window.clearTimeout(resizeTimer);
+  heightBefore ||= windowHeight;
+  windowHeight = window.innerHeight;
   resizeTimer = window.setTimeout(() => {
-    // The page view checks again that the line being sung is still in view.
-    lastTop = -1;
+    // Asked as the page is scrolled now, so scrolling on while the bar moves counts too.
+    if (lastTop >= 0 && lineInView(lastTop, lastBottom, heightBefore)) lastTop = -1;
+    heightBefore = 0;
     if (window.innerWidth === laidOutWidth) return;
     laidOutWidth = window.innerWidth;
+    lastTop = -1;
     score?.render();
   }, 250);
 }
@@ -358,6 +373,7 @@ function tick(frameTime: number) {
   if (singleLine.value) scrollTo(t);
   else if (spot.top !== lastTop) keepInView(spot.top, spot.bottom);
   lastTop = spot.top;
+  lastBottom = spot.bottom;
 }
 
 function setStyle(el: HTMLElement, name: "transform" | "width" | "height", value: string) {
@@ -367,13 +383,19 @@ function setStyle(el: HTMLElement, name: "transform" | "width" | "height", value
 /** "Oma" view: scroll the page so the line being sung sits in the upper part of the screen. */
 function keepInView(top: number, bottom: number) {
   const box = scoreBox.value;
-  if (!box) return;
-  const pageTop = box.getBoundingClientRect().top + window.scrollY;
+  if (!box || lineInView(top, bottom, window.innerHeight)) return;
   const visible = window.innerHeight - dockHeight.value;
-  const lineTop = pageTop + top;
-  if (lineTop < window.scrollY + 16 || pageTop + bottom > window.scrollY + visible - 16) {
-    window.scrollTo({ top: Math.max(0, lineTop - visible * 0.2), behavior: "smooth" });
-  }
+  const lineTop = box.getBoundingClientRect().top + window.scrollY + top;
+  window.scrollTo({ top: Math.max(0, lineTop - visible * 0.2), behavior: "smooth" });
+}
+
+/** "Oma" view: whether the line shows above the dock, as the page is scrolled now, in a window this tall. */
+function lineInView(top: number, bottom: number, height: number): boolean {
+  const box = scoreBox.value;
+  if (!box || singleLine.value) return false;
+  const pageTop = box.getBoundingClientRect().top + window.scrollY;
+  const visible = height - dockHeight.value;
+  return pageTop + top >= window.scrollY + 16 && pageTop + bottom <= window.scrollY + visible - 16;
 }
 
 /** One-line view: slide the line so the music sits at the playhead, along the smoothed curve. */
@@ -425,10 +447,14 @@ function leavePieces(wrap: HTMLElement | null) {
 /**
  * The line never scrolls up and down. When it fits, the spare room goes 40 % above and
  * 60 % below it, so the lowest notes and lyrics stay clear of the dock; else it is
- * centred on your staff.
+ * centred on your staff. It is placed as if the address bar were shown, so the bar
+ * hiding only adds room below the line instead of moving it (#93).
  */
-function verticalOffset(boxHeight: number): number {
+function verticalOffset(clientHeight: number): number {
   if (!score) return 0;
+  // 0 in a browser without `svh`, which then places the line in the whole box.
+  const small = smallViewport.value?.offsetHeight || window.innerHeight;
+  const boxHeight = clientHeight - Math.max(0, window.innerHeight - small);
   const room = score.height - boxHeight;
   if (room <= 0) return room * 0.4;
   const span = score.partSpan(staffOf(song.value!.parts, myPart.value));
@@ -719,6 +745,7 @@ function onPointerUp(event: PointerEvent) {
   <RefusedView v-if="refused" :status="refused" :email="me?.email" />
   <main v-else class="player" :class="{ 'one-line': singleLine }"
     :style="{ paddingBottom: `${dockHeight + (singleLine ? 0 : 16)}px` }">
+    <div ref="smallViewport" class="small-viewport" aria-hidden="true"></div>
     <p v-if="loading" class="hint page">{{ loadingNote || t.loading }}</p>
     <p v-else-if="failure" class="error page" role="alert">
       {{ t.loadFailed }} {{ failure }}

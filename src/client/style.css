@@ -131,6 +131,8 @@ footer { margin-top: 1.5rem; }
 /* "Kaikki": one line that slides sideways; the page itself never scrolls. */
 .player.one-line { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
 .player.one-line .score-scroll { flex: 1; min-height: 0; }
+/* Measures the window with the address bar shown, so the line stays put as it hides (#93). */
+.small-viewport { position: fixed; top: 0; left: 0; width: 0; height: 100svh; visibility: hidden; pointer-events: none; }
 .score-scroll.single-line { overflow: hidden; background: #fff; touch-action: none; user-select: none; cursor: grab; }
 .score-scroll.single-line .score-wrap { max-width: none; width: max-content; margin: 0; will-change: transform; }
 /* While a zoom waits to re-wrap the lines the drawing is just stretched, wider
