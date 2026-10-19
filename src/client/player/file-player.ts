@@ -25,8 +25,6 @@ const CEILING = 10 ** (CEILING_DB / 20);
 
 export class FilePlayer {
   onEnded: () => void = () => {};
-  /** Never called: the file has no starting note in "Ilman omaa" (cue.ts; Eero, #94). */
-  onLevels: () => void = () => {};
   private master = 0;
   private others = DEFAULT_OTHERS;
   private own = true;

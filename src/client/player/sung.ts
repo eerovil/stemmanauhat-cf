@@ -1,7 +1,6 @@
 import { words } from "../i18n";
 import { BasicMIDI } from "spessasynth_core";
 import { CEILING_DB, partChannels } from "./midi";
-import { onlyBetween, StartingNote } from "./cue";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import type { FromWorklet, ToWorklet } from "./sung-worklet";
 import { findNotes, silenced, silentSpans, type Notes } from "./unison";
@@ -13,10 +12,6 @@ import workletUrl from "./sung-worklet?worker&url";
  * "make it a bit louder"). The limiter keeps the peaks under CEILING_DB.
  */
 export const SUNG_GAIN = 10 ** (6 / 20);
-
-/** Seconds the starting note's voice is let in before the note (its consonant) and after it (its release). */
-const CUE_LEAD = 0.05;
-const CUE_TAIL = 0.15;
 
 /**
  * A song whose parts are sung recordings, one MP3 per part (a local test Eero
@@ -31,8 +26,6 @@ const CUE_TAIL = 0.15;
  */
 export class SungPlayer {
   onEnded: () => void = () => {};
-  /** The parts' gains changed by themselves (the starting note in "Ilman omaa", cue.ts). */
-  onLevels: () => void = () => {};
   private master = 0;
   private others = DEFAULT_OTHERS;
   private own = true;
@@ -48,14 +41,11 @@ export class SungPlayer {
   private readonly count: number;
   private readonly meter: AnalyserNode;
   private readonly samples = new Float32Array(1024);
-  private readonly starting: StartingNote;
   readonly duration: number;
 
   private constructor(private readonly context: AudioContext, private readonly node: AudioWorkletNode, buffers: AudioBuffer[]) {
     this.duration = Math.max(0, ...buffers.map((b) => b.duration));
     this.count = buffers.length;
-    this.starting = new StartingNote(() => context.currentTime,
-      () => { this.applyGains(); this.applyUnisons(); this.onLevels(); }, CUE_TAIL);
     const limiter = context.createDynamicsCompressor();
     limiter.threshold.value = CEILING_DB;
     limiter.knee.value = 0;
@@ -95,7 +85,7 @@ export class SungPlayer {
   }
 
   levels(): number[] {
-    return mixLevels(this.count, this.master, this.others, this.own || this.starting.on);
+    return mixLevels(this.count, this.master, this.others, this.own);
   }
 
   /** The gain each part actually carries in the worklet. */
@@ -103,12 +93,11 @@ export class SungPlayer {
     return [...this.applied];
   }
 
-  setMaster(index: number): void { this.master = index; this.applyGains(); this.applyUnisons(); this.cue(this.time()); }
+  setMaster(index: number): void { this.master = index; this.applyGains(); this.applyUnisons(); }
   setOthers(level: number): void { this.others = level; this.applyGains(); }
-  /** Whether your own part sounds ("Ilman omaa" turns it off, but for the starting note). */
-  setOwn(on: boolean): void { this.own = on; this.applyGains(); this.applyUnisons(); this.cue(this.time()); }
+  setOwn(on: boolean): void { this.own = on; this.applyGains(); this.applyUnisons(); }
 
-  /** The song's notes from its MIDI, to sing each unison once (unison.ts) and to find the starting note. */
+  /** The song's notes from its MIDI, to sing each unison once (unison.ts). */
   setUnisons(notes: Notes): void { this.notes = notes; this.applyUnisons(); }
   get playing(): boolean { return this.wanted; }
   get running(): boolean { return this.wanted && this.context.state === "running"; }
@@ -125,7 +114,6 @@ export class SungPlayer {
     this.wanted = true;
     this.assume(this.position);
     this.send({ type: "play", frames: this.frames(this.position) });
-    this.cue(this.position);
     await resumed;
   }
 
@@ -133,7 +121,6 @@ export class SungPlayer {
     this.position = this.time();
     this.wanted = false;
     this.send({ type: "pause" });
-    this.starting.stop();
   }
 
   /** Every part moves together: the worklet has only one position. */
@@ -141,7 +128,6 @@ export class SungPlayer {
     this.position = Math.max(0, Math.min(this.duration, seconds));
     this.assume(this.position);
     this.send({ type: "seek", frames: this.frames(this.position) });
-    this.cue(this.position);
   }
 
   /** Speed without the pitch, as the piano's tempo (stretch.ts). */
@@ -149,7 +135,6 @@ export class SungPlayer {
     if (rate === this.rate) return;
     // Fold the time played so far into the position: the clock's slope changes here.
     this.assume(this.time());
-    this.starting.setRate(rate);
     this.rate = rate;
     this.send({ type: "rate", rate });
   }
@@ -163,16 +148,9 @@ export class SungPlayer {
   }
 
   destroy(): void {
-    this.starting.stop();
     this.send({ type: "pause" });
     this.node.disconnect();
     void this.context.close();
-  }
-
-  /** While playing in "Ilman omaa", your part's starting note from `from`; else none. */
-  private cue(from: number): void {
-    if (this.wanted && !this.own) this.starting.start(this.notes?.parts[this.master], from);
-    else this.starting.stop();
   }
 
   private frames(seconds: number): number {
@@ -198,7 +176,6 @@ export class SungPlayer {
     } else if (m.type === "ended") {
       if (!this.wanted) return;
       this.wanted = false;
-      this.starting.stop();
       this.position = this.duration;
       this.onEnded();
     }
@@ -215,15 +192,8 @@ export class SungPlayer {
   private applyUnisons(): void {
     if (!this.notes) return;
     const rate = this.context.sampleRate;
-    const spans = silentSpans(this.notes, silenced(this.notes, this.master, this.own))
-      .map((list) => list.flatMap(([a, b]) => [Math.round(a * rate), Math.round(b * rate)]));
-    // The starting note in "Ilman omaa": your part sings only it, to the sample.
-    const cue = this.starting.cue;
-    if (cue) {
-      spans[this.master] = onlyBetween(spans[this.master] ?? [], this.frames(Math.max(0, cue.start - CUE_LEAD)),
-        this.frames(cue.end + CUE_TAIL), this.frames(this.duration));
-    }
-    this.send({ type: "silences", silences: spans });
+    const spans = silentSpans(this.notes, silenced(this.notes, this.master, this.own));
+    this.send({ type: "silences", silences: spans.map((list) => list.flatMap(([a, b]) => [Math.round(a * rate), Math.round(b * rate)])) });
   }
 
   private applyGains(): void {
