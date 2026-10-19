@@ -305,7 +305,7 @@ const installWay = computed((): "prompt" | "ios" | null => {
     || me.value?.joinable.includes(props.choir)) return null;
   return ios() ? "ios" : installPrompt.value ? "prompt" : null;
 });
-// Asked only once there is a way to install, so a browser with none uses up no visit.
+// Asked only once there is a way to install, so a browser with none uses up no showing.
 const installAllowed = ref<boolean | null>(null);
 const installNotice = computed(() => installWay.value && installAllowed.value ? installWay.value : null);
 watch(installWay, (way) => {

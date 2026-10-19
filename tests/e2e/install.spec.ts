@@ -71,19 +71,24 @@ test("dismissed, the notice never comes back; nor after a few visits", async ({ 
   await expect(page.getByText(TEXT)).toHaveCount(0);
   await context.close();
 
-  // Each tab is a visit; pages within one count once. The fourth visit shows nothing.
+  // Three showings at most, whether by reloading, coming back from a song or a new tab.
   const other = await browser.newContext({ locale: "fi-FI" });
-  for (let visit = 1; visit <= 4; visit++) {
-    const tab = await other.newPage();
-    await tab.goto("/c/public");
-    await offerInstall(tab);
-    await expect(tab.getByText(TEXT)).toHaveCount(visit <= 3 ? 1 : 0);
-    if (visit === 1) {
-      await tab.reload();
-      await offerInstall(tab);
-      await expect(tab.getByText(TEXT)).toHaveCount(1);
-    }
-    await tab.close();
+  const tab = await other.newPage();
+  await tab.goto("/c/public");
+  await offerInstall(tab);
+  await expect(tab.getByText(TEXT)).toHaveCount(1);
+  await tab.reload();
+  await offerInstall(tab);
+  await expect(tab.getByText(TEXT)).toHaveCount(1);
+  await tab.getByRole("link", { name: "Esittelylaulu" }).click();
+  await expect(tab).toHaveURL(/\/c\/public\/esittely/);
+  await tab.goBack();
+  await offerInstall(tab);
+  await expect(tab.getByText(TEXT)).toHaveCount(1);
+  for (const page of [tab, await other.newPage()]) {
+    await (page === tab ? page.reload() : page.goto("/c/public"));
+    await offerInstall(page);
+    await expect(page.getByText(TEXT)).toHaveCount(0);
   }
   await other.close();
 });

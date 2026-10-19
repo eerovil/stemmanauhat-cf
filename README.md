@@ -77,7 +77,7 @@ The song list's notice that the site can be installed as an app (#91) sends
 `install_shown`, `install_dismiss` and `install_accept`, and the installed app sends
 `app_open` once per visit (iPhones never say they installed); the admin page counts
 who saw the notice and who installed or used the app. The notice shows on at most
-three visits, and never again once dismissed or installed.
+three song list pages, and never again once dismissed or installed.
 
 ## Running it
 
