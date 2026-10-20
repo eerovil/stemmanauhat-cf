@@ -21,6 +21,11 @@ a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
   passphrases at `/admin`.
 - **Songs:** song-app writes each version to R2 under `songs/<choir>/<slug>/<version>/` and points
   a D1 `songs` row at it. The format is in song-app's `docs/stemmanauhat-site.md`.
+  One song can be on several lists with one copy of its files (#104):
+  `./scripts/publish-songs.sh jm,public <bundle>` uploads them once, under the first list's folder,
+  and points each list's row at them. Publishing takes the song off any private list not named;
+  `public` and `testi` keep theirs. `scripts/merge-duplicate-songs.mjs` turned the earlier copies
+  into one.
 - **Test list:** `testi` ("Testilista", D1 `choirs.staging = 1`) is where a new song is tried out
   before a choir gets it. Only admins open it: it has no members, link, requests or flags. song-app
   publishes there like to any choir; on the list an admin picks "Siirrä…" and a choir, and the song

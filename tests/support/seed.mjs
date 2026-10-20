@@ -66,6 +66,9 @@ const songs = [
   ["testi", "uusi", "Uusi laulu", "tests/fixtures/two-part", 8.0, ["Aino Esimerkki", null, null]],
   ["testi", "iltalaulu", "Iltalaulu", "tests/fixtures/two-part", 8.0, [null, null, null]],
 ];
+// One copy of the files for several lists (#104): naiskuoro's Iltalaulu is jm's,
+// as `publish-songs.sh jm,naiskuoro` leaves it. Only its row is added.
+const shares = [["naiskuoro", "iltalaulu", "Iltalaulu", "jm"]];
 const value = (text) => (text === null ? "NULL" : `'${text}'`);
 const sql = [
   "INSERT INTO members (choir, email, added_at) VALUES ('jm', 'laulaja@example.com', '2026-10-09T00:00:00Z');",
@@ -74,6 +77,8 @@ const sql = [
   `INSERT INTO choir_links (choir, salt, hash, iterations, generation) VALUES ('jm', '${salt.toString("base64url")}', '${await hash(PASSPHRASE, salt)}', 10000, 1);`,
   ...songs.map(([choir, slug, title, , duration, credits]) =>
     `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, composer, lyricist, arranger) VALUES ('${choir}', '${slug}', '${title}', 'songs/${choir}/${slug}/${versionFor(choir)}/', '${slug === "jaettu" ? SHARED_PARTS : SUNG_ROWS.includes(slug) ? SUNG_PARTS : OLD_ROWS.includes(slug) ? OLD_PARTS : PARTS}', ${duration.toFixed(1)}, '2026-10-09T12:00:00Z', ${credits.map(value).join(", ")});`),
+  ...shares.map(([choir, slug, title, source]) =>
+    `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at) VALUES ('${choir}', '${slug}', '${title}', 'songs/${source}/${slug}/${versionFor(source)}/', '${OLD_PARTS}', 8.0, '2026-10-09T12:00:00Z');`),
 ].join("\n");
 writeFileSync("tests/fixtures/seed.generated.sql", sql + "\n");
 wrangler("d1", "execute", "stemmanauhat", "--local", "--file", "tests/fixtures/seed.generated.sql");

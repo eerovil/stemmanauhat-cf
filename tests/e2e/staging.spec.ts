@@ -23,6 +23,19 @@ async function postIn(page: Page, url: string, body: unknown) {
   }, [url, body] as const);
 }
 
+test("two lists play one copy of a song's files (#104)", async ({ page, browser }) => {
+  await signInAs(page, "/c/naiskuoro", "laulaja2@example.com");
+  await expect(page.locator(".songs li .song-title").filter({ hasText: "Iltalaulu" })).toHaveCount(1);
+  await playSong(page, "Iltalaulu");
+  // The files are jm's copy, but only naiskuoro's address opens them for this singer.
+  expect(await fileStatus(page, "/files/naiskuoro/iltalaulu/20261009T120000Z/score.mid")).toBe(200);
+  expect(await fileStatus(page, "/files/jm/iltalaulu/20261009T120000Z/score.mid")).toBe(403);
+  const singer = await (await browser.newContext()).newPage();
+  await signInAs(singer, "/c/jm", "laulaja@example.com");
+  expect(await fileStatus(singer, "/files/jm/iltalaulu/20261009T120000Z/score.mid")).toBe(200);
+  expect(await fileStatus(singer, "/files/naiskuoro/iltalaulu/20261009T120000Z/score.mid")).toBe(403);
+});
+
 test("an admin tries a new song on the test list, then moves it to a choir's list", async ({ page }) => {
   await signInAs(page, "/c/testi", "yllapito@example.com");
   await expect(page.getByRole("heading", { name: "Testilista" })).toBeVisible();
@@ -52,7 +65,8 @@ test("an admin tries a new song on the test list, then moves it to a choir's lis
   await expect(page.locator(".songs li .song-title")).toContainText(["Uusi laulu"]);
   await playSong(page, "Uusi laulu");
 
-  // A song the choir has already is replaced by the tried-out version.
+  // A song the choir has already is replaced by the tried-out version. jm's old
+  // copy is naiskuoro's too (one copy for several lists, #104), so its files stay.
   await page.goto("/c/testi");
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByLabel("Siirrä kuorolle: Iltalaulu").selectOption({ label: "Joensuun Mieslaulajat" });
@@ -62,7 +76,11 @@ test("an admin tries a new song on the test list, then moves it to a choir's lis
   expect(await fileStatus(page, "/files/jm/iltalaulu/20261009T120000Z/timing.json")).toBe(404);
   await page.goto("/c/jm");
   await expect(page.locator(".songs li .song-title").filter({ hasText: "Iltalaulu" })).toHaveCount(1);
+  expect(await fileStatus(page, "/files/naiskuoro/iltalaulu/20261009T120000Z/timing.json")).toBe(200);
+  await page.goto("/c/naiskuoro");
+  await playSong(page, "Iltalaulu");
 });
+
 
 test("only admins open the test list, and songs move only from it", async ({ page, browser }) => {
   const singer = await (await browser.newContext()).newPage();

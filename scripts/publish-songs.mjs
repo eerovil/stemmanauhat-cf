@@ -5,6 +5,9 @@
 // scripts/publish-songs.sh, which puts the bundles where the container sees them.
 //
 //   node scripts/publish-songs.mjs --remote public .wrangler/publish/<slug> ...
+//   node scripts/publish-songs.mjs --remote jm,public .wrangler/publish/<slug> ...
+//
+// Several lists (#104) share one copy of the files, under the first list's folder.
 //
 // One process does the whole run: the live site through the Cloudflare API, as
 // song-app's publish does (eerovil/musescore-choir-plugins src/song_app/publish.py),
@@ -59,9 +62,18 @@ export function partFilesIn(dir, parts) {
   return files.map((f) => `parts/${f[0]}`);
 }
 
-/** What to upload for one bundle and the D1 statement that publishes it. */
-export function publishPlan(manifest, choir, date, partFiles = []) {
-  if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
+/**
+ * What to upload for one bundle and the D1 statement that publishes it. `choirs`
+ * is one list or several (#104): the files go up once, under the first one's
+ * folder, and every list's row points at them.
+ */
+export function publishPlan(manifest, choirs, date, partFiles = []) {
+  const lists = typeof choirs === "string" ? [choirs] : [...choirs];
+  for (const choir of lists) if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
+  if (lists.length === 0 || new Set(lists).size !== lists.length) throw new Error(`bad choirs: ${lists.join(",")}`);
+  // The test list is where a song is tried out alone before a choir gets it (#73).
+  if (lists.length > 1 && lists.includes("testi")) throw new Error("the test list cannot be published with others");
+  const choir = lists[0];
   const { slug, title, parts, duration } = manifest;
   if (!slug || slug.includes("/") || !title || !Array.isArray(parts) || parts.length === 0 || !(duration > 0)
     || !parts.every((p) => typeof p?.name === "string" && p.name.trim())) {
@@ -105,19 +117,20 @@ export function publishPlan(manifest, choir, date, partFiles = []) {
   // carry their upload dates (#18).
   const firstPublished = `COALESCE((SELECT MIN(published_at) FROM songs WHERE slug = ${quote(slug)}), ${quote(publishedAt)})`;
   // Every publish sets all three, so a name taken off the score goes from the site too.
-  const sql = `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, ${CREDITS.join(", ")}) VALUES (`
-    + [quote(choir), quote(slug), quote(title), quote(prefix), quote(partsJson), Number(duration), firstPublished,
+  const upsert = (list) => `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, ${CREDITS.join(", ")}) VALUES (`
+    + [quote(list), quote(slug), quote(title), quote(prefix), quote(partsJson), Number(duration), firstPublished,
       ...CREDITS.map((name) => (credits[name] ? quote(credits[name]) : "NULL"))].join(", ")
     + ") ON CONFLICT (choir, slug) DO UPDATE SET title = excluded.title, prefix = excluded.prefix,"
     + " parts = excluded.parts, duration = excluded.duration,"
-    + CREDITS.map((name) => ` ${name} = excluded.${name}`).join(",") + ";"
-    // Publishing a song for another choir moves it, as song-app does, except
-    // that the public list keeps its copy: a public-domain song may be in a
-    // choir's own list too. Publishing to public or to the test list (#73)
-    // moves nothing; publishing to a choir takes it off the test list.
-    + (KEEPS_COPIES.includes(choir) ? ""
-      : `\nDELETE FROM songs WHERE slug = ${quote(slug)} AND choir NOT IN (${quote(choir)}, 'public');`);
-  return { prefix, files, sql, r2Manifest };
+    + CREDITS.map((name) => ` ${name} = excluded.${name}`).join(",") + ";";
+  // Publishing a song for other choirs moves it, as song-app does, except
+  // that the public list keeps its copy: a public-domain song may be in a
+  // choir's own list too. Publishing to public or to the test list (#73)
+  // moves nothing; publishing to a choir takes it off the test list.
+  const moves = lists.some((list) => !KEEPS_COPIES.includes(list));
+  const sql = lists.map(upsert).join("\n")
+    + (moves ? `\nDELETE FROM songs WHERE slug = ${quote(slug)} AND choir NOT IN (${[...new Set([...lists, "public"])].map(quote).join(", ")});` : "");
+  return { choirs: lists, prefix, files, sql, r2Manifest };
 }
 
 const BUCKET = "stemmanauhat";
@@ -132,6 +145,7 @@ export function cloudflareStore(env, fetchFn = fetch, wait = (ms) => new Promise
   const { CLOUDFLARE_API_TOKEN: token, CLOUDFLARE_ACCOUNT_ID: account } = env;
   if (!token || !account) throw new Error("no Cloudflare token: run through scripts/run.sh --cloudflare");
   const api = `https://api.cloudflare.com/client/v4/accounts/${account}`;
+  const objectPath = (key) => `/r2/buckets/${BUCKET}/objects/${key.split("/").map(encodeURIComponent).join("/")}`;
   async function call(method, path, body, type) {
     let last;
     for (let attempt = 0; attempt < TRIES; attempt++) {
@@ -148,12 +162,30 @@ export function cloudflareStore(env, fetchFn = fetch, wait = (ms) => new Promise
     }
     throw new Error(last);
   }
+  /** The rows of the last statement in `sql`. */
+  async function query(sql, params) {
+    const reply = JSON.parse(await call("POST", `/d1/database/${DATABASE_ID}/query`,
+      JSON.stringify(params ? { sql, params } : { sql }), "application/json"));
+    if (!reply.success) throw new Error(`D1 refused the query: ${JSON.stringify(reply.errors)}`);
+    return reply.result?.at(-1)?.results ?? [];
+  }
   return {
-    put: (key, data, type) => call("PUT", `/r2/buckets/${BUCKET}/objects/${key.split("/").map(encodeURIComponent).join("/")}`, data, type),
-    async sql(sql) {
-      const reply = JSON.parse(await call("POST", `/d1/database/${DATABASE_ID}/query`, JSON.stringify({ sql }), "application/json"));
-      if (!reply.success) throw new Error(`D1 refused the query: ${JSON.stringify(reply.errors)}`);
+    put: (key, data, type) => call("PUT", objectPath(key), data, type),
+    sql: async (sql) => { await query(sql); },
+    query,
+    /** Every object under `prefix`: `[{ key, etag, size }]`. */
+    async list(prefix) {
+      const out = [];
+      let cursor;
+      do {
+        const search = new URLSearchParams({ prefix, per_page: "1000", ...(cursor ? { cursor } : {}) });
+        const reply = JSON.parse(await call("GET", `/r2/buckets/${BUCKET}/objects?${search}`));
+        out.push(...reply.result.map(({ key, etag, size }) => ({ key, etag, size })));
+        cursor = reply.result_info?.is_truncated ? reply.result_info.cursor : undefined;
+      } while (cursor);
+      return out;
     },
+    delete: (key) => call("DELETE", objectPath(key)),
     close: async () => {},
   };
 }
@@ -187,12 +219,12 @@ function limiter(limit) {
  * song's D1 query runs once its own files are up. A song that fails leaves no
  * row and does not stop the others. Returns the number of songs that failed.
  */
-export async function publishAll(store, choir, dirs, { log = console.log, now = () => new Date() } = {}) {
+export async function publishAll(store, choirs, dirs, { log = console.log, now = () => new Date() } = {}) {
   // Check every bundle before anything goes up.
   const songs = dirs.map((dir) => {
     const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
     const sung = manifest.sung === true ? partFilesIn(dir, manifest.parts ?? []) : [];
-    const plan = publishPlan(manifest, choir, now(), sung);
+    const plan = publishPlan(manifest, choirs, now(), sung);
     const missing = plan.files.filter((f) => f !== "manifest.json" && !existsSync(join(dir, f)));
     if (missing.length > 0) throw new Error(`${dir}: missing ${missing.join(", ")}`);
     return { dir, manifest, plan };
@@ -204,7 +236,7 @@ export async function publishAll(store, choir, dirs, { log = console.log, now = 
       f === "manifest.json" ? JSON.stringify(plan.r2Manifest) : readFileSync(join(dir, f)),
       TYPES[extname(f)] ?? "application/octet-stream"))));
     await store.sql(plan.sql);
-    log(`published ${manifest.title} → ${plan.prefix} (${((Date.now() - started) / 1000).toFixed(1)} s)`);
+    log(`published ${manifest.title} → ${plan.choirs.join(", ")} (${plan.prefix}, ${((Date.now() - started) / 1000).toFixed(1)} s)`);
   }));
   const failed = results.filter((r) => r.status === "rejected");
   results.forEach((r, i) => r.status === "rejected" && console.error(`not published: ${songs[i].dir}: ${r.reason?.message ?? r.reason}`));
@@ -215,13 +247,13 @@ async function main(args) {
   const where = args.shift();
   const choir = args.shift();
   if (!["--local", "--remote"].includes(where ?? "") || !choir || args.length === 0) {
-    console.error("usage: publish-songs.mjs --local|--remote <choir> <bundle-dir> ...");
+    console.error("usage: publish-songs.mjs --local|--remote <choir>[,<choir>...] <bundle-dir> ...");
     process.exit(2);
   }
   const store = where === "--local" ? await localStore() : cloudflareStore(process.env);
   const started = Date.now();
   try {
-    const failed = await publishAll(store, choir, args);
+    const failed = await publishAll(store, choir.split(","), args);
     console.log(`${args.length - failed} of ${args.length} songs published in ${((Date.now() - started) / 1000).toFixed(1)} s`);
     if (failed > 0) process.exitCode = 1;
   } finally {

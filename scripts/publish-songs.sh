@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Publish song-app bundles to the live site (or the local one with --local).
 #
-#   ./scripts/publish-songs.sh [--local] <choir> <bundle-dir> ...
+#   ./scripts/publish-songs.sh [--local] <choir>[,<choir>...] <bundle-dir> ...
+#
+# Several choirs (jm,public) put the song on each list with one copy of its files (#104).
 #
 # A bundle dir is what scripts/song-app-bundle.py builds: manifest.json,
 # score.musicxml, score.mid and timing.json, plus parts/<n>-<Name>.mp3 when the
@@ -13,7 +15,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 where=--remote
 [ "${1:-}" = "--local" ] && { where=--local; shift; }
-choir="${1:?usage: publish-songs.sh [--local] <choir> <bundle-dir> ...}"; shift
+choir="${1:?usage: publish-songs.sh [--local] <choir>[,<choir>...] <bundle-dir> ...}"; shift
 [ "$#" -gt 0 ] || { echo "no bundles given" >&2; exit 2; }
 
 rm -rf .wrangler/publish
