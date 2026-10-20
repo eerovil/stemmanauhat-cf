@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type Route } from "@playwright/test";
 
 export const PASSPHRASE = "testilinkki-jm";
 
@@ -72,4 +72,12 @@ export async function choosePartIfAsked(page: Page, part: string) {
 /** The gain each part plays at, in part order, as the player reports them. */
 export function gains(page: Page) {
   return page.locator(".dock");
+}
+
+/** Answers a song's row with its parts sung by two voices, as a mixed choir's are (#102): LYSE the first, REMY the rest. */
+export async function mixedVoices(route: Route) {
+  const response = await route.fetch();
+  const song = await response.json();
+  song.parts = song.parts.map((p: object, i: number) => ({ ...p, voice: i === 0 ? "LYSE" : "REMY" }));
+  await route.fulfill({ response, json: song });
 }
