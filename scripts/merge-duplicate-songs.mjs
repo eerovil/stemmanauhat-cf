@@ -5,7 +5,9 @@
 //   ./scripts/run.sh --cloudflare node scripts/merge-duplicate-songs.mjs           # print what it would do
 //   ./scripts/run.sh --cloudflare node scripts/merge-duplicate-songs.mjs --apply   # do it
 //
-// Only a song whose rows match in title, parts and length is merged. The newer
+// Only a song on exactly the jm and public lists, its rows matching in title,
+// parts and length, is merged: the test list's versions and any other list's
+// copies are never touched. The newer
 // version is kept, since a later publish is the likelier fix; when the files are
 // the same (same checksums, manifest.json aside: it names its choir) jm's is
 // kept. The rows change first and the files go after, so a failed delete leaves
@@ -14,6 +16,8 @@ import { fileURLToPath } from "node:url";
 import { cloudflareStore } from "./publish-songs.mjs";
 
 const PREFERRED = "jm";
+/** The only lists whose copies are merged: the songs published to both before #104. */
+const PAIR = ["jm", "public"];
 
 /** The last folder of a prefix: `songs/jm/x/20261009T120000Z/` → `20261009T120000Z`. */
 const versionOf = (prefix) => prefix.split("/").filter(Boolean).pop() ?? "";
@@ -38,6 +42,11 @@ export async function mergePlan(store, rows) {
   for (const [slug, list] of [...bySlug].sort(([a], [b]) => a.localeCompare(b))) {
     const prefixes = [...new Set(list.map((r) => r.prefix))];
     if (prefixes.length < 2) continue;
+    const choirs = list.map((r) => r.choir).sort();
+    if (choirs.length !== PAIR.length || !PAIR.every((c) => choirs.includes(c))) {
+      skipped.push({ slug, why: `on ${choirs.join(", ")}, not just ${PAIR.join(" and ")}` });
+      continue;
+    }
     const first = list[0];
     if (!list.every((r) => r.title === first.title && r.parts === first.parts && r.duration === first.duration)) {
       skipped.push({ slug, why: "the lists' rows differ in title, parts or length" });
@@ -58,7 +67,7 @@ export async function mergePlan(store, rows) {
   return { merges, skipped };
 }
 
-/** Prints the plan, and with `apply` carries it out. Returns the number of merged rows left without a score.mid. */
+/** Prints the plan, and with `apply` carries it out. Returns the number of rows left without a score.mid. */
 export async function mergeDuplicates(store, { apply = false, log = console.log } = {}) {
   const rows = await store.query("SELECT choir, slug, title, prefix, parts, duration FROM songs ORDER BY slug, choir");
   const { merges, skipped } = await mergePlan(store, rows);
@@ -86,10 +95,8 @@ export async function mergeDuplicates(store, { apply = false, log = console.log 
       log(`${m.slug}: deleted ${objects.length} files under ${prefix}`);
     }
   }
-  // Every merged song's rows must still have their music.
-  const merged = new Set(merges.map((m) => m.slug));
-  const after = (await store.query("SELECT choir, slug, prefix FROM songs ORDER BY slug, choir"))
-    .filter((r) => merged.has(r.slug));
+  // Every row must still have its music.
+  const after = await store.query("SELECT choir, slug, prefix FROM songs ORDER BY slug, choir");
   let broken = 0;
   for (const prefix of new Set(after.map((r) => r.prefix))) {
     const names = new Set((await store.list(prefix)).map((o) => o.key.slice(prefix.length)));

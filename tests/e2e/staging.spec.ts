@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { choosePartIfAsked, fetchIn, PASSPHRASE, playAndSeeCursorMove, signInAs } from "./helpers";
 
@@ -34,6 +38,31 @@ test("two lists play one copy of a song's files (#104)", async ({ page, browser 
   await signInAs(singer, "/c/jm", "laulaja@example.com");
   expect(await fileStatus(singer, "/files/jm/iltalaulu/20261009T120000Z/score.mid")).toBe(200);
   expect(await fileStatus(singer, "/files/naiskuoro/iltalaulu/20261009T120000Z/score.mid")).toBe(403);
+});
+
+test("publish-songs to two lists: both members play the one copy (#104)", async ({ page, browser }) => {
+  // The synthetic song as a bundle of its own, published the way an admin does.
+  const dir = mkdtempSync(join(tmpdir(), "bundle-"));
+  try {
+    for (const f of ["score.musicxml", "score.mid", "timing.json"]) cpSync(join("tests/fixtures/two-part", f), join(dir, f));
+    const manifest = JSON.parse(readFileSync("tests/fixtures/two-part/manifest.json", "utf8"));
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ ...manifest, slug: "yhteinen", title: "Yhteinen laulu",
+      parts: [{ name: "Tenori" }, { name: "Basso" }] }));
+    execFileSync("node", ["scripts/publish-songs.mjs", "--local", "jm,naiskuoro", dir], { stdio: "inherit" });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  const bases: string[] = [];
+  for (const [choir, email] of [["jm", "laulaja@example.com"], ["naiskuoro", "laulaja2@example.com"]] as const) {
+    const singer = choir === "jm" ? page : await (await browser.newContext()).newPage();
+    await signInAs(singer, `/c/${choir}`, email);
+    await expect(singer.locator(".songs li .song-title").filter({ hasText: "Yhteinen laulu" })).toHaveCount(1);
+    const song = await singer.evaluate(async (c) => (await fetch(`/api/songs/${c}/yhteinen`)).json() as Promise<{ base: string }>, choir);
+    bases.push(song.base.replace(`/files/${choir}/`, "/files/"));
+    await playSong(singer, "Yhteinen laulu");
+  }
+  // One version, so one upload: both lists' addresses name the same folder.
+  expect(bases[0]).toBe(bases[1]);
 });
 
 test("an admin tries a new song on the test list, then moves it to a choir's list", async ({ page }) => {

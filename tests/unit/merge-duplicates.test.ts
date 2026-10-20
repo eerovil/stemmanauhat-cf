@@ -78,6 +78,35 @@ describe("mergeDuplicates", () => {
     expect(s.deleted).toEqual([]);
     expect(s.rows.map((r) => r.prefix)).toEqual([a.prefix, b.prefix, alone.prefix]);
   });
+  it("merges only jm and public pairs, never a test list version or another list's copy", async () => {
+    const live = row("jm", "uusi", "20261016T000000Z");
+    const staged = row("testi", "uusi", "20261017T000000Z");
+    const nais = row("naiskuoro", "toinen", "20261016T000000Z");
+    const joy = row("joy", "toinen", "20261016T000001Z");
+    const three = [row("jm", "kolme", "20261016T000000Z"), row("public", "kolme", "20261016T000001Z"),
+      row("testi", "kolme", "20261017T000000Z")];
+    const rows = [live, staged, nais, joy, ...three];
+    const s = store(rows, Object.assign({}, ...rows.map((r) => copy(r.prefix))));
+    const log: string[] = [];
+    expect(await mergeDuplicates(s, { apply: true, log: (l: string) => log.push(l) })).toBe(0);
+    expect(log).toContain("uusi: skipped, on jm, testi, not just jm and public");
+    expect(log).toContain("toinen: skipped, on joy, naiskuoro, not just jm and public");
+    expect(log).toContain("kolme: skipped, on jm, public, testi, not just jm and public");
+    expect(s.deleted).toEqual([]);
+    expect(s.rows.map((r) => r.prefix)).toEqual(rows.map((r) => r.prefix));
+  });
+  it("checks every row afterwards and fails when any has no score.mid, merged or not", async () => {
+    const jm = row("jm", "maamme", "20261016T193056Z");
+    const pub = row("public", "maamme", "20261016T193122Z");
+    const other = row("naiskuoro", "rikki", "20261016T000000Z");
+    const files = { ...copy(jm.prefix), ...copy(pub.prefix), ...copy(other.prefix) };
+    delete files[`${other.prefix}score.mid`];
+    const s = store([jm, pub, other], files);
+    const log: string[] = [];
+    expect(await mergeDuplicates(s, { apply: true, log: (l: string) => log.push(l) })).toBe(1);
+    expect(log).toContain(`no score.mid under ${other.prefix}`);
+    expect(s.rows.map((r) => r.prefix)).toEqual([jm.prefix, jm.prefix, other.prefix]);
+  });
   it("leaves a song whose copy has no score.mid", async () => {
     const jm = row("jm", "vanha", "20261016T000000Z");
     const pub = row("public", "vanha", "20261016T000001Z");
