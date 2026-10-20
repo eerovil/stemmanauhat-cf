@@ -2,6 +2,7 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import { forgetSongLists } from "./api";
 import { listenForInstall } from "./install";
+import { isIOS, preventZoom } from "./no-zoom";
 import "./style.css";
 
 // Signing out, or landing on sign-in, forgets the song lists this tab kept (#43).
@@ -12,6 +13,7 @@ if (location.pathname.startsWith("/signin")) forgetSongLists();
 
 listenForInstall();
 createApp(App).mount("#app");
+if (isIOS()) preventZoom();
 
 // Installable as an app (public/manifest.webmanifest); sw.js only adds an offline page.
 if ("serviceWorker" in navigator && window.isSecureContext) {
