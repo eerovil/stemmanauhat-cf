@@ -3,6 +3,7 @@ import { Sequencer, WorkletSynthesizer } from "spessasynth_lib";
 import processorUrl from "spessasynth_lib/dist/spessasynth_processor.min.js?url";
 import { words } from "../i18n";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
+import { allowSilentMode } from "./session";
 import { findNotes, silenced, withoutNotes, type Notes, type UnisonNote } from "./unison";
 
 /**
@@ -103,6 +104,7 @@ export class MidiPlayer {
    * resumes it in play()).
    */
   static async create(midiUrl: string, partNames: string[], log: (m: string) => void = () => {}): Promise<MidiPlayer> {
+    allowSilentMode();
     const context = new AudioContext();
     soundfont ??= fetch(SOUNDFONT_URL).then((r) => {
       if (!r.ok) throw new Error(`piano: HTTP ${r.status}`);
@@ -159,6 +161,7 @@ export class MidiPlayer {
    * start only from one, so resume() is called before anything is awaited.
    */
   async play(): Promise<void> {
+    allowSilentMode();
     const resumed = this.context.resume();
     this.wanted = true;
     if (this.reloading) this.reloading = { from: this.position, at: this.context.currentTime };

@@ -2,6 +2,7 @@ import { words } from "../i18n";
 import { BasicMIDI } from "spessasynth_core";
 import { CEILING_DB, partChannels } from "./midi";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
+import { allowSilentMode } from "./session";
 import type { FromWorklet, ToWorklet } from "./sung-worklet";
 import { findNotes, silenced, silentSpans, type Notes } from "./unison";
 import workletUrl from "./sung-worklet?worker&url";
@@ -70,7 +71,9 @@ export class SungPlayer {
    * here, suspended until play() resumes it from the tap (iPhones allow no other
    * way); the test passes a fake one.
    */
-  static async create(urls: string[], log: (m: string) => void = () => {}, context: AudioContext = new AudioContext()): Promise<SungPlayer> {
+  static async create(urls: string[], log: (m: string) => void = () => {}, given?: AudioContext): Promise<SungPlayer> {
+    allowSilentMode();
+    const context = given ?? new AudioContext();
     log(words().loadingParts);
     const [buffers] = await Promise.all([
       Promise.all(urls.map(async (url) => {
@@ -110,6 +113,7 @@ export class SungPlayer {
 
   /** Must be called straight from the singer's tap, like the other players' play(). */
   async play(): Promise<void> {
+    allowSilentMode();
     const resumed = this.context.resume();
     this.wanted = true;
     this.assume(this.position);
