@@ -74,10 +74,17 @@ export function publishPlan(manifest, choir, date, partFiles = []) {
   // The part names, and each part's sung MP3 only when the bundle has them
   // (partFilesIn), marked `sung` so the player offers them as "Laulu". A name in an
   // older manifest alone is not listed (#36): it points at nothing uploaded.
-  // The voice that sings them (the player credits it), when the manifest names one; REMY otherwise.
-  const voice = manifest.voice;
-  if (voice != null && !(typeof voice === "string" && /^[A-Za-z][A-Za-z0-9 ]{0,30}$/.test(voice))) throw new Error(`bad voice for ${slug}`);
-  const sungAs = (file) => ({ file, sung: true, ...(voice ? { voice } : {}) });
+  // The voice that sings each (the player credits it): the part's own, as a mixed
+  // choir's parts name theirs (#102), else the manifest's; REMY when neither names one.
+  const voiceOf = (p) => {
+    const voice = p.voice ?? manifest.voice;
+    if (voice != null && !(typeof voice === "string" && /^[A-Za-z][A-Za-z0-9 ]{0,30}$/.test(voice))) throw new Error(`bad voice for ${slug}`);
+    return voice;
+  };
+  const sungAs = (p, file) => {
+    const voice = voiceOf(p);
+    return { file, sung: true, ...(voice ? { voice } : {}) };
+  };
   // Where a part is drawn when it shares a staff (musescore-choir-plugins#420), kept as song-app wrote it.
   const placed = (p) => {
     const ok = Number.isInteger(p.staff) && p.staff >= 0 && Array.isArray(p.voices) && p.voices.length > 0
@@ -87,7 +94,7 @@ export function publishPlan(manifest, choir, date, partFiles = []) {
     return { staff: p.staff, voices: p.voices };
   };
   const partsJson = JSON.stringify(parts.map((p, i) => ({
-    name: p.name, ...placed(p), ...(partFiles[i] ? sungAs(partFiles[i]) : {}) })));
+    name: p.name, ...placed(p), ...(partFiles[i] ? sungAs(p, partFiles[i]) : {}) })));
   const publishedAt = date.toISOString().replace(/\.\d+Z$/, "Z");
   // The manifest in R2 carries the same facts as the row, as song-app writes it.
   const r2Manifest = { slug, title, choir, version, score: "score.musicxml", timing: "timing.json",

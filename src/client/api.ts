@@ -43,11 +43,17 @@ export const VOICE_CREDITS: Record<string, string> = {
   LYSE: "UTAU French Resources (valshamr)",
 };
 
-/** The credit line shown while a song's sung parts play: the voice that sings them, with its makers. */
+/**
+ * The credit line shown while a song's sung parts play: every voice that sings them, in the
+ * parts' order, each with its makers. A mixed choir's parts name two (#102).
+ */
 export function sungCredit(parts: Part[]): string {
-  const voice = parts.find((p) => p.voice)?.voice ?? "REMY";
-  const by = VOICE_CREDITS[voice];
-  return `${words().sungBy} ${voice}${by ? `, ${by}` : ""}`;
+  const voices = new Set(parts.length ? parts.map((p) => p.voice ?? "REMY") : ["REMY"]);
+  const credited = [...voices].map((voice) => {
+    const by = VOICE_CREDITS[voice];
+    return `${voice}${by ? `, ${by}` : ""}`;
+  });
+  return `${words().sungBy} ${credited.join("; ")}`;
 }
 
 export interface SongSummary {

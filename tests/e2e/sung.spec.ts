@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { choosePartIfAsked, gains, PASSPHRASE, playAndSeeCursorMove, shownScore } from "./helpers";
+import { choosePartIfAsked, gains, mixedVoices, PASSPHRASE, playAndSeeCursorMove, shownScore } from "./helpers";
 
 // A song whose parts are sung MP3s plays them on one Web Audio clock (player/sung.ts) when the
 // singer picks "Laulu" in Säädöt; the piano is the default (Eero, 2026-10-13). The seed uploads
@@ -36,6 +36,16 @@ test("the piano is the default; Säädöt's Laulu plays the sung parts, and the 
   // The next visit starts sung.
   await page.reload();
   await expect(gains(page)).toHaveAttribute("data-player", "sung");
+});
+
+test("a song whose parts name two voices credits both while the singing plays", async ({ page }) => {
+  await page.addInitScript(SUNG);
+  await page.route("**/api/songs/public/laulettu", mixedVoices);
+  await page.goto("/c/public/laulettu");
+  await choosePartIfAsked(page, "Tenori");
+  await expect(gains(page)).toHaveAttribute("data-player", "sung");
+  await expect(page.locator(".dock .sung-credit")).toHaveText(
+    "Tekoälyn laulama · Ääni: LYSE, UTAU French Resources (valshamr); REMY, UTAU French Resources (Hisa!)");
 });
 
 test("a piano visit fetches neither the singing code nor the sung MP3s", async ({ page }) => {

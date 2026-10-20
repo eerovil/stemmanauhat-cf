@@ -39,4 +39,10 @@ describe("sungCredit", () => {
     expect(sungCredit([{ name: "S", file: "a.mp3", sung: true, voice: "LYSE" }]))
       .toBe("Tekoälyn laulama · Ääni: LYSE, UTAU French Resources (valshamr)");
   });
+  it("credits every voice of a mixed choir once, in the parts' order", () => {
+    const mixed = [{ name: "S", voice: "LYSE" }, { name: "A", voice: "LYSE" }, { name: "T", voice: "REMY" }, { name: "B", voice: "REMY" }]
+      .map((p) => ({ ...p, file: "a.mp3", sung: true }));
+    expect(sungCredit(mixed)).toBe(
+      "Tekoälyn laulama · Ääni: LYSE, UTAU French Resources (valshamr); REMY, UTAU French Resources (Hisa!)");
+  });
 });

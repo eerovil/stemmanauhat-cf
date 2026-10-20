@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { choosePartIfAsked, PASSPHRASE, signInAs } from "./helpers";
+import { choosePartIfAsked, mixedVoices, PASSPHRASE, signInAs } from "./helpers";
 
 // Evidence screenshots for a pull request. Skipped unless SCREENSHOTS_DIR is
 // set: ./scripts/run.sh env SCREENSHOTS_DIR=test-results/shots corepack pnpm exec playwright test screenshots
@@ -366,6 +366,16 @@ test("player on a phone: the dot that says a song can be heard sung (#84)", asyn
   await page.getByRole("button", { name: "Säädöt" }).click();
   await expect(page.locator(".sung-tip")).toBeVisible();
   await page.screenshot({ path: `${dir}/player-sung-dot-settings-phone.png` });
+});
+
+test("player on a phone: a mixed choir's song credits both singing voices (#102)", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("stemmanauhat:settings", JSON.stringify({ sound: "sung" })));
+  await page.route("**/api/songs/public/laulettu", mixedVoices);
+  await page.goto("/c/public/laulettu");
+  await choosePartIfAsked(page, "Tenori");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await expect(page.locator(".dock .sung-credit")).toContainText("LYSE");
+  await page.screenshot({ path: `${dir}/player-two-voices-phone.png` });
 });
 
 test("song list: the notice to install the site as an app, on Android and on an iPhone (#91)", async ({ page, browser }) => {

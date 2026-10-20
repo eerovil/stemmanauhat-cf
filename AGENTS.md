@@ -25,7 +25,8 @@ D1 for the per-choir email allow-lists, Google sign-in). Read README.md first.
   Säädöt; the piano stays the default and the choice carries from song to song (Eero, 2026-10-13).
   The sung parts play on one Web Audio clock (`player/sung.ts`). Each voice's terms require a credit:
   keep "Ääni: <voice>, <its makers>" (`sungCredit`, `VOICE_CREDITS` in `api.ts`; REMY for the men's
-  songs, LYSE for the women's, named per song by the manifest's `"voice"`) visible whenever the sung parts play (it is in
+  songs, LYSE for the women's, named per song by the manifest's `"voice"`; a mixed choir's parts name
+  their own, `{"name": "Tenori", "voice": "REMY"}` in `manifest.parts`, and the credit names every voice that sings) visible whenever the sung parts play (it is in
   the dock's info, under the bar and time).
 
 - **Usage events** (eerovil/eeron-omat-taskit#72) are the `events` table: who listened to what,
