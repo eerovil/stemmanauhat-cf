@@ -16,7 +16,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const CHOIRS = ["jm", "naiskuoro", "public", "testi"];
+// The choirs in D1 (scripts/add-choir.sh); joy is JOY-kuoro, a mixed choir (#102).
+export const CHOIRS = ["jm", "naiskuoro", "joy", "public", "testi"];
 /** Lists that keep their copy when the song is published elsewhere, and take it off nowhere (#73). */
 const KEEPS_COPIES = ["public", "testi"];
 const FILES = ["score.musicxml", "score.mid", "timing.json", "manifest.json"];

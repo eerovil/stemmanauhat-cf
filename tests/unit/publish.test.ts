@@ -57,7 +57,8 @@ describe("publishPlan", () => {
   it("keeps a part's own voice, with the manifest's as the fallback, and refuses a malformed one", () => {
     const files = ["parts/1-Tenori.mp3", "parts/2-Basso.mp3"];
     const mixed = { ...manifest, voice: "LYSE", parts: [{ name: "Tenori", voice: "REMY" }, { name: "Basso" }] };
-    const plan = publishPlan(mixed, "public", date, files);
+    const plan = publishPlan(mixed, "joy", date, files);
+    expect(plan.prefix).toBe("songs/joy/kokeilu/20261010T123456Z/");
     expect(plan.r2Manifest.parts).toEqual([
       { name: "Tenori", file: files[0], sung: true, voice: "REMY" }, { name: "Basso", file: files[1], sung: true, voice: "LYSE" }]);
     expect(plan.sql).toContain(`"voice":"REMY"`);
