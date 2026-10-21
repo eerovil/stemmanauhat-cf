@@ -15,6 +15,11 @@
 // few at a time, then one D1 query points the song at the new version, so the
 // site sees the old version or the whole new one. An older version's files stay
 // in R2. The token comes only from scripts/run.sh --cloudflare.
+//
+// A part name the voice tree (#107) doesn't know stops the publish before anything goes up; the
+// person publishing says where it goes, and it goes in with the song:
+//
+//   node scripts/publish-songs.mjs --remote joy --place "Bassi=B" .wrangler/publish/<slug>
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -133,6 +138,106 @@ export function publishPlan(manifest, choirs, date, partFiles = []) {
   return { choirs: lists, prefix, files, sql, r2Manifest };
 }
 
+/** Names are the same when they differ only in letter case and spaces, as in the player (src/client/player/part.ts). */
+const normName = (name) => name.toLowerCase().replace(/\s+/g, "");
+const MAX_DEPTH = 4;
+
+/** The voice tree (#107) and the names in no place on purpose, from D1. */
+export async function readTree(store) {
+  const voices = (await store.query("SELECT id, parent, names FROM voices"))
+    .map((r) => ({ id: r.id, parent: r.parent, names: JSON.parse(r.names) }));
+  const unplaced = (await store.query("SELECT name FROM unplaced_parts")).map((r) => r.name);
+  return { voices, unplaced };
+}
+
+/** How many levels down `id` is (1 at the top), or Infinity when its parents are missing or loop. */
+function depthOf(voices, id) {
+  const seen = new Set();
+  for (let v = voices.find((u) => u.id === id); v; v = voices.find((u) => u.id === v.parent)) {
+    if (seen.has(v.id)) return Infinity;
+    seen.add(v.id);
+    if (v.parent === null) return seen.size;
+  }
+  return Infinity;
+}
+
+/**
+ * Whether the player can place `name`, the way its placeOf does: one of a place's names, a name
+ * in no place on purpose, or a split part ("S1b") of a name above the fourth level.
+ */
+export function knowsName(tree, name) {
+  const key = normName(name);
+  const at = (k) => tree.voices.find((v) => v.names.some((n) => normName(n) === k));
+  if (at(key) || tree.unplaced.some((n) => normName(n) === key)) return true;
+  const above = key.length > 1 && key.endsWith("b") ? at(key.slice(0, -1)) : undefined;
+  return above !== undefined && depthOf(tree.voices, above.id) < MAX_DEPTH;
+}
+
+/** `--place` values: `Name=B2` (an existing place), `Name=B4@B` (a new one under B), `Name=-` (in no place). */
+export function parsePlace(text) {
+  const eq = text.lastIndexOf("=");
+  const name = text.slice(0, eq).trim();
+  const target = text.slice(eq + 1).trim();
+  const [id, parent] = target.split("@").map((t) => t.trim());
+  if (eq < 0 || !name || !id || (parent !== undefined && !parent) || (id === "-" && parent !== undefined)) {
+    throw new Error(`bad --place "${text}": use "Name=<id>", "Name=<new id>@<parent id>" or "Name=-"`);
+  }
+  return { name, id, parent };
+}
+
+/**
+ * The D1 statement that puts every part name of `songs` the tree doesn't know where the person
+ * publishing said (`places`), or "" when there is none. A name with no place given stops the whole
+ * publish before anything goes up: where a part belongs is the publisher's call, never a guess.
+ */
+export function treePlan(tree, songs, places = []) {
+  const unknown = new Map();
+  for (const { manifest } of songs) {
+    for (const { name } of manifest.parts) {
+      if (!knowsName(tree, name)) unknown.set(normName(name), [...(unknown.get(normName(name)) ?? []), manifest.slug]);
+    }
+  }
+  const voices = tree.voices.map((v) => ({ ...v, names: [...v.names] }));
+  const changed = new Set();
+  const created = new Set();
+  const unplaced = [];
+  for (const { name, id, parent } of places) {
+    if (!unknown.has(normName(name))) throw new Error(`--place "${name}": no song here has that part, or it is already in the tree`);
+    unknown.delete(normName(name));
+    if (id === "-") { unplaced.push(name); continue; }
+    let voice = voices.find((v) => v.id === id);
+    if (parent !== undefined && !voice) {
+      if (depthOf(voices, parent) >= MAX_DEPTH) throw new Error(`--place "${name}": no place ${parent}, or it is at the fourth level`);
+      voice = { id, parent, names: [] };
+      voices.push(voice);
+      created.add(id);
+    } else if (!voice || (parent !== undefined && voice.parent !== parent)) {
+      throw new Error(`--place "${name}": ${voice ? `${id} is already under ${voice.parent ?? "nothing"}` : `no place ${id}`}`);
+    }
+    voice.names.push(name);
+    if (!created.has(id)) changed.add(id);
+  }
+  if (unknown.size > 0) {
+    const list = [...unknown].map(([key, slugs]) => {
+      const name = songs.flatMap((s) => s.manifest.parts).find((p) => normName(p.name) === key).name;
+      return `  "${name}" (${[...new Set(slugs)].join(", ")})`;
+    });
+    throw new Error(["part names not in the voice tree (#107):", ...list,
+      "Ask the person publishing where each one goes, then publish again with one of these per name:",
+      '  --place "<name>=<id>"            a name of an existing place',
+      '  --place "<name>=<new id>@<id>"   a new place under an existing one (four levels at most)',
+      '  --place "<name>=-"               in no place: it matches only itself (a solo, a trio)',
+      `The places: ${voices.map((v) => `${v.id} (${v.names[0] ?? ""})`).join(", ")}`].join("\n"));
+  }
+  const json = (v) => quote(JSON.stringify(v.names));
+  return [
+    ...voices.filter((v) => created.has(v.id)).map((v) =>
+      `INSERT INTO voices (id, parent, names) VALUES (${quote(v.id)}, ${quote(v.parent)}, ${json(v)});`),
+    ...voices.filter((v) => changed.has(v.id)).map((v) => `UPDATE voices SET names = ${json(v)} WHERE id = ${quote(v.id)};`),
+    ...unplaced.map((name) => `INSERT OR IGNORE INTO unplaced_parts (name) VALUES (${quote(name)});`),
+  ].join("\n");
+}
+
 const BUCKET = "stemmanauhat";
 const DATABASE_ID = "b3d80c7d-0fb7-45a2-b6f6-f7311556b953"; // wrangler.jsonc
 const TYPES = { ".musicxml": "application/vnd.recordare.musicxml+xml", ".mid": "audio/midi",
@@ -197,6 +302,7 @@ async function localStore() {
   return {
     put: (key, data, type) => proxy.env.SONGS.put(key, data, { httpMetadata: { contentType: type } }),
     sql: (sql) => proxy.env.DB.exec(sql),
+    query: async (sql) => (await proxy.env.DB.prepare(sql).all()).results,
     close: () => proxy.dispose(),
   };
 }
@@ -219,7 +325,7 @@ function limiter(limit) {
  * song's D1 query runs once its own files are up. A song that fails leaves no
  * row and does not stop the others. Returns the number of songs that failed.
  */
-export async function publishAll(store, choirs, dirs, { log = console.log, now = () => new Date() } = {}) {
+export async function publishAll(store, choirs, dirs, { log = console.log, now = () => new Date(), places = [] } = {}) {
   // Check every bundle before anything goes up.
   const songs = dirs.map((dir) => {
     const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
@@ -229,6 +335,12 @@ export async function publishAll(store, choirs, dirs, { log = console.log, now =
     if (missing.length > 0) throw new Error(`${dir}: missing ${missing.join(", ")}`);
     return { dir, manifest, plan };
   });
+  // Every part name in the voice tree first (#107), so the player carries a singer's part to it.
+  const tree = treePlan(await readTree(store), songs, places);
+  if (tree) {
+    await store.sql(tree);
+    log(`voice tree: ${places.map((p) => `${p.name} → ${p.id === "-" ? "no place" : p.id}`).join(", ")}`);
+  }
   const upload = limiter(UPLOADS_AT_ONCE);
   const results = await Promise.allSettled(songs.map(async ({ dir, manifest, plan }) => {
     const started = Date.now();
@@ -244,18 +356,24 @@ export async function publishAll(store, choirs, dirs, { log = console.log, now =
 }
 
 async function main(args) {
+  const places = [];
+  for (let i = args.indexOf("--place"); i >= 0; i = args.indexOf("--place")) places.push(parsePlace(args.splice(i, 2)[1] ?? ""));
   const where = args.shift();
   const choir = args.shift();
   if (!["--local", "--remote"].includes(where ?? "") || !choir || args.length === 0) {
-    console.error("usage: publish-songs.mjs --local|--remote <choir>[,<choir>...] <bundle-dir> ...");
+    console.error('usage: publish-songs.mjs --local|--remote <choir>[,<choir>...] [--place "<name>=<id>"]... <bundle-dir> ...');
     process.exit(2);
   }
   const store = where === "--local" ? await localStore() : cloudflareStore(process.env);
   const started = Date.now();
   try {
-    const failed = await publishAll(store, choir.split(","), args);
+    const failed = await publishAll(store, choir.split(","), args, { places });
     console.log(`${args.length - failed} of ${args.length} songs published in ${((Date.now() - started) / 1000).toFixed(1)} s`);
     if (failed > 0) process.exitCode = 1;
+  } catch (error) {
+    // A bundle refused before anything went up (a bad manifest, a part name with no place): say why, plainly.
+    console.error(error.message);
+    process.exitCode = 1;
   } finally {
     await store.close();
   }

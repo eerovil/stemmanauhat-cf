@@ -74,8 +74,12 @@ picked in that choir. Songs name and divide their parts differently ("Basso 2", 
 Each place lists every name it goes by, compared ignoring letter case and spaces. A remembered
 part that the song doesn't have falls back to the nearest place above it that it has, never
 down or sideways; a name not in the tree ("Tenori solo") matches only itself, and a name ending
-in "b" ("S1b") sits just below the name without it. To add a name, edit the table, no code
-change needed:
+in "b" ("S1b") sits just below the name without it. Publishing with `scripts/publish-songs.sh`
+stops on a part name in no place and not listed in `unplaced_parts` (solos, trios), before
+anything goes up, and lists the places: the person publishing says where each one goes, and
+it goes in with the song (`--place "Bassi=B"` a name of an existing place, `--place "Basso
+4=B4@B"` a new place under one, `--place "Kertoja=-"` in no place). To change the tree by hand,
+edit the table, no code change needed:
 
     ./scripts/run.sh --cloudflare corepack pnpm exec wrangler d1 execute stemmanauhat --remote \
       --command "UPDATE voices SET names = json_insert(names, '\$[#]', 'Bassi') WHERE id = 'B'"

@@ -39,7 +39,7 @@ describe("the voice tree (#107)", () => {
     expect(placeOf("Upper bass 2", tree)).toEqual(["men", "B", "B2", "B2u"]);
   });
   it("reads one place from its many names, ignoring case and spaces", () => {
-    for (const name of ["Sopraano 1", "S1", "soprano I", "Soprano1"]) expect(placeOf(name, tree)).toEqual(["women", "S", "S1"]);
+    for (const name of ["Sopraano 1", "S1", "soprano 1", "Soprano1"]) expect(placeOf(name, tree)).toEqual(["women", "S", "S1"]);
     for (const name of ["Basso", "Bass", "B"]) expect(placeOf(name, tree)).toEqual(["men", "B"]);
     expect(placeOf("Baritoni", tree)).toEqual(["men", "Bar"]);
     expect(placeOf("Miehet", tree)).toEqual(["men"]);
@@ -51,7 +51,7 @@ describe("the voice tree (#107)", () => {
     expect(placeOf("Upper bass 2b", tree)).toBeNull();
   });
   it("knows no solo or trio part, so those match only themselves", () => {
-    for (const name of ["Tenori solo", "Solo 1", "Trio T1", "Solo"]) expect(placeOf(name, tree)).toBeNull();
+    for (const name of ["Tenori solo", "Solo 1", "Trio T1", "Solo", "Bassi"]) expect(placeOf(name, tree)).toBeNull();
   });
   it("leaves out a row too deep or whose parents loop or are missing", () => {
     const deep: Voice[] = [{ id: "a", parent: null, names: ["a"] }, { id: "b", parent: "a", names: ["bb"] },

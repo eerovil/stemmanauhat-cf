@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error a plain .mjs script without types
-import { cloudflareStore, partFilesIn, publishAll, publishPlan, versionFor } from "../../scripts/publish-songs.mjs";
+import { cloudflareStore, knowsName, parsePlace, partFilesIn, publishAll, publishPlan, readTree, treePlan, versionFor } from "../../scripts/publish-songs.mjs";
 
 const manifest = {
   slug: "kokeilu", title: "Kokeilijan 'laulu'", duration: 8,
@@ -166,6 +166,15 @@ describe("publishPlan", () => {
   });
 });
 
+/** A D1 with every migration, as the live one: the voice tree (#107) is in it. */
+function migrated() {
+  const db = new DatabaseSync(":memory:");
+  for (const f of readdirSync("migrations").sort()) db.exec(readFileSync(join("migrations", f), "utf8"));
+  return db;
+}
+const treeDb = migrated();
+const query = async (sql: string) => treeDb.prepare(sql).all() as Record<string, unknown>[];
+
 function bundle(root: string, slug: string, withMidi = true, sung = false) {
   const dir = join(root, slug);
   mkdirSync(dir, { recursive: true });
@@ -179,7 +188,7 @@ describe("publishAll", () => {
     const root = mkdtempSync(join(tmpdir(), "publish-"));
     try {
       const events: string[] = [];
-      const store = {
+      const store = { query,
         put: async (key: string, _data: unknown, type: string) => {
           await new Promise((r) => setTimeout(r, 5));
           events.push(`put ${key} ${type}`);
@@ -206,7 +215,7 @@ describe("publishAll", () => {
     try {
       const puts: string[] = [];
       const rows: string[] = [];
-      const store = { put: async (key: string) => { puts.push(key); }, sql: async (sql: string) => { rows.push(sql); } };
+      const store = { query, put: async (key: string) => { puts.push(key); }, sql: async (sql: string) => { rows.push(sql); } };
       expect(await publishAll(store, ["jm", "public"], [bundle(root, "yksi")], { log: () => {}, now: () => date })).toBe(0);
       expect(puts).toHaveLength(4);
       expect(puts.every((k) => k.startsWith("songs/jm/yksi/20261010T123456Z/"))).toBe(true);
@@ -220,7 +229,7 @@ describe("publishAll", () => {
     const root = mkdtempSync(join(tmpdir(), "publish-"));
     try {
       const rows: string[] = [];
-      const store = {
+      const store = { query,
         put: async (key: string) => { if (key.includes("/rikki/") && key.endsWith(".mid")) throw new Error("boom"); },
         sql: async (sql: string) => { rows.push(/slug = '(\w+)'/.exec(sql)?.[1] ?? "?"); },
       };
@@ -239,7 +248,7 @@ describe("publishAll", () => {
       for (const f of ["1-Tenori.mp3", "2-Basso.mp3"]) writeFileSync(join(dir, "parts", f), f);
       const puts: string[] = [];
       const rows: string[] = [];
-      const store = { put: async (key: string) => { puts.push(key); }, sql: async (sql: string) => { rows.push(sql); } };
+      const store = { query, put: async (key: string) => { puts.push(key); }, sql: async (sql: string) => { rows.push(sql); } };
       expect(await publishAll(store, "jm", [dir], { log: () => {}, now: () => date })).toBe(0);
       expect(puts.some((k) => k.endsWith(".mp3"))).toBe(false);
       expect(rows[0]).toContain(`'[{"name":"Tenori"},{"name":"Basso"}]'`);
@@ -255,7 +264,7 @@ describe("publishAll", () => {
       for (const f of ["1-Tenori.mp3", "2-Basso.mp3"]) writeFileSync(join(dir, "parts", f), f);
       const puts: string[] = [];
       const rows: string[] = [];
-      const store = { put: async (key: string, _data: unknown, type: string) => { puts.push(`${key} ${type}`); },
+      const store = { query, put: async (key: string, _data: unknown, type: string) => { puts.push(`${key} ${type}`); },
         sql: async (sql: string) => { rows.push(sql); } };
       expect(await publishAll(store, "public", [dir], { log: () => {}, now: () => date })).toBe(0);
       expect(puts).toContain("songs/public/laulettu/20261010T123456Z/parts/1-Tenori.mp3 audio/mpeg");
@@ -269,10 +278,67 @@ describe("publishAll", () => {
     const root = mkdtempSync(join(tmpdir(), "publish-"));
     try {
       let puts = 0;
-      const store = { put: async () => { puts++; }, sql: async () => {} };
+      const store = { query, put: async () => { puts++; }, sql: async () => {} };
       await expect(publishAll(store, "jm", [bundle(root, "hyva"), bundle(root, "vajaa", false)], { log: () => {} }))
         .rejects.toThrow(/missing score.mid/);
       expect(puts).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the voice tree when publishing (#107)", () => {
+  const songs = (...names: string[][]) => names.map((parts, i) => ({ manifest: { slug: `laulu${i}`, parts: parts.map((name) => ({ name })) } }));
+  it("knows the tree's names, a split part and the names in no place", async () => {
+    const tree = await readTree({ query });
+    for (const name of ["Basso 2", "bass2", "S1b", "Tenorib", "Tenori solo", "Trio Bar", "Upper bass 2"]) expect(knowsName(tree, name)).toBe(true);
+    for (const name of ["Bassi", "Basso 4", "Upper bass 2b", "Kertoja"]) expect(knowsName(tree, name)).toBe(false);
+  });
+  it("needs nothing when every part is known", async () => {
+    expect(treePlan(await readTree({ query }), songs(["Sopraano", "Basso 2"], ["T1", "T1b"]))).toBe("");
+  });
+  it("stops on a part with no place given, naming it, its songs and the places", async () => {
+    const tree = await readTree({ query });
+    expect(() => treePlan(tree, songs(["Bassi", "Basso"], ["bassi"]))).toThrow(/"Bassi" \(laulu0, laulu1\)[\s\S]*--place[\s\S]*B \(Basso\)/);
+    expect(() => treePlan(tree, songs(["Bassi", "Kertoja"]), [parsePlace("Bassi=B")])).toThrow(/"Kertoja"/);
+  });
+  it("puts each new name where the publisher said, and the D1 takes it", async () => {
+    const db = migrated();
+    const tree = await readTree({ query: async (sql: string) => db.prepare(sql).all() as Record<string, unknown>[] });
+    const sql = treePlan(tree, songs(["Bassi", "Basso 4", "Bass 4", "Kertoja"]),
+      ["Bassi=B", "Basso 4=B4@B", "Bass 4=B4@B", "Kertoja=-"].map(parsePlace));
+    db.exec(sql);
+    const names = (id: string) => JSON.parse((db.prepare("SELECT names FROM voices WHERE id = ?").get(id) as { names: string }).names);
+    expect(names("B")).toEqual(["Basso", "Bass", "B", "Bassi"]);
+    expect(names("B4")).toEqual(["Basso 4", "Bass 4"]);
+    expect((db.prepare("SELECT parent FROM voices WHERE id = 'B4'").get() as { parent: string }).parent).toBe("B");
+    expect(db.prepare("SELECT name FROM unplaced_parts WHERE name = 'Kertoja'").get()).toBeTruthy();
+  });
+  it("refuses a place that doesn't fit", async () => {
+    const tree = await readTree({ query });
+    const plan = (place: string) => () => treePlan(tree, songs(["Bassi"]), [parsePlace(place)]);
+    expect(plan("Bassi=Q")).toThrow(/no place Q/);
+    expect(plan("Bassi=B2@T")).toThrow(/already under B/);
+    expect(plan("Bassi=X@B2u")).toThrow(/fourth level/);
+    expect(plan("Basso=B")).toThrow(/already in the tree/);
+    expect(() => parsePlace("Bassi")).toThrow(/bad --place/);
+    expect(() => parsePlace("Bassi=-@B")).toThrow(/bad --place/);
+  });
+  it("puts the tree in before any file goes up, and nothing goes up when a name has no place", async () => {
+    const root = mkdtempSync(join(tmpdir(), "publish-"));
+    try {
+      const dir = join(root, "uusi");
+      mkdirSync(dir);
+      writeFileSync(join(dir, "manifest.json"), JSON.stringify({ ...manifest, slug: "uusi", parts: [{ name: "Tenori" }, { name: "Bassi" }] }));
+      for (const f of ["score.musicxml", "timing.json", "score.mid"]) writeFileSync(join(dir, f), f);
+      const events: string[] = [];
+      const store = { query, put: async (key: string) => { events.push(`put ${key}`); }, sql: async (sql: string) => { events.push(sql); } };
+      await expect(publishAll(store, "joy", [dir], { log: () => {}, now: () => date })).rejects.toThrow(/"Bassi"/);
+      expect(events).toEqual([]);
+      expect(await publishAll(store, "joy", [dir], { log: () => {}, now: () => date, places: [parsePlace("Bassi=B")] })).toBe(0);
+      expect(events[0]).toMatch(/^UPDATE voices SET names = .*"Bassi".* WHERE id = 'B';$/);
+      expect(events.slice(1).some((e) => e.startsWith("put"))).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

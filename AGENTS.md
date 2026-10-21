@@ -29,6 +29,10 @@ D1 for the per-choir email allow-lists, Google sign-in). Read README.md first.
   their own, `{"name": "Tenori", "voice": "REMY"}` in `manifest.parts`, and the credit names every voice that sings) visible whenever the sung parts play (it is in
   the dock's info, under the bar and time).
 
+- **Where a new part name goes in the voice tree** (#107) is the person publishing's call. When
+  `scripts/publish-songs.sh` stops on part names not in the tree, ask Eero where each one goes
+  and publish again with his `--place` answers; never guess a place.
+
 - **Usage events** (eerovil/eeron-omat-taskit#72) are the `events` table: who listened to what,
   for how long and with which settings (README, "Usage events"). It holds members' emails, so
   never commit rows from it. Read it with `./scripts/run.sh --cloudflare corepack pnpm exec
