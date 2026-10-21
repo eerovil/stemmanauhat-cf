@@ -238,14 +238,18 @@ describe("publishAll", () => {
         put: async () => {}, sql: async (sql: string) => { db.exec(sql); } };
       expect(await sharingLists(store, "yksi", ["joy"])).toEqual(["joy-alumnit"]);
       expect(await sharingLists(store, "yksi", ["public"])).toEqual([]);
+      // A choir added in D1 but not to CHOIRS that shares the files is kept as well, not refused.
+      db.exec("INSERT INTO choirs (id, name) VALUES ('kamari', 'Kamarikuoro')");
+      db.exec("INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at) SELECT 'kamari', slug, title, prefix, parts, duration, published_at FROM songs WHERE choir = 'joy' AND slug = 'yksi'");
       const said: string[] = [];
       expect(await publishAll(store, "joy", [bundle(root, "yksi"), bundle(root, "kaksi")],
         { log: (line: string) => said.push(line), now: () => date })).toBe(0);
-      expect(said).toContain("Kokeilijan 'laulu': also on joy-alumnit (same files)");
+      expect(said).toContain("Kokeilijan 'laulu': also on joy-alumnit, kamari (same files)");
       expect(db.prepare("SELECT choir, slug, prefix FROM songs ORDER BY slug, choir").all()).toEqual([
         { choir: "joy", slug: "kaksi", prefix: "songs/joy/kaksi/20261010T123456Z/" },
         { choir: "joy", slug: "yksi", prefix: "songs/joy/yksi/20261010T123456Z/" },
         { choir: "joy-alumnit", slug: "yksi", prefix: "songs/joy/yksi/20261010T123456Z/" },
+        { choir: "kamari", slug: "yksi", prefix: "songs/joy/yksi/20261010T123456Z/" },
         { choir: "public", slug: "yksi", prefix: "songs/public/yksi/20250301T100000Z/" },
       ]);
     } finally {

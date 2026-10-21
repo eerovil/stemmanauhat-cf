@@ -71,11 +71,14 @@ export function partFilesIn(dir, parts) {
 /**
  * What to upload for one bundle and the D1 statement that publishes it. `choirs`
  * is one list or several (#104): the files go up once, under the first one's
- * folder, and every list's row points at them.
+ * folder, and every list's row points at them. `shared` are lists D1 already has
+ * the song on with the same files (sharingLists): they come from D1, so they need
+ * not be in CHOIRS.
  */
-export function publishPlan(manifest, choirs, date, partFiles = []) {
-  const lists = typeof choirs === "string" ? [choirs] : [...choirs];
-  for (const choir of lists) if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
+export function publishPlan(manifest, choirs, date, partFiles = [], shared = []) {
+  const named = typeof choirs === "string" ? [choirs] : [...choirs];
+  for (const choir of named) if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
+  const lists = [...named, ...shared];
   if (lists.length === 0 || new Set(lists).size !== lists.length) throw new Error(`bad choirs: ${lists.join(",")}`);
   // The test list is where a song is tried out alone before a choir gets it (#73).
   if (lists.length > 1 && lists.includes("testi")) throw new Error("the test list cannot be published with others");
@@ -353,7 +356,7 @@ export async function publishAll(store, choirs, dirs, { log = console.log, now =
     publishPlan(manifest, named, now(), sung);
     const shared = await sharingLists(store, manifest.slug, named);
     if (shared.length > 0) log(`${manifest.title}: also on ${shared.join(", ")} (same files)`);
-    const plan = publishPlan(manifest, [...named, ...shared], now(), sung);
+    const plan = publishPlan(manifest, named, now(), sung, shared);
     const missing = plan.files.filter((f) => f !== "manifest.json" && !existsSync(join(dir, f)));
     if (missing.length > 0) throw new Error(`${dir}: missing ${missing.join(", ")}`);
     songs.push({ dir, manifest, plan });
