@@ -24,7 +24,10 @@ a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
   One song can be on several lists with one copy of its files (#104):
   `./scripts/publish-songs.sh jm,public <bundle>` uploads them once, under the first list's folder,
   and points each list's row at them. Publishing takes the song off any private list not named;
-  `public` and `testi` keep theirs. `scripts/merge-duplicate-songs.mjs` turned the earlier copies
+  `public` and `testi` keep theirs. A private list whose row points at the same files as a named
+  list's keeps the song too, with the new version, so fixing a JOY-kuoro song keeps it on
+  JOY-alumnit. song-app's own Publish panel does not do that yet: publish a song that is on several
+  lists with sing-song or `publish-songs.sh`. `scripts/merge-duplicate-songs.mjs` turned the earlier copies
   into one.
 - **Test list:** `testi` ("Testilista", D1 `choirs.staging = 1`) is where a new song is tried out
   before a choir gets it. Only admins open it: it has no members, link, requests or flags. song-app
@@ -201,7 +204,8 @@ eerovil's copy runs in the ruokalista Cloudflare account. The D1 database `stemm
 R2 bucket `stemmanauhat` are there, the credentials are in `~/.local/share/stemmanauhat/cloudflare.env`
 on the host, and the GitHub Actions secrets are set. The VPS proxies `stemmanauhat.vilpponen.fi`
 to the Worker (`PUBLIC_HOST`), so the Google client needs both names'
-`/auth/callback`. Its choirs are `jm` and `naiskuoro`, and old-site links keep working with the
+`/auth/callback`. Its choirs are `jm`, `naiskuoro`, `joy` (JOY-kuoro) and `joy-alumnit` (JOY-alumnit,
+its former singers, with JOY's songs on the same files), and old-site links keep working with the
 passphrase set by `./scripts/set-passphrase.sh jm`; `/admin` cannot show that link, and "Tee uusi
 linkki" replaces it.
 
