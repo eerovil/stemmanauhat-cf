@@ -207,7 +207,7 @@ R2 bucket `stemmanauhat` are there, the credentials are in `~/.local/share/stemm
 on the host, and the GitHub Actions secrets are set. The VPS proxies `stemmanauhat.vilpponen.fi`
 to the Worker (`PUBLIC_HOST`), so the Google client needs both names'
 `/auth/callback`. Its choirs are `jm`, `naiskuoro`, `joy` (JOY-kuoro) and `joy-alumnit` (JOY-alumnit,
-its former singers, with JOY's songs on the same files) and `laurille` (Laurille), and old-site links keep working with the
+its former singers, with JOY's songs on the same files), `laurille` (Laurille) and `yl` (YL), and old-site links keep working with the
 passphrase set by `./scripts/set-passphrase.sh jm`; `/admin` cannot show that link, and "Tee uusi
 linkki" replaces it.
 
