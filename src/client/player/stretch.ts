@@ -37,6 +37,8 @@ export class PartStretcher {
   private gains: number[];
   /** Per part, where it is left out or turned up (unison.ts): song frames, [start, end, gain] in order. */
   private spans: number[][];
+  /** Per part, its gain by pitch (balance.ts): song frames, [frame, gain, frame, gain, …] in order. */
+  private curves: number[][];
   /** Song frames at the last start, jump or tempo change, and output frames since: the position. */
   private base = 0;
   private emitted = 0;
@@ -58,6 +60,7 @@ export class PartStretcher {
     this.length = Math.max(0, ...parts.map((p) => p.length));
     this.gains = parts.map(() => 0);
     this.spans = parts.map(() => []);
+    this.curves = parts.map(() => []);
   }
 
   setGains(gains: number[]): void {
@@ -66,6 +69,10 @@ export class PartStretcher {
 
   setSpans(spans: number[][]): void {
     this.spans = this.parts.map((_, i) => spans[i] ?? []);
+  }
+
+  setCurves(curves: number[][]): void {
+    this.curves = this.parts.map((_, i) => curves[i] ?? []);
   }
 
   /** The song position, in frames: where the sound going out now comes from. */
@@ -148,13 +155,19 @@ export class PartStretcher {
       const part = this.parts[p]!;
       const end = Math.min(n, part.length - start);
       const spans = this.spansIn(p, start, start + n);
-      if (!spans.length) {
+      const curve = this.curves[p]!;
+      if (!spans.length && !curve.length) {
         for (let i = Math.max(0, -start); i < end; i++) out[at + i]! += part[start + i]! * gain;
         continue;
       }
+      let k = curveIndex(curve, start);
       for (let i = Math.max(0, -start); i < end; i++) {
         const f = start + i;
         let g = 1;
+        if (curve.length) {
+          while (k + 2 < curve.length && curve[k + 2]! <= f) k += 2;
+          g = curveAt(curve, k, f);
+        }
         for (let k = 0; k < spans.length; k += 3) {
           const depth = Math.min(f - spans[k]!, spans[k + 1]! - f);
           if (depth > 0) g *= 1 + (spans[k + 2]! - 1) * Math.min(1, depth / QUIET_FADE);
@@ -235,4 +248,23 @@ export class PartStretcher {
     this.overlap.copyWithin(0, HOP);
     this.overlap.fill(0, HOP);
   }
+}
+
+/** The last breakpoint at or before frame `f` (the first when none is). */
+function curveIndex(curve: number[], f: number): number {
+  let lo = 0;
+  let hi = curve.length / 2 - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (curve[2 * mid]! <= f) lo = mid;
+    else hi = mid - 1;
+  }
+  return 2 * Math.max(0, lo);
+}
+
+/** The curve's gain at frame `f`, from breakpoint `k` on: straight between two, flat past the ends. */
+function curveAt(curve: number[], k: number, f: number): number {
+  if (f <= curve[k]! || k + 2 >= curve.length) return curve[k + 1]!;
+  const [a, ga, b, gb] = [curve[k]!, curve[k + 1]!, curve[k + 2]!, curve[k + 3]!];
+  return ga + ((gb - ga) * (f - a)) / (b - a);
 }

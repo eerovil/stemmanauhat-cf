@@ -18,6 +18,8 @@ export interface UnisonNote {
   /** The note-on and note-off events' indexes in the track. */
   on: number;
   off: number;
+  /** The MIDI key: 60 is middle C. */
+  key: number;
   /** Seconds. */
   start: number;
   end: number;
@@ -50,7 +52,7 @@ export function findNotes(midi: BasicMIDI, partChannels: number[][]): Notes {
       if (part === undefined) return;
       const key = ((e.statusByte & 0x0f) << 8) | e.data[0]!;
       if (kind === NOTE_ON && e.data[1]! > 0) {
-        const note = { part, track: t, on: i, off: -1, start: midi.midiTicksToSeconds(e.ticks), end: Infinity };
+        const note = { part, track: t, on: i, off: -1, key: e.data[0]!, start: midi.midiTicksToSeconds(e.ticks), end: Infinity };
         open.set(key, [...(open.get(key) ?? []), note]);
         parts[part]!.push(note);
       } else {

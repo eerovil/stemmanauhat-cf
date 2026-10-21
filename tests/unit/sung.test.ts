@@ -172,6 +172,16 @@ describe("SungPlayer", () => {
     expect(power()).toBeLessThanOrEqual(1);
   });
 
+  it("sends each part's gain by pitch to the worklet in frames, with the song's notes", async () => {
+    const { p, port } = await player();
+    const note = (part: number, key: number, start: number) => ({ part, track: part, on: 0, off: 1, key, start, end: start + 1 });
+    p.setUnisons({ parts: [[note(0, 60, 0)], [note(1, 48, 0), note(1, 60, 2)]], unisons: [] });
+    const curves = port.sent.find((m) => m.type === "curves") as { curves: number[][] };
+    expect(curves.curves[0]).toEqual([0, 1]);
+    expect(curves.curves[1]!.filter((_, i) => i % 2 === 0)).toEqual([0, 1950, 1962]);
+    expect(curves.curves[1]![1]).toBeCloseTo(10 ** (3 / 20));
+  });
+
   it("lifts the mix by SUNG_GAIN into the limiter, which holds the peaks under the ceiling", async () => {
     const { context } = await player();
     const boost = context.node!.next!;
