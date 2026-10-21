@@ -3,6 +3,7 @@ import { BasicMIDI } from "spessasynth_core";
 import { CEILING_DB, partChannels } from "./midi";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import { allowSilentMode } from "./session";
+import { pitchCurves } from "./balance";
 import type { FromWorklet, ToWorklet } from "./sung-worklet";
 import { boosts, findNotes, gainSpans, silenced, type Notes } from "./unison";
 import workletUrl from "./sung-worklet?worker&url";
@@ -100,8 +101,13 @@ export class SungPlayer {
   setOthers(level: number): void { this.others = level; this.applyGains(); }
   setOwn(on: boolean): void { this.own = on; this.applyGains(); this.applyUnisons(); }
 
-  /** The song's notes from its MIDI, to sing each unison once (unison.ts). */
-  setUnisons(notes: Notes): void { this.notes = notes; this.applyUnisons(); }
+  /** The song's notes from its MIDI, to sing each unison once (unison.ts) and low notes louder (balance.ts). */
+  setUnisons(notes: Notes): void {
+    this.notes = notes;
+    const rate = this.context.sampleRate;
+    this.send({ type: "curves", curves: pitchCurves(notes).map((c) => c.map((v, i) => (i % 2 ? v : Math.round(v * rate)))) });
+    this.applyUnisons();
+  }
   get playing(): boolean { return this.wanted; }
   get running(): boolean { return this.wanted && this.context.state === "running"; }
 

@@ -160,4 +160,28 @@ describe("PartStretcher", () => {
     for (const i of [5000, 25000]) expect(out[i]).toBeCloseTo(parts[0]![i]! + parts[1]![i]!, 6);
     expect(out[10256]).toBeCloseTo(1.25 * parts[0]![10256]! + parts[1]![10256]!, 3);
   });
+
+  it("follows a part's gain curve, straight between its points and flat past its ends", () => {
+    const parts = [tone(220, 1), tone(330, 1)];
+    const s = new PartStretcher(parts);
+    s.setGains([1, 1]);
+    s.setCurves([[10000, 2, 10100, 0.5]]);
+    s.start(0);
+    const out = render(s, 20000);
+    expect(out[5000]).toBeCloseTo(2 * parts[0]![5000]! + parts[1]![5000]!, 6);
+    expect(out[10050]).toBeCloseTo(1.25 * parts[0]![10050]! + parts[1]![10050]!, 6);
+    expect(out[15000]).toBeCloseTo(0.5 * parts[0]![15000]! + parts[1]![15000]!, 6);
+  });
+
+  it("multiplies a gain curve with the unison spans", () => {
+    const parts = [tone(220, 1)];
+    const s = new PartStretcher(parts);
+    s.setGains([1]);
+    s.setCurves([[0, 2]]);
+    s.setSpans([[10000, 20000, 1.5]]);
+    s.start(0);
+    const out = render(s, 30000);
+    expect(out[15000]).toBeCloseTo(3 * parts[0]![15000]!, 6);
+    expect(out[25000]).toBeCloseTo(2 * parts[0]![25000]!, 6);
+  });
 });
