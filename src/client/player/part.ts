@@ -25,13 +25,13 @@ const norm = (name: string) => name.toLowerCase().replace(/\s+/g, "");
  */
 export function placeOf(name: string, voices: Voice[]): string[] | null {
   const key = norm(name);
-  const voice = voices.find((v) => v.names.some((n) => norm(n) === key));
-  if (voice) return pathOf(voice, voices);
-  if (key.length > 1 && key.endsWith("b")) {
-    const above = voices.find((v) => v.names.some((n) => norm(n) === key.slice(0, -1)));
-    const path = above ? pathOf(above, voices) : null;
-    if (path && path.length < MAX_DEPTH) return [...path, `${above!.id}+b`];
-  }
+  // The first row with this name whose place is whole: a row too deep or cut off is left out.
+  const at = (k: string) => voices.filter((v) => v.names.some((n) => norm(n) === k))
+    .map((v) => pathOf(v, voices)).find((path) => path !== null) ?? null;
+  const path = at(key);
+  if (path) return path;
+  const above = key.length > 1 && key.endsWith("b") ? at(key.slice(0, -1)) : null;
+  if (above && above.length < MAX_DEPTH) return [...above, `${above.at(-1)}+b`];
   return null;
 }
 

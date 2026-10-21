@@ -295,6 +295,20 @@ describe("the voice tree when publishing (#107)", () => {
     for (const name of ["Basso 2", "bass2", "S1b", "Tenorib", "Tenori solo", "Trio Bar", "Upper bass 2"]) expect(knowsName(tree, name)).toBe(true);
     for (const name of ["Bassi", "Basso 4", "Upper bass 2b", "Kertoja"]) expect(knowsName(tree, name)).toBe(false);
   });
+  it("doesn't count a name whose only row the player leaves out: too deep, cut off or in a loop", () => {
+    const row = (id: string, parent: string | null, ...names: string[]) => ({ id, parent, names });
+    const tree = { unplaced: [], voices: [row("a", null, "A"), row("b", "a", "B"), row("c", "b", "C"), row("d", "c", "D"),
+      row("e", "d", "Viides"), row("x", "gone", "Orpo"), row("y", "z", "Kehä"), row("z", "y", "Kehä 2"), row("w", "y", "D")] };
+    expect(knowsName(tree, "D")).toBe(true);
+    for (const name of ["Viides", "Orpo", "Kehä", "Kehä 2", "Db", "Orpob"]) expect(knowsName(tree, name)).toBe(false);
+    expect(knowsName(tree, "Cb")).toBe(true);
+    expect(() => treePlan(tree, [{ manifest: { slug: "laulu", parts: [{ name: "Uusi" }] } }], [parsePlace("Uusi=e")]))
+      .toThrow(/no place e, or it is below the fourth level/);
+    expect(() => treePlan(tree, [{ manifest: { slug: "laulu", parts: [{ name: "Uusi" }] } }], [parsePlace("Uusi=x")]))
+      .toThrow(/no place x/);
+    expect(() => treePlan(tree, [{ manifest: { slug: "laulu", parts: [{ name: "Viides" }] } }]))
+      .toThrow(/"Viides"/);
+  });
   it("needs nothing when every part is known", async () => {
     expect(treePlan(await readTree({ query }), songs(["Sopraano", "Basso 2"], ["T1", "T1b"]))).toBe("");
   });

@@ -62,6 +62,8 @@ describe("the voice tree (#107)", () => {
     expect(placeOf("e", deep)).toBeNull();
     expect(placeOf("x", deep)).toBeNull();
     expect(placeOf("z", deep)).toBeNull();
+    // A name on a broken row and on a whole one is read from the whole one, as publishing does.
+    expect(placeOf("e", [...deep, { id: "f", parent: "a", fi: "f", en: "f", names: ["e"] }])).toEqual(["a", "f"]);
   });
 
   const start = (names: string[], choirPart: string, songPart: string | null = null) =>

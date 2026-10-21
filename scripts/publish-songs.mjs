@@ -162,15 +162,16 @@ function depthOf(voices, id) {
 }
 
 /**
- * Whether the player can place `name`, the way its placeOf does: one of a place's names, a name
- * in no place on purpose, or a split part ("S1b") of a name above the fourth level.
+ * Whether the player can place `name`, the way its placeOf does: one of the names of a place at
+ * most four levels down whose parents are all there, a name in no place on purpose, or a split part
+ * ("S1b") of a name above the fourth level. A row the player leaves out does not count.
  */
 export function knowsName(tree, name) {
   const key = normName(name);
-  const at = (k) => tree.voices.find((v) => v.names.some((n) => normName(n) === k));
-  if (at(key) || tree.unplaced.some((n) => normName(n) === key)) return true;
-  const above = key.length > 1 && key.endsWith("b") ? at(key.slice(0, -1)) : undefined;
-  return above !== undefined && depthOf(tree.voices, above.id) < MAX_DEPTH;
+  const depth = (k) => Math.min(Infinity, ...tree.voices
+    .filter((v) => v.names.some((n) => normName(n) === k)).map((v) => depthOf(tree.voices, v.id)));
+  if (depth(key) <= MAX_DEPTH || tree.unplaced.some((n) => normName(n) === key)) return true;
+  return key.length > 1 && key.endsWith("b") && depth(key.slice(0, -1)) < MAX_DEPTH;
 }
 
 /** `--place` values: `Name=B2` (an existing place), `Name=B4@B` (a new one under B), `Name=-` (in no place). */
@@ -211,8 +212,8 @@ export function treePlan(tree, songs, places = []) {
       voice = { id, parent, names: [] };
       voices.push(voice);
       created.add(id);
-    } else if (!voice || (parent !== undefined && voice.parent !== parent)) {
-      throw new Error(`--place "${name}": ${voice ? `${id} is already under ${voice.parent ?? "nothing"}` : `no place ${id}`}`);
+    } else if (!voice || depthOf(voices, id) > MAX_DEPTH || (parent !== undefined && voice.parent !== parent)) {
+      throw new Error(`--place "${name}": ${voice && depthOf(voices, id) <= MAX_DEPTH ? `${id} is already under ${voice.parent ?? "nothing"}` : `no place ${id}, or it is below the fourth level or its parents are missing`}`);
     }
     voice.names.push(name);
     if (!created.has(id)) changed.add(id);
