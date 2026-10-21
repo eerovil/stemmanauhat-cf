@@ -26,7 +26,8 @@ import { fileURLToPath } from "node:url";
 
 // The choirs in D1 (scripts/add-choir.sh); joy is JOY-kuoro, a mixed choir (#102),
 // and joy-alumnit its former singers, sharing JOY's songs (eerovil/eeron-omat-taskit#94).
-export const CHOIRS = ["jm", "naiskuoro", "joy", "joy-alumnit", "public", "testi"];
+// laurille is Laurille, a small group singing one song (eerovil/eeron-omat-taskit#97).
+export const CHOIRS = ["jm", "naiskuoro", "joy", "joy-alumnit", "laurille", "public", "testi"];
 /** Lists that keep their copy when the song is published elsewhere, and take it off nowhere (#73). */
 const KEEPS_COPIES = ["public", "testi"];
 const FILES = ["score.musicxml", "score.mid", "timing.json", "manifest.json"];
