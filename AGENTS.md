@@ -48,6 +48,8 @@ Every change runs the test suite (`pnpm test`), which must include at least one 
 test: sign-in stubbed, a song's score renders, audio plays, the cursor moves. A build or a linter
 alone is not a test. Use the AgentDeck job queue for test runs as the poller brief says.
 
+- Run the whole unit and end-to-end suite before the first push, and grep the tests for every
+  string your change alters.
 - Copy screenshots out of `test-results/` before the next Playwright run, because the run wipes it
   (`test-results/shots` included). Check that each file is non-empty before uploading.
 - Set a free `PLAYWRIGHT_PORT` (default 8787) when another checkout holds the default port, and
@@ -67,6 +69,12 @@ changes): every POST is a 403. The key is the Worker secret `AGENT_LOGIN_SECRET`
 other copy is `~/.local/share/stemmanauhat/agent-login.key` on this host, never in the
 repository. Never paste a link into an issue, a pull request or a log you post.
 `--rotate` makes a new key and ends every link and agent session already made.
+
+## Working a singer's flag
+
+A flag's `part` (`song_requests.part`) is the part the singer sings, not the part at fault:
+compare all parts at the flagged bar. Check `songs.published_at` too: a republish after the flag
+may already have fixed it.
 
 ## Where things are decided
 
