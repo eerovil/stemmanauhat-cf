@@ -30,22 +30,26 @@ const EPS = 0.001;
  * …], in order; the gain runs straight between them and stays flat past the
  * first and the last. It moves to a note's gain from LEAD before the note, over
  * RAMP, and holds it to the part's next note, through the voice's release and
- * any rest. A chord within the part takes the mean of the notes sounding.
+ * any rest. A chord within the part takes the mean of the notes sounding, again
+ * from where one of them ends while others go on.
  */
 export function pitchCurves(notes: Notes): number[][] {
   return notes.parts.map((list) => {
+    const times = [...list.map((n) => ({ t: n.start, lead: LEAD })),
+      ...list.filter((n) => Number.isFinite(n.end)).map((n) => ({ t: n.end, lead: 0 }))]
+      .sort((a, b) => a.t - b.t);
     const curve: number[] = [];
     let gain: number | null = null;
     let last = -Infinity;
-    for (let i = 0; i < list.length; i++) {
-      const t = list[i]!.start;
+    for (const { t, lead } of times) {
       if (t < last + EPS) continue;
-      last = t;
       const sounding = list.filter((m) => m.start < t + EPS && m.end > t + EPS);
-      const db = sounding.reduce((a, m) => a + pitchDb(m.key), 0) / Math.max(1, sounding.length);
+      if (!sounding.length) continue;
+      last = t;
+      const db = sounding.reduce((a, m) => a + pitchDb(m.key), 0) / sounding.length;
       const g = dbToGain(db);
       if (g === gain) continue;
-      const at = Math.max(0, t - LEAD, curve.length ? curve[curve.length - 2]! : 0);
+      const at = Math.max(0, t - lead, curve.length ? curve[curve.length - 2]! : 0);
       if (gain !== null) curve.push(at, gain);
       curve.push(gain === null ? at : at + RAMP, g);
       gain = g;

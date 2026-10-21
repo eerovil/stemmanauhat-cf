@@ -31,4 +31,11 @@ describe("the sung parts' balance by pitch", () => {
     const midi = BasicMIDI.fromArrayBuffer(smf([["T", [[0, 48, 0, 480], [0, 72, 0, 480]]]]));
     expect(pitchCurves(findNotes(midi, partChannels(midi, ["T"])))[0]).toEqual([0, 1]);
   });
+
+  it("goes to the note held on when the rest of a chord ends", () => {
+    // C3 and C5 together; C5 ends at 0.5 s, C3 goes on to 1 s.
+    const midi = BasicMIDI.fromArrayBuffer(smf([["T", [[0, 48, 0, 960], [0, 72, 0, 480]]]]));
+    expect(round(pitchCurves(findNotes(midi, partChannels(midi, ["T"])))[0]!))
+      .toEqual(round([0, 1, 0.5, 1, 0.512, dbToGain(3)]));
+  });
 });
