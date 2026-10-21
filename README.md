@@ -26,7 +26,9 @@ a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
   and points each list's row at them. Publishing takes the song off any private list not named;
   `public` and `testi` keep theirs. A private list whose row points at the same files as a named
   list's keeps the song too, with the new version, so fixing a JOY-kuoro song keeps it on
-  JOY-alumnit. song-app's own Publish panel does not do that yet: publish a song that is on several
+  JOY-alumnit. Every JOY-alumnit song is on JOY-kuoro's list too, but a new JOY-kuoro song is not
+  on the alumni's (eerovil/eeron-omat-taskit#101): publishing or moving a song to `joy-alumnit`
+  puts it on `joy` as well (`ALSO_ON`). song-app's own Publish panel does not do that yet: publish a song that is on several
   lists with sing-song or `publish-songs.sh`. `scripts/merge-duplicate-songs.mjs` turned the earlier copies
   into one.
 - **Test list:** `testi` ("Testilista", D1 `choirs.staging = 1`) is where a new song is tried out
