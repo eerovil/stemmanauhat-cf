@@ -125,6 +125,39 @@ describe("publishPlan", () => {
     expect(plan.sql).toContain("NULL, NULL, NULL)");
     expect(() => publishPlan({ ...manifest, composer: 3 }, "jm", date)).toThrow(/bad manifest for kokeilu: composer/);
   });
+  it("puts a song on several lists with one copy of its files (#104)", () => {
+    const plan = publishPlan(manifest, ["jm", "naiskuoro"], date);
+    expect(plan.choirs).toEqual(["jm", "naiskuoro"]);
+    expect(plan.prefix).toBe("songs/jm/kokeilu/20261010T123456Z/");
+    expect(plan.r2Manifest.choir).toBe("jm");
+    expect(plan.sql).toContain("DELETE FROM songs WHERE slug = 'kokeilu' AND choir NOT IN ('jm', 'naiskuoro', 'public');");
+    const db = new DatabaseSync(":memory:");
+    for (const f of readdirSync("migrations").sort()) db.exec(readFileSync(join("migrations", f), "utf8"));
+    const rows = () => db.prepare("SELECT choir, prefix FROM songs ORDER BY choir").all();
+    db.exec(publishPlan(manifest, "joy", new Date("2025-03-01T10:00:00Z")).sql);
+    db.exec(publishPlan(manifest, "public", new Date("2025-03-01T10:00:00Z")).sql);
+    db.exec(plan.sql);
+    // joy is a private list not named, so it loses the song; public keeps its own copy.
+    expect(rows()).toEqual([
+      { choir: "jm", prefix: plan.prefix },
+      { choir: "naiskuoro", prefix: plan.prefix },
+      { choir: "public", prefix: "songs/public/kokeilu/20250301T100000Z/" },
+    ]);
+    // The first date stays on every list.
+    expect(db.prepare("SELECT DISTINCT published_at AS at FROM songs").all()).toEqual([{ at: "2025-03-01T10:00:00Z" }]);
+    // public with a choir: both rows share the one copy.
+    db.exec(publishPlan(manifest, ["public", "jm"], date).sql);
+    expect(db.prepare("SELECT prefix FROM songs WHERE choir IN ('jm', 'public')").all())
+      .toEqual([{ prefix: "songs/public/kokeilu/20261010T123456Z/" }, { prefix: "songs/public/kokeilu/20261010T123456Z/" }]);
+    expect(rows().map((r) => r.choir)).toEqual(["jm", "public"]);
+  });
+  it("refuses a repeated choir, an unknown one in a list, and the test list with others", () => {
+    expect(() => publishPlan(manifest, ["jm", "jm"], date)).toThrow(/bad choirs/);
+    expect(() => publishPlan(manifest, [], date)).toThrow(/bad choirs/);
+    expect(() => publishPlan(manifest, ["jm", "kaikki"], date)).toThrow(/unknown choir/);
+    expect(() => publishPlan(manifest, ["testi", "jm"], date)).toThrow(/test list/);
+    expect(publishPlan(manifest, ["public"], date).sql).not.toContain("DELETE");
+  });
   it("refuses an unknown choir and a broken manifest", () => {
     expect(() => publishPlan(manifest, "kaikki", date)).toThrow(/unknown choir/);
     expect(() => publishPlan({ ...manifest, parts: [] }, "public", date)).toThrow(/bad manifest/);
@@ -164,6 +197,21 @@ describe("publishAll", () => {
       }
       expect(events).toContain("put songs/jm/yksi/20261010T123456Z/score.mid audio/midi");
       expect(events).toContain("put songs/jm/yksi/20261010T123456Z/score.musicxml application/vnd.recordare.musicxml+xml");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it("uploads the files once for several lists and writes every list's row in one query (#104)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "publish-"));
+    try {
+      const puts: string[] = [];
+      const rows: string[] = [];
+      const store = { put: async (key: string) => { puts.push(key); }, sql: async (sql: string) => { rows.push(sql); } };
+      expect(await publishAll(store, ["jm", "public"], [bundle(root, "yksi")], { log: () => {}, now: () => date })).toBe(0);
+      expect(puts).toHaveLength(4);
+      expect(puts.every((k) => k.startsWith("songs/jm/yksi/20261010T123456Z/"))).toBe(true);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.match(/INSERT INTO songs/g)).toHaveLength(2);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -250,6 +298,29 @@ describe("cloudflareStore", () => {
     ]);
     expect((calls[0]![1].headers as Record<string, string>).Authorization).toBe("Bearer t0k");
     expect(JSON.parse(calls[2]![1].body as string)).toEqual({ sql: "SELECT 1;" });
+  });
+  it("reads D1 rows, lists R2 page by page and deletes an object (#104)", async () => {
+    const urls: string[] = [];
+    const fetchFn = async (url: string, init: RequestInit) => {
+      urls.push(`${init.method} ${url}`);
+      if (url.includes("/query")) {
+        expect(JSON.parse(init.body as string)).toEqual({ sql: "SELECT ?", params: [1] });
+        return new Response(JSON.stringify({ success: true, result: [{ results: [{ n: 1 }] }] }));
+      }
+      if (init.method === "GET") {
+        const more = !url.includes("cursor=");
+        return new Response(JSON.stringify({ success: true,
+          result: [{ key: more ? "p/a" : "p/b", etag: "e", size: 1, http_metadata: {} }],
+          result_info: { is_truncated: more, cursor: "c1" } }));
+      }
+      return new Response("{}");
+    };
+    const store = cloudflareStore({ CLOUDFLARE_API_TOKEN: "t", CLOUDFLARE_ACCOUNT_ID: "a" }, fetchFn, async () => {});
+    expect(await store.query("SELECT ?", [1])).toEqual([{ n: 1 }]);
+    expect(await store.list("p/")).toEqual([{ key: "p/a", etag: "e", size: 1 }, { key: "p/b", etag: "e", size: 1 }]);
+    await store.delete("p/a b");
+    expect(urls.at(-1)).toBe("DELETE https://api.cloudflare.com/client/v4/accounts/a/r2/buckets/stemmanauhat/objects/p/a%20b");
+    expect(urls[2]).toContain("cursor=c1");
   });
   it("stops at once on a 403 and needs the token", async () => {
     let n = 0;

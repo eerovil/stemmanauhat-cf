@@ -704,8 +704,11 @@ async function adminMove(ctx: Ctx): Promise<Response> {
     ).bind(to, newPrefix, from, slug, now),
     db.prepare("DELETE FROM songs WHERE choir = ? AND slug = ?").bind(from, slug),
   ]);
-  // Nothing points at these any more.
-  const stale = [...keys, ...(oldPrefix && oldPrefix !== newPrefix ? await listKeys(ctx.env.SONGS, oldPrefix) : [])];
+  // Nothing points at these any more. The replaced version's folder may still
+  // be another list's (one copy for several lists, #104); then it stays.
+  const shared = oldPrefix && await db.prepare("SELECT 1 FROM songs WHERE prefix = ? LIMIT 1").bind(oldPrefix).first();
+  const stale = [...keys,
+    ...(oldPrefix && oldPrefix !== newPrefix && !shared ? await listKeys(ctx.env.SONGS, oldPrefix) : [])];
   for (let i = 0; i < stale.length; i += 1000) await ctx.env.SONGS.delete(stale.slice(i, i + 1000));
   return json({ moved: slug, to });
 }
