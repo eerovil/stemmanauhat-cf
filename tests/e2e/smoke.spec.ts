@@ -313,6 +313,23 @@ test("a singer whose choir part is split (Tenorib) starts on Tenori in a song wi
   await expect(gains(page)).toHaveAttribute("data-gains", "0.160 1.000");
 });
 
+test("a singer of Basso 2 starts on Basso in a song not divided, and keeps Basso 2 (#107)", async ({ page }) => {
+  await page.goto("/c/public");
+  await page.evaluate(() => localStorage.setItem("stemmanauhat:public:part", "Basso 2"));
+  await page.goto("/c/public/esittely");
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Valitse oma stemma" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Vaihda oma stemma" })).toContainText("Basso");
+  await expect(gains(page)).toHaveAttribute("data-gains", "0.160 1.000");
+
+  // Picking Basso by hand saves it for this song, and the choir part stays Basso 2.
+  await page.getByRole("button", { name: "Vaihda oma stemma" }).click();
+  await page.getByRole("dialog", { name: "Valitse oma stemma" }).getByRole("button", { name: "Basso" }).click();
+  expect(await page.evaluate(() => localStorage.getItem("stemmanauhat:public:part"))).toBe("Basso 2");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("stemmanauhat:song:public/esittely") ?? "{}").part))
+    .toBe("Basso");
+});
+
 test("the public demo opens without signing in", async ({ page }) => {
   await page.goto("/c/public");
   await page.getByRole("link", { name: "Esittelylaulu" }).click();

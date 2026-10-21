@@ -1,16 +1,82 @@
 /**
+ * A place in the voice tree (#107, the `voices` table): group, voice, divided part, its upper or
+ * lower half. Each place lists every name it goes by ("Basso 2", "Bass 2", "B2").
+ */
+export interface Voice {
+  id: string;
+  parent: string | null;
+  names: string[];
+}
+
+/** How deep the tree goes: Miehet › Basso › Basso 2 › Upper bass 2. */
+const MAX_DEPTH = 4;
+
+/** Names are the same when they differ only in letter case and spaces. */
+const norm = (name: string) => name.toLowerCase().replace(/\s+/g, "");
+
+/**
+ * Where a part name sits in the tree, as the ids from the top down ("Basso 2" → men, B, B2), or
+ * null for a name not in it ("Tenori solo"), which then matches only itself. A split part ("S1b",
+ * "Tenorib", eerovil/stemmanauhat-cf#39) sits just below the name without its "b". A row deeper
+ * than four levels, or whose parents are missing or loop, is left out.
+ */
+export function placeOf(name: string, voices: Voice[]): string[] | null {
+  const key = norm(name);
+  const voice = voices.find((v) => v.names.some((n) => norm(n) === key));
+  if (voice) return pathOf(voice, voices);
+  if (key.length > 1 && key.endsWith("b")) {
+    const above = voices.find((v) => v.names.some((n) => norm(n) === key.slice(0, -1)));
+    const path = above ? pathOf(above, voices) : null;
+    if (path && path.length < MAX_DEPTH) return [...path, `${above!.id}+b`];
+  }
+  return null;
+}
+
+function pathOf(voice: Voice, voices: Voice[]): string[] | null {
+  const path = [voice.id];
+  for (let v = voice; v.parent !== null;) {
+    const up = voices.find((u) => u.id === v.parent);
+    if (!up || path.length >= MAX_DEPTH || path.includes(up.id)) return null;
+    path.unshift(up.id);
+    v = up;
+  }
+  return path;
+}
+
+const samePlace = (a: string[] | null, b: string[] | null) =>
+  a !== null && b !== null && a.length === b.length && a.every((id, i) => id === b[i]);
+
+/**
  * Which part a singer starts a song on, as an index into the song's parts, or -1 to ask.
- * The part chosen for this song wins; else the one usually sung in this choir. A split part
- * ("S1b", eerovil/stemmanauhat-cf#39) falls back to its unsplit part ("S1") in a song without
- * it. Part names and divisi change from song to song, so never guess further than that.
+ * The part chosen for this song wins; else the one usually sung in this choir, or failing that
+ * the nearest place above it in the voice tree that the song has: "Basso 2" starts on "Basso" or
+ * "Bass" in a song not divided, and on "Miehet" in one for men and women. It never moves down or
+ * sideways: "Basso" in a song with "Basso 1" and "Basso 2" asks, as we can't know which one.
  */
 export function startingPart(names: string[], songPart: string | null | undefined,
-  choirPart: string | null | undefined): number {
-  const indexOf = (name: string | null | undefined) => (name ? names.indexOf(name) : -1);
-  let part = indexOf(songPart);
-  if (part < 0) part = indexOf(choirPart);
-  if (part < 0 && choirPart && choirPart.length > 1 && choirPart.endsWith("b")) part = indexOf(choirPart.slice(0, -1));
+  choirPart: string | null | undefined, voices: Voice[] = []): number {
+  const places = names.map((n) => placeOf(n, voices));
+  const exact = (name: string | null | undefined) => (name ? names.indexOf(name) : -1);
+  const at = (place: string[] | null) => places.findIndex((p) => samePlace(p, place));
+  let part = exact(songPart);
+  if (part < 0 && songPart) part = at(placeOf(songPart, voices));
+  if (part < 0) part = exact(choirPart);
+  const path = choirPart ? placeOf(choirPart, voices) : null;
+  for (let depth = path?.length ?? 0; part < 0 && depth > 0; depth--) part = at(path!.slice(0, depth));
+  // A split name the tree doesn't know ("Xb") still falls back to "X", as before the tree.
+  if (part < 0 && !path && choirPart && choirPart.length > 1 && choirPart.endsWith("b")) part = exact(choirPart.slice(0, -1));
   return part;
+}
+
+/**
+ * Whether picking `picked` keeps `remembered` as the choir's part: it does when `picked` is a
+ * place above it ("Basso" when the singer sings "Basso 2"), so the next divided song starts on
+ * "Basso 2" again.
+ */
+export function keepChoirPart(remembered: string | null | undefined, picked: string, voices: Voice[] = []): boolean {
+  const mine = remembered ? placeOf(remembered, voices) : null;
+  const theirs = placeOf(picked, voices);
+  return mine !== null && theirs !== null && theirs.length < mine.length && samePlace(mine.slice(0, theirs.length), theirs);
 }
 
 /** Where a part is drawn: musescore-choir-plugins#420 puts the parts of a big song back on the

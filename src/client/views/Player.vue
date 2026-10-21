@@ -9,7 +9,7 @@ import { t, words } from "../i18n";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
 import type { SungPlayer } from "../player/sung";
-import { focusOf, staffOf, startingPart, visibleStaves } from "../player/part";
+import { focusOf, keepChoirPart, staffOf, startingPart, visibleStaves } from "../player/part";
 import { SlidingPieces } from "../player/slide";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
@@ -130,10 +130,11 @@ onMounted(async () => {
   document.title = `${s.title} – ${words().siteName}`;
   remembered.setLast(props.choir, props.slug);
 
-  // The part: this song's, else the one usually sung in this choir (S1b falling back to S1), else
-  // ask. A fallback is not remembered, so the next song with S1b starts on S1b again.
+  // The part: this song's, else the one usually sung in this choir or the nearest above it in the
+  // voice tree (S1b falling back to S1, Basso 2 to Basso), else ask. A fallback is not remembered,
+  // so the next song with S1b starts on S1b again.
   const memory = songMemory(props.choir, props.slug);
-  const part = startingPart(s.parts.map((p) => p.name), memory.part, remembered.part(props.choir));
+  const part = startingPart(s.parts.map((p) => p.name), memory.part, remembered.part(props.choir), s.voices);
   myPart.value = Math.max(0, part);
   askPart.value = firstAsk.value = part < 0;
   showHint.value = !localStorage.getItem("stemmanauhat:hint-seen");
@@ -499,7 +500,8 @@ function choosePart(index: number) {
   const ownStaffChanges = !singleLine.value && staffOf(parts, index) !== staffOf(parts, myPart.value);
   myPart.value = index;
   const name = song.value!.parts[index]!.name;
-  remembered.setPart(props.choir, name);
+  // Picking "Basso" in a song not divided keeps "Basso 2" as the choir's part (#107).
+  if (!keepChoirPart(remembered.part(props.choir), name, song.value!.voices)) remembered.setPart(props.choir, name);
   rememberSong(props.choir, props.slug, { part: name });
   mixer?.setMaster(index);
   if (mixer) levels.value = mixer.effectiveLevels();
