@@ -24,8 +24,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The choirs in D1 (scripts/add-choir.sh); joy is JOY-kuoro, a mixed choir (#102).
-export const CHOIRS = ["jm", "naiskuoro", "joy", "public", "testi"];
+// The choirs in D1 (scripts/add-choir.sh); joy is JOY-kuoro, a mixed choir (#102),
+// and joy-alumnit its former singers, sharing JOY's songs (eerovil/eeron-omat-taskit#94).
+export const CHOIRS = ["jm", "naiskuoro", "joy", "joy-alumnit", "public", "testi"];
 /** Lists that keep their copy when the song is published elsewhere, and take it off nowhere (#73). */
 const KEEPS_COPIES = ["public", "testi"];
 const FILES = ["score.musicxml", "score.mid", "timing.json", "manifest.json"];
@@ -70,11 +71,14 @@ export function partFilesIn(dir, parts) {
 /**
  * What to upload for one bundle and the D1 statement that publishes it. `choirs`
  * is one list or several (#104): the files go up once, under the first one's
- * folder, and every list's row points at them.
+ * folder, and every list's row points at them. `shared` are lists D1 already has
+ * the song on with the same files (sharingLists): they come from D1, so they need
+ * not be in CHOIRS.
  */
-export function publishPlan(manifest, choirs, date, partFiles = []) {
-  const lists = typeof choirs === "string" ? [choirs] : [...choirs];
-  for (const choir of lists) if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
+export function publishPlan(manifest, choirs, date, partFiles = [], shared = []) {
+  const named = typeof choirs === "string" ? [choirs] : [...choirs];
+  for (const choir of named) if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
+  const lists = [...named, ...shared];
   if (lists.length === 0 || new Set(lists).size !== lists.length) throw new Error(`bad choirs: ${lists.join(",")}`);
   // The test list is where a song is tried out alone before a choir gets it (#73).
   if (lists.length > 1 && lists.includes("testi")) throw new Error("the test list cannot be published with others");
@@ -323,20 +327,40 @@ function limiter(limit) {
 }
 
 /**
+ * The other private lists whose row for `slug` points at the same files as a
+ * named list's row: the same song on several lists (#104), such as a choir and
+ * its alumni (eerovil/eeron-omat-taskit#94). A publish keeps it on them, with
+ * the new version, instead of moving it off. public and the test list keep
+ * their copy anyway and are left as they are.
+ */
+export async function sharingLists(store, slug, lists) {
+  if (lists.every((list) => KEEPS_COPIES.includes(list))) return [];
+  const rows = await store.query(`SELECT DISTINCT b.choir AS choir FROM songs a JOIN songs b ON b.slug = a.slug AND b.prefix = a.prefix
+    WHERE a.slug = ${quote(slug)} AND a.choir IN (${lists.map(quote).join(", ")})
+      AND b.choir NOT IN (${[...new Set([...lists, ...KEEPS_COPIES])].map(quote).join(", ")}) ORDER BY b.choir`);
+  return rows.map((row) => row.choir);
+}
+
+/**
  * Publish every bundle in `dirs` to `store`. All uploads share one pool; each
  * song's D1 query runs once its own files are up. A song that fails leaves no
  * row and does not stop the others. Returns the number of songs that failed.
  */
 export async function publishAll(store, choirs, dirs, { log = console.log, now = () => new Date(), places = [] } = {}) {
+  const named = typeof choirs === "string" ? [choirs] : [...choirs];
   // Check every bundle before anything goes up.
-  const songs = dirs.map((dir) => {
+  const songs = [];
+  for (const dir of dirs) {
     const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
     const sung = manifest.sung === true ? partFilesIn(dir, manifest.parts ?? []) : [];
-    const plan = publishPlan(manifest, choirs, now(), sung);
+    publishPlan(manifest, named, now(), sung);
+    const shared = await sharingLists(store, manifest.slug, named);
+    if (shared.length > 0) log(`${manifest.title}: also on ${shared.join(", ")} (same files)`);
+    const plan = publishPlan(manifest, named, now(), sung, shared);
     const missing = plan.files.filter((f) => f !== "manifest.json" && !existsSync(join(dir, f)));
     if (missing.length > 0) throw new Error(`${dir}: missing ${missing.join(", ")}`);
-    return { dir, manifest, plan };
-  });
+    songs.push({ dir, manifest, plan });
+  }
   // Every part name in the voice tree first (#107), so the player carries a singer's part to it.
   const tree = treePlan(await readTree(store), songs, places);
   if (tree) {

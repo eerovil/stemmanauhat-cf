@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error a plain .mjs script without types
-import { cloudflareStore, knowsName, parsePlace, partFilesIn, publishAll, publishPlan, readTree, treePlan, versionFor } from "../../scripts/publish-songs.mjs";
+import { cloudflareStore, knowsName, parsePlace, partFilesIn, publishAll, publishPlan, readTree, sharingLists, treePlan, versionFor } from "../../scripts/publish-songs.mjs";
 
 const manifest = {
   slug: "kokeilu", title: "Kokeilijan 'laulu'", duration: 8,
@@ -221,6 +221,37 @@ describe("publishAll", () => {
       expect(puts.every((k) => k.startsWith("songs/jm/yksi/20261010T123456Z/"))).toBe(true);
       expect(rows).toHaveLength(1);
       expect(rows[0]!.match(/INSERT INTO songs/g)).toHaveLength(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it("keeps a song on a private list that shares its files, and still moves it off one that doesn't (eeron-omat-taskit#94)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "publish-"));
+    try {
+      const db = migrated();
+      const old = new Date("2025-03-01T10:00:00Z");
+      // On joy and joy-alumnit with one copy, on naiskuoro with its own, and in public.
+      db.exec(publishPlan({ ...manifest, slug: "yksi" }, ["joy", "joy-alumnit"], old).sql);
+      db.exec(publishPlan({ ...manifest, slug: "yksi" }, "public", old).sql);
+      db.exec(publishPlan({ ...manifest, slug: "kaksi" }, "naiskuoro", old).sql);
+      const store = { query: async (sql: string) => db.prepare(sql).all() as Record<string, unknown>[],
+        put: async () => {}, sql: async (sql: string) => { db.exec(sql); } };
+      expect(await sharingLists(store, "yksi", ["joy"])).toEqual(["joy-alumnit"]);
+      expect(await sharingLists(store, "yksi", ["public"])).toEqual([]);
+      // A choir added in D1 but not to CHOIRS that shares the files is kept as well, not refused.
+      db.exec("INSERT INTO choirs (id, name) VALUES ('kamari', 'Kamarikuoro')");
+      db.exec("INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at) SELECT 'kamari', slug, title, prefix, parts, duration, published_at FROM songs WHERE choir = 'joy' AND slug = 'yksi'");
+      const said: string[] = [];
+      expect(await publishAll(store, "joy", [bundle(root, "yksi"), bundle(root, "kaksi")],
+        { log: (line: string) => said.push(line), now: () => date })).toBe(0);
+      expect(said).toContain("Kokeilijan 'laulu': also on joy-alumnit, kamari (same files)");
+      expect(db.prepare("SELECT choir, slug, prefix FROM songs ORDER BY slug, choir").all()).toEqual([
+        { choir: "joy", slug: "kaksi", prefix: "songs/joy/kaksi/20261010T123456Z/" },
+        { choir: "joy", slug: "yksi", prefix: "songs/joy/yksi/20261010T123456Z/" },
+        { choir: "joy-alumnit", slug: "yksi", prefix: "songs/joy/yksi/20261010T123456Z/" },
+        { choir: "kamari", slug: "yksi", prefix: "songs/joy/yksi/20261010T123456Z/" },
+        { choir: "public", slug: "yksi", prefix: "songs/public/yksi/20250301T100000Z/" },
+      ]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
