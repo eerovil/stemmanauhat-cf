@@ -372,9 +372,34 @@ async function song(ctx: Ctx, choir: string, slug: string): Promise<Response> {
       WHERE choir = ? AND song = ? AND done_at IS NULL ORDER BY created_at DESC, id DESC`,
   ).bind(choir, slug).all<{ id: number; bar: number | null; problems: string | null; note: string | null;
     created_at: string }>();
+  // The voice tree (#107): which part names mean the same voice. A song still loads without it.
+  const voices = await ctx.env.DB.prepare("SELECT id, parent, name_fi, name_en, names FROM voices")
+    .all<VoiceRow>().then((r) => parseVoices(r.results), () => []);
   return json({
     ...song, parts: JSON.parse(row.parts), choir, base,
     flags: flags.results.map((f) => ({ ...f, problems: problemList(f.problems) })),
+    voices,
+  });
+}
+
+interface VoiceRow {
+  id: string;
+  parent: string | null;
+  name_fi: string;
+  name_en: string;
+  names: string;
+}
+
+/** The `voices` rows as the player reads them; a row whose names are not a JSON list of strings is left out. */
+export function parseVoices(rows: VoiceRow[]): { id: string; parent: string | null; fi: string; en: string; names: string[] }[] {
+  return rows.flatMap((r) => {
+    try {
+      const names: unknown = JSON.parse(r.names);
+      if (!Array.isArray(names) || !names.every((n) => typeof n === "string")) return [];
+      return [{ id: r.id, parent: r.parent, fi: r.name_fi, en: r.name_en, names }];
+    } catch {
+      return [];
+    }
   });
 }
 

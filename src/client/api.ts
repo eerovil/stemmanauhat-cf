@@ -1,4 +1,5 @@
 import { lang, words } from "./i18n";
+import type { Voice } from "./player/part";
 
 export interface Choir {
   id: string;
@@ -146,6 +147,8 @@ export interface Song extends SongSummary {
   choir: string;
   base: string;
   flags: SongFlag[];
+  /** The voice tree (#107), for carrying a singer's part between differently named parts. */
+  voices?: Voice[];
 }
 
 /** A refusal the page should show rather than an error: 401, 403 or 404. */

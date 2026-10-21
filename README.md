@@ -65,6 +65,32 @@ a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
   it caches the icons and that page, never a song, a page or the API, so access checks and new
   versions work as before.
 
+### Part names
+
+A singer's part carries from song to song: the player starts each song on the part they last
+picked in that choir. Songs name and divide their parts differently ("Basso 2", "Basso", "Bass",
+"B2"), so the `voices` table in D1 (#107) holds a tree of voices: group (Naiset, Miehet), voice
+(Basso), divided part (Basso 2) and its upper or lower half (Upper bass 2), at most four levels.
+Each place lists every name it goes by, compared ignoring letter case and spaces, and has
+its own name in Finnish and English (`name_fi`, `name_en`): the part picker and the player show
+that one, so "B2", "Bass 2" and "Basso 2" all read "Basso 2" ("Bass 2" in English). Renaming a
+place renames it in every song, with no republishing. A name not in the tree shows as the
+song has it. A remembered
+part that the song doesn't have falls back to the nearest place above it that it has, never
+down or sideways; a name not in the tree ("Tenori solo") matches only itself, and a name ending
+in "b" ("S1b") sits just below the name without it. Publishing with `scripts/publish-songs.sh`
+stops on a part name in no place and not listed in `unplaced_parts` (solos, trios), before
+anything goes up, and lists the places: the person publishing says where each one goes, and
+it goes in with the song (`--place "Bassi=B"` a name of an existing place, `--place "Basso
+4=B4@B"` a new place under one, `--place "Kertoja=-"` in no place). To change the tree by hand,
+edit the table, no code change needed:
+
+    ./scripts/run.sh --cloudflare corepack pnpm exec wrangler d1 execute stemmanauhat --remote \
+      --command "UPDATE voices SET names = json_insert(names, '\$[#]', 'Bassi') WHERE id = 'B'"
+
+A place made by `--place` shows as the name it was made for, in both languages, until renamed
+(`UPDATE voices SET name_en = 'Bass 4' WHERE id = 'B4'`).
+
 ### Usage events
 
 To see whether singers find the singing and which settings they use

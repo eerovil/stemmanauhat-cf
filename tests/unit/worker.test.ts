@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decideAccess, type AccessFacts } from "../../src/worker/access";
 import { parseRange, safeSongPath } from "../../src/worker/files";
 import { readEmail } from "../../src/worker/google";
-import { parseEmails, parseSetlist, popularGroups, safeNext, versionOf } from "../../src/worker/index";
+import { parseEmails, parseSetlist, parseVoices, popularGroups, safeNext, versionOf } from "../../src/worker/index";
 import { joinUrl, linkKey } from "../../src/worker/links";
 import { publicOrigin } from "../../src/worker/origin";
 import { newPassphraseRecord, passphraseMatches } from "../../src/worker/passphrase";
@@ -200,5 +200,17 @@ describe("popularGroups", () => {
       { song: "c", people: 2, seconds: 90 }, { song: "d", people: 2, seconds: 60 },
     ])).toEqual([["a"], ["b", "c"], ["d"]]);
     expect(popularGroups([])).toEqual([]);
+  });
+});
+
+describe("parseVoices", () => {
+  it("reads the rows and leaves out one whose names are not a list of strings", () => {
+    expect(parseVoices([
+      { id: "men", parent: null, name_fi: "Miehet", name_en: "Men", names: '["Miehet", "Men"]' },
+      { id: "B", parent: "men", name_fi: "Basso", name_en: "Bass", names: "not json" },
+      { id: "T", parent: "men", name_fi: "Tenori", name_en: "Tenor", names: '["Tenori", 1]' },
+      { id: "Bar", parent: "men", name_fi: "Baritoni", name_en: "Baritone", names: '{"name": "Bar"}' },
+    ])).toEqual([{ id: "men", parent: null, fi: "Miehet", en: "Men", names: ["Miehet", "Men"] }]);
+    expect(parseVoices([])).toEqual([]);
   });
 });

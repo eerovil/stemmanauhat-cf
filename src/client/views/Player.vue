@@ -5,11 +5,11 @@ import {
   rememberSong, songMemory, validRate, type FlagProblem, type Me, type MixMode, type Song,
 } from "../api";
 import Icon from "../components/Icon.vue";
-import { t, words } from "../i18n";
+import { lang, t, words } from "../i18n";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
 import type { SungPlayer } from "../player/sung";
-import { focusOf, staffOf, startingPart, visibleStaves } from "../player/part";
+import { focusOf, keepChoirPart, partLabel, staffOf, startingPart, visibleStaves } from "../player/part";
 import { SlidingPieces } from "../player/slide";
 import { DEFAULT_OTHERS, gainOf } from "../player/mix";
 import type { Score } from "../player/score";
@@ -130,10 +130,11 @@ onMounted(async () => {
   document.title = `${s.title} – ${words().siteName}`;
   remembered.setLast(props.choir, props.slug);
 
-  // The part: this song's, else the one usually sung in this choir (S1b falling back to S1), else
-  // ask. A fallback is not remembered, so the next song with S1b starts on S1b again.
+  // The part: this song's, else the one usually sung in this choir or the nearest above it in the
+  // voice tree (S1b falling back to S1, Basso 2 to Basso), else ask. A fallback is not remembered,
+  // so the next song with S1b starts on S1b again.
   const memory = songMemory(props.choir, props.slug);
-  const part = startingPart(s.parts.map((p) => p.name), memory.part, remembered.part(props.choir));
+  const part = startingPart(s.parts.map((p) => p.name), memory.part, remembered.part(props.choir), s.voices);
   myPart.value = Math.max(0, part);
   askPart.value = firstAsk.value = part < 0;
   showHint.value = !localStorage.getItem("stemmanauhat:hint-seen");
@@ -499,7 +500,8 @@ function choosePart(index: number) {
   const ownStaffChanges = !singleLine.value && staffOf(parts, index) !== staffOf(parts, myPart.value);
   myPart.value = index;
   const name = song.value!.parts[index]!.name;
-  remembered.setPart(props.choir, name);
+  // Picking "Basso" in a song not divided keeps "Basso 2" as the choir's part (#107).
+  if (!keepChoirPart(remembered.part(props.choir), name, song.value!.voices)) remembered.setPart(props.choir, name);
   rememberSong(props.choir, props.slug, { part: name });
   mixer?.setMaster(index);
   if (mixer) levels.value = mixer.effectiveLevels();
@@ -507,6 +509,11 @@ function choosePart(index: number) {
     score.setVisible(visibleParts());
     lastTop = -1;
   }
+}
+
+/** A part as the singer sees it: its place's name in the voice tree, in the site's language (#107). */
+function labelOf(name: string | undefined): string {
+  return name === undefined ? "" : partLabel(name, song.value?.voices ?? [], lang.value);
 }
 
 function pickPart(index: number) {
@@ -864,7 +871,7 @@ function onPointerUp(event: PointerEvent) {
             <span v-else-if="playerKind === 'sung'" class="info-credits sung-credit">{{ sungCredit(song.parts) }}</span>
           </div>
           <button type="button" class="own" :aria-label="t.changePart" @click="askPart = true">
-            <span class="own-tag">{{ t.ownTag }}</span><span class="own-name">{{ song.parts[myPart]?.name }}</span></button>
+            <span class="own-tag">{{ t.ownTag }}</span><span class="own-name">{{ labelOf(song.parts[myPart]?.name) }}</span></button>
           <button type="button" class="play" :aria-label="playing ? t.pause : t.play"
             :data-sounding="sounding ? '1' : '0'" @click="togglePlay"><Icon :name="playing ? 'pause' : 'play'" :size="24" /></button>
           <button type="button" class="settings" :class="{ on: sheetOpen }" :aria-expanded="sheetOpen"
@@ -908,7 +915,7 @@ function onPointerUp(event: PointerEvent) {
           <p>{{ t.partIntro }}</p>
           <div class="picker-grid">
             <button v-for="(p, i) in song.parts" :key="i" type="button"
-              :class="{ mine: i === myPart && !firstAsk }" @click="pickPart(i)">{{ p.name }}</button>
+              :class="{ mine: i === myPart && !firstAsk }" @click="pickPart(i)">{{ labelOf(p.name) }}</button>
           </div>
         </div>
       </template>

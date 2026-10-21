@@ -61,6 +61,24 @@ test("a split-part singer (Tenorib) starts on Tenori without being asked", async
   await page.screenshot({ path: `${dir}/split-part-fallback-phone.png` });
 });
 
+test("parts show by their place's own name: a song naming them T1 and Bass 2 (#107)", async ({ page }) => {
+  await page.route("**/api/songs/public/esittely", async (route) => {
+    const data = await (await route.fetch()).json();
+    data.parts = [{ name: "T1" }, { name: "Bass 2" }];
+    await route.fulfill({ json: data });
+  });
+  await page.goto("/c/public/esittely");
+  await expect(page.getByRole("dialog", { name: "Valitse oma stemma" })).toBeVisible();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${dir}/part-names-picker-phone.png` });
+  await page.evaluate(() => localStorage.setItem("stemmanauhat:public:part", "Basso 2"));
+  await page.reload();
+  await expect(page.locator(".own-name")).toHaveText("Basso 2");
+  await page.getByRole("button", { name: "Selvä" }).click();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${dir}/part-names-dock-phone.png` });
+});
+
 test("song list sorted popular lately and newest first", async ({ page }) => {
   await page.route("**/api/songs?choir=jm", async (route) => {
     const data = await (await route.fetch()).json();
