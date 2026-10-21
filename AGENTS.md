@@ -48,6 +48,11 @@ Every change runs the test suite (`pnpm test`), which must include at least one 
 test: sign-in stubbed, a song's score renders, audio plays, the cursor moves. A build or a linter
 alone is not a test. Use the AgentDeck job queue for test runs as the poller brief says.
 
+- Copy screenshots out of `test-results/` before the next Playwright run, because the run wipes it
+  (`test-results/shots` included). Check that each file is non-empty before uploading.
+- Set a free `PLAYWRIGHT_PORT` (default 8787) when another checkout holds the default port, and
+  still run the test locally. Never leave a new browser test to CI as its first run.
+
 ## Checking the live site as a singer
 
 The live site needs a Google sign-in, so an agent checks it with a login link
