@@ -2,7 +2,7 @@ import { BasicMIDI, BasicSoundBank } from "spessasynth_core";
 import { describe, expect, it } from "vitest";
 import { partChannels } from "../../src/client/player/midi";
 import { renderParts, renderSong } from "../../src/client/player/render";
-import { findNotes, silenced, unisonSteps } from "../../src/client/player/unison";
+import { boosts, findNotes, silenced, unisonSteps, withoutNotes } from "../../src/client/player/unison";
 import { smf, type N } from "./smf";
 
 const RATE = 22050;
@@ -47,5 +47,19 @@ describe("renderParts", () => {
     expect([...rendered.effects]).toEqual([...alone.effects]);
     const steps = unisonSteps(notes, silenced(notes, 0, true), RATE, 1);
     expect(steps).toEqual([{ at: [0, RATE / 2], gains: [1, 1] }, { at: [0, RATE / 2], gains: [0, 0] }]);
+  });
+
+  it("plays a unison of four parts about 4 dB louder than one part's note (#115)", async () => {
+    const four = BasicMIDI.fromArrayBuffer(smf([0, 1, 2, 3].map((ch) => [`P${ch}`, [[ch, 60, 0, 960]]])));
+    const notes = findNotes(four, partChannels(four, ["P0", "P1", "P2", "P3"]));
+    const played = withoutNotes(four, silenced(notes, 0, true).keys(), notes, boosts(notes, 0, true));
+    const one = BasicMIDI.fromArrayBuffer(smf([["P0", [[0, 60, 0, 960]]]]));
+    const frames = RATE;
+    const louder = await renderSong(setupFor(4), played, 1, frames);
+    const alone = await renderSong(setupFor(4), one, 1, frames);
+    const db = 10 * Math.log10(energy(louder.parts[0]!) / energy(alone.parts[0]!));
+    expect(db).toBeGreaterThan(3);
+    expect(db).toBeLessThan(5);
+    for (const p of [1, 2, 3]) expect(energy(louder.parts[p]!)).toBe(0);
   });
 });

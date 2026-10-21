@@ -6,7 +6,7 @@
  */
 import { BasicMIDI } from "spessasynth_core";
 import { renderParts } from "./render";
-import { findNotes, silenced, unisonSteps, type Notes } from "./unison";
+import { boosts, findNotes, silenced, unisonSteps, type Notes } from "./unison";
 import { mixToWav, type RenderedParts } from "./wav";
 
 export type ToWorker =
@@ -37,7 +37,8 @@ scope.onmessage = async (event: MessageEvent<ToWorker>) => {
       rendered = { rate: m.rate, parts: await renderParts(setup!, song, notes, m.rate, progress) };
     }
     if (m.type === "render") { post({ type: "rendered" }); return; }
-    const steps = unisonSteps(notes!, silenced(notes!, m.master, m.own), rendered.parts.sampleRate, m.rate);
+    const steps = unisonSteps(notes!, silenced(notes!, m.master, m.own), rendered.parts.sampleRate, m.rate,
+      boosts(notes!, m.master, m.own));
     const wav = mixToWav(rendered.parts, m.gains, m.outputGain, m.ceiling, steps);
     post({ type: "wav", id: m.id, wav, rate: m.rate }, [wav]);
   } catch (error) {

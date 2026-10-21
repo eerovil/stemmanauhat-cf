@@ -4,7 +4,7 @@ import { CEILING_DB, partChannels } from "./midi";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import { allowSilentMode } from "./session";
 import type { FromWorklet, ToWorklet } from "./sung-worklet";
-import { findNotes, silenced, silentSpans, type Notes } from "./unison";
+import { boosts, findNotes, gainSpans, silenced, type Notes } from "./unison";
 import workletUrl from "./sung-worklet?worker&url";
 
 /**
@@ -192,12 +192,12 @@ export class SungPlayer {
    * (Eero, "Lempilintu", eeron-omat-taskit#45). Where the parts sing in unison and add
    * up louder, the limiter holds the peaks.
    */
-  /** The parts left out of each unison, as stretches of song frames for the worklet. */
+  /** The parts left out of each unison, or singing one louder, as stretches of song frames for the worklet. */
   private applyUnisons(): void {
     if (!this.notes) return;
     const rate = this.context.sampleRate;
-    const spans = silentSpans(this.notes, silenced(this.notes, this.master, this.own));
-    this.send({ type: "silences", silences: spans.map((list) => list.flatMap(([a, b]) => [Math.round(a * rate), Math.round(b * rate)])) });
+    const spans = gainSpans(this.notes, silenced(this.notes, this.master, this.own), boosts(this.notes, this.master, this.own));
+    this.send({ type: "spans", spans: spans.map((list) => list.flatMap(([a, b, g]) => [Math.round(a * rate), Math.round(b * rate), g])) });
   }
 
   private applyGains(): void {

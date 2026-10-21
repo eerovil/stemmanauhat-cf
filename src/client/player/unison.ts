@@ -8,6 +8,9 @@ import type { GainSteps } from "./wav";
  * Eero wanted them, together, as loud as one: the loudest of them sings the
  * note and the others are left out of it. "Loudest" is your own part when it is
  * one of them (and sounds), else any of the others, which all play at one level.
+ * Past two parts the note grows a little louder, STEP_DB for each part more
+ * that is heard on it (eerovil/stemmanauhat-cf#115): a full TTBB unison sounded
+ * thin next to the chords around it.
  */
 export interface UnisonNote {
   part: number;
@@ -73,6 +76,16 @@ export function findNotes(midi: BasicMIDI, partChannels: number[][]): Notes {
   return { parts, unisons: [...byStart.values()].filter((u) => u.length > 1) };
 }
 
+/** dB a unison's note is raised for each part past two heard on it (Eero, #115). */
+export const STEP_DB = 2;
+
+/** How many dB louder a unison sounds that `heard` parts sing: none for two, STEP_DB for each more. */
+export function boostDb(heard: number): number {
+  return STEP_DB * Math.max(0, heard - 2);
+}
+
+export const dbToGain = (db: number) => 10 ** (db / 20);
+
 /** Which part sings a unison: yours when it is one of them and sounds, else the first other one. */
 export function carrier(unison: Unison, master: number, own: boolean): UnisonNote {
   return unison.find((n) => own && n.part === master) ?? unison.find((n) => n.part !== master)!;
@@ -92,13 +105,33 @@ export function silenced(notes: Notes, master: number, own: boolean): Map<Unison
 }
 
 /**
+ * The notes that sing a unison louder, with their dB: the carrier of each unison
+ * that more than two parts are heard on. Your own part is not heard with `own` off.
+ */
+export function boosts(notes: Notes, master: number, own: boolean): Map<UnisonNote, number> {
+  const out = new Map<UnisonNote, number>();
+  for (const u of notes.unisons) {
+    const db = boostDb(u.filter((n) => own || n.part !== master).length);
+    if (db > 0) out.set(carrier(u, master, own), db);
+  }
+  return out;
+}
+
+/**
  * A copy of the song without the notes in `drop`, for the piano. With `notes`,
  * every unison note is held until the unison's longest copy ends (Eero, #76:
  * one note, held longest), so the copy that is kept rings as long as any did;
- * never into the part's own next strike of that key.
+ * never into the part's own next strike of that key. Each note in `louder` is
+ * struck harder by its dB: the piano's loudness goes as velocity squared
+ * (SoundFont's default velocity curve), capped at 127.
  */
-export function withoutNotes(midi: BasicMIDI, drop: Iterable<UnisonNote>, notes?: Notes): BasicMIDI {
+export function withoutNotes(midi: BasicMIDI, drop: Iterable<UnisonNote>, notes?: Notes,
+  louder: Map<UnisonNote, number> = new Map()): BasicMIDI {
   const copy = BasicMIDI.copyFrom(midi);
+  for (const [n, db] of louder) {
+    const on = copy.tracks[n.track]!.events[n.on]!;
+    on.data[1] = Math.min(127, Math.round(on.data[1]! * 10 ** (db / 40)));
+  }
   if (notes) {
     const key = (n: UnisonNote) => midi.tracks[n.track]!.events[n.on]!.data[0];
     const tick = (t: number, i: number) => midi.tracks[t]!.events[i]!.ticks;
@@ -127,31 +160,36 @@ export function withoutNotes(midi: BasicMIDI, drop: Iterable<UnisonNote>, notes?
 }
 
 /**
- * Where each sung part is left out, in seconds: its silenced notes (until the
- * note that sings it instead ends), those that
- * follow on without a gap as one stretch. Starts `lead` early, for the
- * consonant a singer starts before the beat, and ends `tail` late, for the
- * voice's release. A rest between two of them stays heard (a breath). A part's recording is all its notes
- * in one, so a note sounding at the same time as one of the part's own notes
- * that stays (a chord within the part) is not left out: that would take the
- * other note with it.
+ * Where each sung part is left out or turned up, in seconds, as [start, end,
+ * gain]: its silenced notes at 0 (until the note that sings it instead ends),
+ * and the notes it sings a unison louder on (`louder`) at that gain; those that
+ * follow on without a gap at one gain as one stretch. Starts `lead` early, for
+ * the consonant a singer starts before the beat, and ends `tail` late, for the
+ * voice's release. A rest between two of them stays as it is (a breath). A part's
+ * recording is all its notes in one, so a note sounding at the same time as
+ * another of the part's own notes that stays (a chord within the part) is left
+ * as it is: that would take the other note with it.
  */
-export function silentSpans(notes: Notes, gone: Map<UnisonNote, UnisonNote>, lead = 0.05, tail = 0.15): [number, number][][] {
+export function gainSpans(notes: Notes, gone: Map<UnisonNote, UnisonNote>,
+  louder: Map<UnisonNote, number> = new Map(), lead = 0.05, tail = 0.15): [number, number, number][][] {
   return notes.parts.map((list) => {
-    const spans: [number, number][] = [];
-    let run: [number, number] | null = null;
+    const spans: [number, number, number][] = [];
+    let run: [number, number, number] | null = null;
     const kept = list.filter((m) => !gone.has(m));
-    const alongside = (n: UnisonNote) => kept.some((m) => m.start < n.end - EPS && m.end > n.start + EPS);
+    const alongside = (n: UnisonNote) => kept.some((m) => m !== n && m.start < n.end - EPS && m.end > n.start + EPS);
     list.forEach((n, i) => {
-      if (!gone.has(n) || alongside(n)) { run = null; return; }
-      const by = gone.get(n)!;
+      const by = gone.get(n);
+      const db = louder.get(n);
+      if ((!by && db === undefined) || alongside(n)) { run = null; return; }
+      const gain = by ? 0 : dbToGain(db!);
       // Held longer than the note that sings it, the voice comes back in for the rest of it;
-      // else it stays out for its release too, up to the part's next note.
+      // else it stays out (or up) for its release too, up to the part's next note.
       const next = list[i + 1];
-      const end = n.end > by.end + EPS ? by.end : Math.min(n.end + tail, next ? Math.max(n.end, next.start - lead) : Infinity);
+      const release = Math.min(n.end + tail, next ? Math.max(n.end, next.start - lead) : Infinity);
+      const end = by && n.end > by.end + EPS ? by.end : release;
       const start = Math.max(0, n.start - lead);
-      if (run && start <= run[1]) run[1] = Math.max(run[1], end);
-      else { run = [start, end]; spans.push(run); }
+      if (run && run[2] === gain && start <= run[1]) run[1] = Math.max(run[1], end);
+      else { run = [start, end, gain]; spans.push(run); }
     });
     return spans;
   });
@@ -165,16 +203,18 @@ export function unisonNotes(notes: Notes): Set<UnisonNote> {
 /**
  * For the file player, which renders each part's unison notes apart: each
  * part's gain over them, 0 from a silenced note's start to the part's next
- * unison note, so the left-out note's ring is gone too.
+ * unison note, so the left-out note's ring is gone too, and above 1 over a
+ * note in `louder`.
  */
-export function unisonSteps(notes: Notes, gone: Map<UnisonNote, UnisonNote>, sampleRate: number, rate: number): GainSteps[] {
+export function unisonSteps(notes: Notes, gone: Map<UnisonNote, UnisonNote>, sampleRate: number, rate: number,
+  louder: Map<UnisonNote, number> = new Map()): GainSteps[] {
   const all = unisonNotes(notes);
   return notes.parts.map((list) => {
     const steps: GainSteps = { at: [], gains: [] };
     for (const n of list) {
       if (!all.has(n)) continue;
       steps.at.push(Math.round((n.start / rate) * sampleRate));
-      steps.gains.push(gone.has(n) ? 0 : 1);
+      steps.gains.push(gone.has(n) ? 0 : dbToGain(louder.get(n) ?? 0));
     }
     return steps;
   });
