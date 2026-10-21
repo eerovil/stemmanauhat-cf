@@ -55,7 +55,8 @@ test("the player's part question and settings are in English", async ({ page }) 
   const dialog = page.getByRole("dialog", { name: "Choose your part" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "Which part do you sing?" })).toBeVisible();
-  await dialog.getByRole("button", { name: "Tenori", exact: true }).click();
+  // The song's "Tenori" shows by its place's English name in the voice tree (#107).
+  await dialog.getByRole("button", { name: "Tenor", exact: true }).click();
   await expect(page).toHaveTitle("Kokeilulaulu – Stemmanauhat");
   await page.getByRole("button", { name: "Got it" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
