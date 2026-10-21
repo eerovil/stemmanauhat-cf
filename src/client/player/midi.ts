@@ -4,7 +4,7 @@ import processorUrl from "spessasynth_lib/dist/spessasynth_processor.min.js?url"
 import { words } from "../i18n";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import { allowSilentMode } from "./session";
-import { findNotes, silenced, withoutNotes, type Notes, type UnisonNote } from "./unison";
+import { boosts, findNotes, silenced, withoutNotes, type Notes, type UnisonNote } from "./unison";
 
 /**
  * The song's MIDI, played in the browser with MuseScore's own grand piano
@@ -66,6 +66,8 @@ export class MidiPlayer {
   private readonly samples = new Float32Array(1024);
   /** The notes left out of the song now playing (unison.ts). */
   private gone = new Map<UnisonNote, UnisonNote>();
+  /** The notes struck louder, for a unison more than two parts sing. */
+  private louder = new Map<UnisonNote, number>();
   private reloads = Promise.resolve();
   /** While the song loads again: where it was and when (the context's clock). */
   private reloading: { from: number; at: number } | null = null;
@@ -208,11 +210,14 @@ export class MidiPlayer {
   private applyUnisons(): void {
     this.reloads = this.reloads.then(async () => {
       const gone = silenced(this.notes, this.master, this.own);
-      if (gone.size === this.gone.size && [...gone.keys()].every((n) => this.gone.has(n))) return;
+      const louder = boosts(this.notes, this.master, this.own);
+      if (gone.size === this.gone.size && [...gone.keys()].every((n) => this.gone.has(n))
+        && louder.size === this.louder.size && [...louder].every(([n, db]) => this.louder.get(n) === db)) return;
       this.gone = gone;
+      this.louder = louder;
       this.reloading = { from: this.time(), at: this.context.currentTime };
       try {
-        await load(this.seq, withoutNotes(this.midi, gone.keys(), this.notes));
+        await load(this.seq, withoutNotes(this.midi, gone.keys(), this.notes, louder));
         const t = this.time();
         this.seq.currentTime = t;
         if (this.wanted) this.seq.play();

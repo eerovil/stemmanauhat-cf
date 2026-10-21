@@ -140,12 +140,24 @@ describe("PartStretcher", () => {
     const parts = [tone(220, 1), tone(330, 1)];
     const s = new PartStretcher(parts);
     s.setGains([1, 1]);
-    s.setSilences([[10000, 20000]]);
+    s.setSpans([[10000, 20000, 0]]);
     s.start(0);
     const out = render(s, 30000);
     // Fully out inside, only part 2 sounding there; untouched outside; between, a fade.
     for (const i of [11000, 15000, 19000]) expect(out[i]).toBeCloseTo(parts[1]![i]!, 6);
     for (const i of [5000, 25000]) expect(out[i]).toBeCloseTo(parts[0]![i]! + parts[1]![i]!, 6);
     expect(out[10256]).toBeCloseTo(0.5 * parts[0]![10256]! + parts[1]![10256]!, 3);
+  });
+
+  it("turns a part up over its louder spans, fading at their edges", () => {
+    const parts = [tone(220, 1), tone(330, 1)];
+    const s = new PartStretcher(parts);
+    s.setGains([1, 1]);
+    s.setSpans([[10000, 20000, 1.5]]);
+    s.start(0);
+    const out = render(s, 30000);
+    for (const i of [11000, 15000, 19000]) expect(out[i]).toBeCloseTo(1.5 * parts[0]![i]! + parts[1]![i]!, 6);
+    for (const i of [5000, 25000]) expect(out[i]).toBeCloseTo(parts[0]![i]! + parts[1]![i]!, 6);
+    expect(out[10256]).toBeCloseTo(1.25 * parts[0]![10256]! + parts[1]![10256]!, 3);
   });
 });
