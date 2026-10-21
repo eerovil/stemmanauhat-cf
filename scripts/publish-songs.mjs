@@ -28,6 +28,19 @@ import { fileURLToPath } from "node:url";
 // and joy-alumnit its former singers, sharing JOY's songs (eerovil/eeron-omat-taskit#94).
 // laurille is Laurille, a small group singing one song (eerovil/eeron-omat-taskit#97).
 export const CHOIRS = ["jm", "naiskuoro", "joy", "joy-alumnit", "laurille", "public", "testi"];
+/**
+ * A list whose songs are always on another list too: every JOY-alumnit song is
+ * also JOY-kuoro's, but a new JOY-kuoro song is not the alumni's
+ * (eerovil/eeron-omat-taskit#101). The worker's move from the test list does the same (ALSO_ON).
+ */
+export const ALSO_ON = { "joy-alumnit": "joy" };
+
+/** The lists named, each followed by the list it always brings along when that is not named too. */
+export function withAlsoOn(choirs) {
+  const named = typeof choirs === "string" ? [choirs] : [...choirs];
+  return [...named, ...named.map((choir) => ALSO_ON[choir]).filter((also) => also && !named.includes(also))];
+}
+
 /** Lists that keep their copy when the song is published elsewhere, and take it off nowhere (#73). */
 const KEEPS_COPIES = ["public", "testi"];
 const FILES = ["score.musicxml", "score.mid", "timing.json", "manifest.json"];
@@ -74,10 +87,10 @@ export function partFilesIn(dir, parts) {
  * is one list or several (#104): the files go up once, under the first one's
  * folder, and every list's row points at them. `shared` are lists D1 already has
  * the song on with the same files (sharingLists): they come from D1, so they need
- * not be in CHOIRS.
+ * not be in CHOIRS. A named list brings its ALSO_ON list along.
  */
 export function publishPlan(manifest, choirs, date, partFiles = [], shared = []) {
-  const named = typeof choirs === "string" ? [choirs] : [...choirs];
+  const named = withAlsoOn(choirs);
   for (const choir of named) if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
   const lists = [...named, ...shared];
   if (lists.length === 0 || new Set(lists).size !== lists.length) throw new Error(`bad choirs: ${lists.join(",")}`);
@@ -348,7 +361,7 @@ export async function sharingLists(store, slug, lists) {
  * row and does not stop the others. Returns the number of songs that failed.
  */
 export async function publishAll(store, choirs, dirs, { log = console.log, now = () => new Date(), places = [] } = {}) {
-  const named = typeof choirs === "string" ? [choirs] : [...choirs];
+  const named = withAlsoOn(choirs);
   // Check every bundle before anything goes up.
   const songs = [];
   for (const dir of dirs) {

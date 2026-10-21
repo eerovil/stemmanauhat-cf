@@ -111,6 +111,37 @@ test("an admin tries a new song on the test list, then moves it to a choir's lis
 });
 
 
+test("a song moved to JOY-alumnit goes on JOY-kuoro's list too (eeron-omat-taskit#101)", async ({ page }) => {
+  const d1 = (sql: string) => execFileSync("node_modules/.bin/wrangler", ["d1", "execute", "stemmanauhat", "--local", "--command", sql], { stdio: "ignore" });
+  const dir = mkdtempSync(join(tmpdir(), "bundle-"));
+  d1("INSERT INTO choirs (id, name) VALUES ('joy', 'JOY-kuoro'), ('joy-alumnit', 'JOY-alumnit')");
+  try {
+    for (const f of ["score.musicxml", "score.mid", "timing.json"]) cpSync(join("tests/fixtures/two-part", f), join(dir, f));
+    const manifest = JSON.parse(readFileSync("tests/fixtures/two-part/manifest.json", "utf8"));
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({ ...manifest, slug: "vanha", title: "Vanha laulu",
+      parts: [{ name: "Tenori" }, { name: "Basso" }] }));
+    execFileSync("node", ["scripts/publish-songs.mjs", "--local", "testi", dir], { stdio: "inherit" });
+
+    await signInAs(page, "/c/testi", "yllapito@example.com");
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByLabel("Siirrä kuorolle: Vanha laulu").selectOption({ label: "JOY-alumnit" });
+    await expect(page.locator(".move-message")).toHaveText("Vanha laulu siirretty listalle JOY-alumnit.");
+    const bases: string[] = [];
+    for (const choir of ["joy-alumnit", "joy"]) {
+      await page.goto(`/c/${choir}`);
+      await expect(page.locator(".songs li .song-title")).toHaveText(["Vanha laulu"]);
+      const song = await page.evaluate(async (c) => (await fetch(`/api/songs/${c}/vanha`)).json() as Promise<{ base: string }>, choir);
+      bases.push(song.base.replace(`/files/${choir}/`, "/files/"));
+    }
+    // One copy of the files for both lists.
+    expect(bases[0]).toBe(bases[1]);
+    await playSong(page, "Vanha laulu");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    d1("DELETE FROM songs WHERE slug = 'vanha'; DELETE FROM choirs WHERE id IN ('joy', 'joy-alumnit')");
+  }
+});
+
 test("only admins open the test list, and songs move only from it", async ({ page, browser }) => {
   const singer = await (await browser.newContext()).newPage();
   await signInAs(singer, "/c/jm", "laulaja@example.com");

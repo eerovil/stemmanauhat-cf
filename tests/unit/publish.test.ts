@@ -86,6 +86,15 @@ describe("publishPlan", () => {
     expect(sql).toContain("'2026-10-10T12:34:56Z'");
     expect(sql).toContain("DELETE FROM songs WHERE slug = 'kokeilu' AND choir NOT IN ('jm', 'public');");
   });
+  it("puts a JOY-alumnit song on JOY-kuoro's list too, but not a JOY-kuoro song on the alumni's (eeron-omat-taskit#101)", () => {
+    const alumni = publishPlan(manifest, "joy-alumnit", date);
+    expect(alumni.choirs).toEqual(["joy-alumnit", "joy"]);
+    expect(alumni.prefix).toBe("songs/joy-alumnit/kokeilu/20261010T123456Z/");
+    expect(alumni.sql).toContain("DELETE FROM songs WHERE slug = 'kokeilu' AND choir NOT IN ('joy-alumnit', 'joy', 'public');");
+    expect(publishPlan(manifest, ["joy", "joy-alumnit"], date).choirs).toEqual(["joy", "joy-alumnit"]);
+    expect(publishPlan(manifest, ["joy-alumnit", "public"], date).choirs).toEqual(["joy-alumnit", "public", "joy"]);
+    expect(publishPlan(manifest, "joy", date).choirs).toEqual(["joy"]);
+  });
   it("leaves the choirs' copies alone when publishing to public or to the test list", () => {
     expect(publishPlan(manifest, "public", date).sql).not.toContain("DELETE");
     expect(publishPlan(manifest, "testi", date).sql).not.toContain("DELETE");

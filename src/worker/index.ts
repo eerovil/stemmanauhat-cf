@@ -679,6 +679,13 @@ async function adminSetlists(ctx: Ctx): Promise<Response> {
 // ---------------------------------------------------------------- the test list
 
 /**
+ * A list whose songs are always on another list too: every JOY-alumnit song is
+ * also JOY-kuoro's, but not the other way (eerovil/eeron-omat-taskit#101).
+ * scripts/publish-songs.mjs has the same ALSO_ON.
+ */
+export const ALSO_ON: Record<string, string> = { "joy-alumnit": "joy" };
+
+/**
  * Moves a tried-out song from the test list to a choir's list (#73). Its files
  * are copied to the choir's own folder first, since song-app deletes a
  * version's files when it publishes to the test list again; then one D1 batch
@@ -699,13 +706,15 @@ async function adminMove(ctx: Ctx): Promise<Response> {
   if (source!.results[0]?.staging !== 1 || target!.results[0]?.staging !== 0) {
     return json({ error: "unknown choir" }, 400);
   }
-  const [song, replaced] = await db.batch<{ prefix: string }>([
+  // A JOY-alumnit song goes on JOY-kuoro's list too, with the same files.
+  const lists = ALSO_ON[to] ? [to, ALSO_ON[to]] : [to];
+  const [song, ...replaced] = await db.batch<{ prefix: string }>([
     db.prepare("SELECT prefix FROM songs WHERE choir = ? AND slug = ?").bind(from, slug),
-    db.prepare("SELECT prefix FROM songs WHERE choir = ? AND slug = ?").bind(to, slug),
+    ...lists.map((list) => db.prepare("SELECT prefix FROM songs WHERE choir = ? AND slug = ?").bind(list, slug)),
   ]);
   const prefix = song!.results[0]?.prefix;
   if (!prefix) return json({ error: "unknown song" }, 400);
-  const oldPrefix = replaced!.results[0]?.prefix ?? null;
+  const oldPrefixes = [...new Set(replaced.map((r) => r.results[0]?.prefix).filter((p): p is string => !!p))];
   const newPrefix = `songs/${to}/${slug}/${versionOf(prefix)}/`;
 
   const keys = await listKeys(ctx.env.SONGS, prefix);
@@ -718,7 +727,7 @@ async function adminMove(ctx: Ctx): Promise<Response> {
   }
   const now = new Date(ctx.now * 1000).toISOString().replace(/\.\d+Z$/, "Z");
   await db.batch([
-    db.prepare(
+    ...lists.map((list) => db.prepare(
       `INSERT INTO songs (choir, slug, title, prefix, parts, duration, published_at, ${CREDITS})
        SELECT ?1, slug, title, ?2, parts, duration,
               COALESCE((SELECT published_at FROM songs WHERE choir = ?1 AND slug = ?4), ?5), ${CREDITS}
@@ -726,14 +735,16 @@ async function adminMove(ctx: Ctx): Promise<Response> {
        ON CONFLICT (choir, slug) DO UPDATE SET title = excluded.title, prefix = excluded.prefix,
          parts = excluded.parts, duration = excluded.duration, composer = excluded.composer,
          lyricist = excluded.lyricist, arranger = excluded.arranger`,
-    ).bind(to, newPrefix, from, slug, now),
+    ).bind(list, newPrefix, from, slug, now)),
     db.prepare("DELETE FROM songs WHERE choir = ? AND slug = ?").bind(from, slug),
   ]);
-  // Nothing points at these any more. The replaced version's folder may still
+  // Nothing points at these any more. A replaced version's folder may still
   // be another list's (one copy for several lists, #104); then it stays.
-  const shared = oldPrefix && await db.prepare("SELECT 1 FROM songs WHERE prefix = ? LIMIT 1").bind(oldPrefix).first();
-  const stale = [...keys,
-    ...(oldPrefix && oldPrefix !== newPrefix && !shared ? await listKeys(ctx.env.SONGS, oldPrefix) : [])];
+  const stale = [...keys];
+  for (const old of oldPrefixes) {
+    if (old === newPrefix || await db.prepare("SELECT 1 FROM songs WHERE prefix = ? LIMIT 1").bind(old).first()) continue;
+    stale.push(...await listKeys(ctx.env.SONGS, old));
+  }
   for (let i = 0; i < stale.length; i += 1000) await ctx.env.SONGS.delete(stale.slice(i, i + 1000));
   return json({ moved: slug, to });
 }
