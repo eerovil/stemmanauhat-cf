@@ -76,6 +76,14 @@ A flag's `part` (`song_requests.part`) is the part the singer sings, not the par
 compare all parts at the flagged bar. Check `songs.published_at` too: a republish after the flag
 may already have fixed it.
 
+## Publishing a JOY song
+
+Every `joy-alumnit` song is on `joy` too; a new `joy` song is not on `joy-alumnit`
+(eerovil/eeron-omat-taskit#101). `scripts/publish-songs.sh` (sing-song) and the test list's
+"Siirrä…" keep that. song-app's own Publish panel does not: it publishes to one list and takes the
+song off the other. Never publish a `joy` or `joy-alumnit` song with the panel; use sing-song or
+`publish-songs.sh` (Eero, 2026-10-21).
+
 ## Where things are decided
 
 The product decisions (D1–D7) are in the first issue of this repository, moved from
