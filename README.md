@@ -71,7 +71,11 @@ A singer's part carries from song to song: the player starts each song on the pa
 picked in that choir. Songs name and divide their parts differently ("Basso 2", "Basso", "Bass",
 "B2"), so the `voices` table in D1 (#107) holds a tree of voices: group (Naiset, Miehet), voice
 (Basso), divided part (Basso 2) and its upper or lower half (Upper bass 2), at most four levels.
-Each place lists every name it goes by, compared ignoring letter case and spaces. A remembered
+Each place lists every name it goes by, compared ignoring letter case and spaces, and has
+its own name in Finnish and English (`name_fi`, `name_en`): the part picker and the player show
+that one, so "B2", "Bass 2" and "Basso 2" all read "Basso 2" ("Bass 2" in English). Renaming a
+place renames it in every song, with no republishing. A name not in the tree shows as the
+song has it. A remembered
 part that the song doesn't have falls back to the nearest place above it that it has, never
 down or sideways; a name not in the tree ("Tenori solo") matches only itself, and a name ending
 in "b" ("S1b") sits just below the name without it. Publishing with `scripts/publish-songs.sh`
@@ -83,6 +87,9 @@ edit the table, no code change needed:
 
     ./scripts/run.sh --cloudflare corepack pnpm exec wrangler d1 execute stemmanauhat --remote \
       --command "UPDATE voices SET names = json_insert(names, '\$[#]', 'Bassi') WHERE id = 'B'"
+
+A place made by `--place` shows as the name it was made for, in both languages, until renamed
+(`UPDATE voices SET name_en = 'Bass 4' WHERE id = 'B4'`).
 
 ### Usage events
 

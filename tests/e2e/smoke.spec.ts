@@ -330,6 +330,27 @@ test("a singer of Basso 2 starts on Basso in a song not divided, and keeps Basso
     .toBe("Basso");
 });
 
+test("parts show by their place's own name, whatever the song calls them (#107)", async ({ page }) => {
+  await page.route("**/api/songs/public/esittely", async (route) => {
+    const data = await (await route.fetch()).json();
+    data.parts = [{ name: "T1" }, { name: "Bass 2" }];
+    await route.fulfill({ json: data });
+  });
+  await page.goto("/c/public");
+  await page.evaluate(() => localStorage.setItem("stemmanauhat:public:part", "Basso 2"));
+  await page.goto("/c/public/esittely");
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await expect(page.locator(".own-name")).toHaveText("Basso 2");
+  await page.getByRole("button", { name: "Vaihda oma stemma" }).click();
+  await expect(page.getByRole("dialog", { name: "Valitse oma stemma" }).getByRole("button"))
+    .toHaveText(["Tenori 1", "Basso 2"]);
+
+  await page.evaluate(() => localStorage.setItem("stemmanauhat:lang", "en"));
+  await page.reload();
+  await expect(page.getByTestId("score").locator("svg").first()).toBeVisible();
+  await expect(page.locator(".own-name")).toHaveText("Bass 2");
+});
+
 test("the public demo opens without signing in", async ({ page }) => {
   await page.goto("/c/public");
   await page.getByRole("link", { name: "Esittelylaulu" }).click();

@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { focusOf, keepChoirPart, placeOf, staffCount, staffOf, startingPart, visibleStaves, type Voice }
+import { focusOf, keepChoirPart, partLabel, placeOf, staffCount, staffOf, startingPart, visibleStaves, type Voice }
   from "../../src/client/player/part";
 
 /** The voice tree as the migration seeds it (#107). */
 const tree: Voice[] = [...readFileSync("migrations/0009_voices.sql", "utf8")
-  .matchAll(/^ {2}\('([^']+)', (NULL|'[^']+'), '(\[.*\])'\)/gm)]
-  .map(([, id, parent, names]) => ({ id: id!, parent: parent === "NULL" ? null : parent!.slice(1, -1), names: JSON.parse(names!) }));
+  .matchAll(/^ {2}\('([^']+)', (NULL|'[^']+'), '([^']+)', '([^']+)', '(\[.*\])'\)/gm)]
+  .map(([, id, parent, fi, en, names]) => ({ id: id!, parent: parent === "NULL" ? null : parent!.slice(1, -1), fi: fi!, en: en!,
+    names: JSON.parse(names!) }));
 
 describe("startingPart", () => {
   const split = ["S1", "S1b", "S2", "A1", "A2"];
@@ -54,9 +55,9 @@ describe("the voice tree (#107)", () => {
     for (const name of ["Tenori solo", "Solo 1", "Trio T1", "Solo", "Bassi"]) expect(placeOf(name, tree)).toBeNull();
   });
   it("leaves out a row too deep or whose parents loop or are missing", () => {
-    const deep: Voice[] = [{ id: "a", parent: null, names: ["a"] }, { id: "b", parent: "a", names: ["bb"] },
+    const deep: Voice[] = ([{ id: "a", parent: null, names: ["a"] }, { id: "b", parent: "a", names: ["bb"] },
       { id: "c", parent: "b", names: ["c"] }, { id: "d", parent: "c", names: ["d"] }, { id: "e", parent: "d", names: ["e"] },
-      { id: "x", parent: "y", names: ["x"] }, { id: "y", parent: "x", names: ["y"] }, { id: "z", parent: "gone", names: ["z"] }];
+      { id: "x", parent: "y", names: ["x"] }, { id: "y", parent: "x", names: ["y"] }, { id: "z", parent: "gone", names: ["z"] }] as Omit<Voice, "fi" | "en">[]).map((v) => ({ ...v, fi: v.id, en: v.id }));
     expect(placeOf("d", deep)).toEqual(["a", "b", "c", "d"]);
     expect(placeOf("e", deep)).toBeNull();
     expect(placeOf("x", deep)).toBeNull();
@@ -87,6 +88,15 @@ describe("the voice tree (#107)", () => {
   });
   it("finds the song's own part by its place too", () => {
     expect(start(["Tenori", "Bass"], "Tenori", "Basso")).toBe(1);
+  });
+  it("shows every part by its place's own name, in the site's language", () => {
+    for (const name of ["B2", "Bass 2", "basso2"]) expect(partLabel(name, tree, "fi")).toBe("Basso 2");
+    expect(partLabel("B2", tree, "en")).toBe("Bass 2");
+    expect(partLabel("Upper B2", tree, "fi")).toBe("Basso 2 ylä");
+    expect(partLabel("Mezzo", tree, "en")).toBe("Mezzo-soprano");
+    expect(partLabel("Tenori solo", tree, "en")).toBe("Tenori solo");
+    expect(partLabel("T1b", tree, "fi")).toBe("T1b");
+    expect(partLabel("B2", [], "fi")).toBe("B2");
   });
   it("keeps the choir part when the singer picks a place above it", () => {
     expect(keepChoirPart("Basso 2", "Basso", tree)).toBe(true);

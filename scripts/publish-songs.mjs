@@ -232,7 +232,8 @@ export function treePlan(tree, songs, places = []) {
   const json = (v) => quote(JSON.stringify(v.names));
   return [
     ...voices.filter((v) => created.has(v.id)).map((v) =>
-      `INSERT INTO voices (id, parent, names) VALUES (${quote(v.id)}, ${quote(v.parent)}, ${json(v)});`),
+      // A new place shows as the name it was made for until someone renames it (README, "Part names").
+      `INSERT INTO voices (id, parent, name_fi, name_en, names) VALUES (${quote(v.id)}, ${quote(v.parent)}, ${quote(v.names[0])}, ${quote(v.names[0])}, ${json(v)});`),
     ...voices.filter((v) => changed.has(v.id)).map((v) => `UPDATE voices SET names = ${json(v)} WHERE id = ${quote(v.id)};`),
     ...unplaced.map((name) => `INSERT OR IGNORE INTO unplaced_parts (name) VALUES (${quote(name)});`),
   ].join("\n");

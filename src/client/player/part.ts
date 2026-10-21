@@ -5,6 +5,9 @@
 export interface Voice {
   id: string;
   parent: string | null;
+  /** What the player shows for every part at this place, whatever the song calls it. */
+  fi: string;
+  en: string;
   names: string[];
 }
 
@@ -41,6 +44,17 @@ function pathOf(voice: Voice, voices: Voice[]): string[] | null {
     v = up;
   }
   return path;
+}
+
+/**
+ * The name to show for a part: its place's own name in the tree, in the site's language
+ * ("B2", "Bass 2" and "Basso 2" all show as "Basso 2"), or the song's own name for a part the
+ * tree doesn't name ("Tenori solo", a split "T1b").
+ */
+export function partLabel(name: string, voices: Voice[], lang: "fi" | "en"): string {
+  const id = placeOf(name, voices)?.at(-1);
+  const voice = voices.find((v) => v.id === id);
+  return voice ? voice[lang] : name;
 }
 
 const samePlace = (a: string[] | null, b: string[] | null) =>

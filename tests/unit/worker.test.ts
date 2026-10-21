@@ -206,11 +206,11 @@ describe("popularGroups", () => {
 describe("parseVoices", () => {
   it("reads the rows and leaves out one whose names are not a list of strings", () => {
     expect(parseVoices([
-      { id: "men", parent: null, names: '["Miehet", "Men"]' },
-      { id: "B", parent: "men", names: "not json" },
-      { id: "T", parent: "men", names: '["Tenori", 1]' },
-      { id: "Bar", parent: "men", names: '{"name": "Bar"}' },
-    ])).toEqual([{ id: "men", parent: null, names: ["Miehet", "Men"] }]);
+      { id: "men", parent: null, name_fi: "Miehet", name_en: "Men", names: '["Miehet", "Men"]' },
+      { id: "B", parent: "men", name_fi: "Basso", name_en: "Bass", names: "not json" },
+      { id: "T", parent: "men", name_fi: "Tenori", name_en: "Tenor", names: '["Tenori", 1]' },
+      { id: "Bar", parent: "men", name_fi: "Baritoni", name_en: "Baritone", names: '{"name": "Bar"}' },
+    ])).toEqual([{ id: "men", parent: null, fi: "Miehet", en: "Men", names: ["Miehet", "Men"] }]);
     expect(parseVoices([])).toEqual([]);
   });
 });
