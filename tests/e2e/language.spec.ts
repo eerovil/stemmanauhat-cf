@@ -30,6 +30,20 @@ test("an English browser gets the song list in English, with US dates and Englis
   await order.getByRole("button", { name: "Newest" }).click();
   await expect(page.locator(".songs .date")).toHaveText(["10/5/2026", "9/1/2026", "8/1/2026"]);
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  // The site's maker and its source code (#119).
+  await expect(page.getByText("Made by Eero Vilpponen")).toBeVisible();
+  const source = page.getByRole("link", { name: "Source code" });
+  await expect(source).toHaveAttribute("href", "https://github.com/eerovil/stemmanauhat-cf");
+  await expect(source).toHaveAttribute("target", "_blank");
+});
+
+test("the signed-out front page and sign-in page name the maker and link the source code (#119)", async ({ page }) => {
+  await page.goto("/?lang=fi");
+  await expect(page.getByText("Tekijä: Eero Vilpponen")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Lähdekoodi" }))
+    .toHaveAttribute("href", "https://github.com/eerovil/stemmanauhat-cf");
+  await page.goto("/signin?lang=en");
+  await expect(page.getByRole("link", { name: "Source code" })).toBeVisible();
 });
 
 test("the language can be switched, is remembered on the device, and ?lang= overrides it", async ({ page }) => {
