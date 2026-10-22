@@ -1,0 +1,18 @@
+{
+ "slug": "pitka",
+ "title": "Pitkä laulu",
+ "choir": "public",
+ "version": "20261009T120000Z",
+ "score": "score.musicxml",
+ "timing": "timing.json",
+ "parts": [
+  {
+   "name": "Tenori"
+  },
+  {
+   "name": "Basso"
+  }
+ ],
+ "duration": 600.0,
+ "midi": "score.mid"
+}

@@ -58,6 +58,8 @@ const songs = [
   ["jm", "iltalaulu", "Iltalaulu", "tests/fixtures/two-part", 8.0, [null, null, null]],
   // A free-rhythm verse written as one bar of 32 quarters (#45).
   ["public", "vapaa-rytmi", "Vapaa rytmi", "tests/fixtures/long-bar", 20.0, [null, null, null]],
+  // A song wider on one line than OSMD's default page limit (eeron-omat-taskit#104).
+  ["public", "pitka", "Pitkä laulu", "tests/fixtures/long-song", 600.0, [null, null, null]],
   // The two-part song sung: the fixture MP3s are synthetic tones, one per part.
   ["public", "laulettu", "Laulettu laulu", "tests/fixtures/two-part", 8.0, ["Esimerkki Säveltäjä", "Esimerkki Sanoittaja", null]],
   // The two-part song with both parts on one staff (musescore-choir-plugins#420).
