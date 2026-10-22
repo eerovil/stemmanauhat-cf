@@ -54,36 +54,50 @@ export function songPivot(notes: Notes): number {
  * every part's notes starting or ending move it.
  */
 export function pitchCurves(notes: Notes, octaveDb = OCTAVE_DB, pivot: Pivot = DEFAULT_PIVOT): number[][] {
-  const all = notes.parts.flat();
   const fixed = pivot === "song" ? songPivot(notes) : pivot;
-  const eventsOf = (list: typeof all) => [...list.map((n) => ({ t: n.start, lead: LEAD })),
-    ...list.filter((n) => Number.isFinite(n.end)).map((n) => ({ t: n.end, lead: 0 }))];
-  const allEvents = pivot === "moment" ? eventsOf(all) : [];
-  const soundingAt = (list: typeof all, t: number) => list.filter((m) => m.start < t + EPS && m.end > t + EPS);
-  return notes.parts.map((list) => {
-    // With the middle of the moment, every part's notes move this part's gain too.
-    const times = (pivot === "moment" ? allEvents : eventsOf(list)).sort((a, b) => a.t - b.t || b.lead - a.lead);
-    const curve: number[] = [];
-    let gain: number | null = null;
-    let last = -Infinity;
-    for (const { t, lead } of times) {
-      if (t < last + EPS) continue;
-      const sounding = soundingAt(list, t);
-      if (!sounding.length) continue;
-      last = t;
-      let middle = fixed as number;
-      if (pivot === "moment") {
-        const now = soundingAt(all, t);
-        middle = now.reduce((a, m) => a + m.key, 0) / now.length;
-      }
-      const db = sounding.reduce((a, m) => a + pitchDb(m.key, octaveDb, middle), 0) / sounding.length;
-      const g = dbToGain(db);
+  // One pass through every note's start and end in time order (starts first at the same time),
+  // keeping each part's and the whole song's sounding notes as a count and a sum of keys.
+  const events: { t: number; start: boolean; part: number; key: number }[] = [];
+  for (const n of notes.parts.flat()) {
+    events.push({ t: n.start, start: true, part: n.part, key: n.key });
+    if (Number.isFinite(n.end)) events.push({ t: n.end, start: false, part: n.part, key: n.key });
+  }
+  events.sort((a, b) => a.t - b.t || Number(b.start) - Number(a.start));
+  const parts = notes.parts.length;
+  const count = new Array<number>(parts).fill(0);
+  const sum = new Array<number>(parts).fill(0);
+  let allCount = 0;
+  let allSum = 0;
+  const curves: number[][] = notes.parts.map(() => []);
+  const gains: (number | null)[] = notes.parts.map(() => null);
+  for (let i = 0; i < events.length;) {
+    // Everything within EPS of the first event happens together, at its time.
+    const t = events[i]!.t;
+    const first = events[i]!.start ? LEAD : 0;
+    const leads = new Map<number, number>();
+    for (; i < events.length && events[i]!.t < t + EPS; i++) {
+      const e = events[i]!;
+      if (!leads.has(e.part)) leads.set(e.part, e.start ? LEAD : 0);
+      const d = e.start ? 1 : -1;
+      count[e.part]! += d;
+      sum[e.part]! += d * e.key;
+      allCount += d;
+      allSum += d * e.key;
+    }
+    // With the middle of the moment, every part's notes move every part's gain.
+    const middle = pivot === "moment" ? allSum / Math.max(1, allCount) : (fixed as number);
+    for (let p = 0; p < parts; p++) {
+      const lead = pivot === "moment" ? first : leads.get(p);
+      if (lead === undefined || count[p]! <= 0) continue;
+      const g = dbToGain(pitchDb(sum[p]! / count[p]!, octaveDb, middle));
+      const gain = gains[p]!;
       if (g === gain) continue;
+      const curve = curves[p]!;
       const at = Math.max(0, t - lead, curve.length ? curve[curve.length - 2]! : 0);
       if (gain !== null) curve.push(at, gain);
       curve.push(gain === null ? at : at + RAMP, g);
-      gain = g;
+      gains[p] = g;
     }
-    return curve;
-  });
+  }
+  return curves;
 }

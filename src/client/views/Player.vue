@@ -816,7 +816,9 @@ function onPointerUp(event: PointerEvent) {
 
       <!-- Säädöt: a sheet just above the dock; a tap on the dimmed score closes it. -->
       <div v-if="sheetOpen" class="backdrop" @click="closePanels"></div>
-      <div v-if="sheetOpen" class="sheet" :style="{ bottom: `${dockHeight - 1}px` }">
+      <!-- No taller than the screen above the dock: Lisäasetukset's part rows scroll within it. -->
+      <div v-if="sheetOpen" class="sheet"
+        :style="{ bottom: `${dockHeight - 1}px`, maxHeight: `calc(100dvh - ${dockHeight}px - env(safe-area-inset-top) - 8px)` }">
         <div class="handle" aria-hidden="true"></div>
         <ul v-if="song.flags.length" class="flags" :aria-label="t.reportedProblems">
           <li v-for="f in song.flags" :key="f.id">{{ t.reportedProblem }} {{ flagLine(f) }}</li>
@@ -842,12 +844,6 @@ function onPointerUp(event: PointerEvent) {
           <div v-if="switching" class="mode-hint">{{ t.loadingSinging }}</div>
           <div v-else-if="sound === 'sung' && playerKind !== 'sung'" class="mode-hint">{{ t.singingFailed }}</div>
         </template>
-        <div v-if="mode !== 'solo'" class="others-row">
-          <span class="row-label">{{ t.otherParts }}</span>
-          <input type="range" min="0" max="1" step="0.01" :value="others" :aria-label="t.otherPartsVolume"
-            @input="onOthersSlider(Number(($event.target as HTMLInputElement).value))" />
-          <span class="others-value">{{ Math.round(gainOf(others) * 100) }} %</span>
-        </div>
         <div class="setting">
           <span class="row-label">{{ t.tempo }}</span>
           <div class="stepper" role="group" :aria-label="t.tempo">
@@ -877,29 +873,39 @@ function onPointerUp(event: PointerEvent) {
               @click="changeZoom(1)">+</button>
           </div>
         </div>
-        <details v-if="hasSung" class="advanced">
+        <!-- Lisäasetukset (#117): closed until tapped. Muut stemmat for every song; on a sung song
+             also the singing's balance by pitch and each sung part's volume. -->
+        <details class="advanced">
           <summary>{{ t.advanced }}</summary>
-          <div class="mode-hint">{{ t.advancedSungOnly }}</div>
-          <div class="others-row">
-            <span class="row-label">{{ t.lowLouder }}</span>
-            <input type="range" min="0" max="12" step="1" :value="lowLouder" :aria-label="t.lowLouder"
-              @input="setBalance(Number(($event.target as HTMLInputElement).value), middle)" />
-            <span class="others-value">{{ lowLouder }} {{ t.dbPerOctave }}</span>
+          <div v-if="mode !== 'solo'" class="others-row">
+            <span class="row-label">{{ t.otherParts }}</span>
+            <input type="range" min="0" max="1" step="0.01" :value="others" :aria-label="t.otherPartsVolume"
+              @input="onOthersSlider(Number(($event.target as HTMLInputElement).value))" />
+            <span class="others-value">{{ Math.round(gainOf(others) * 100) }} %</span>
           </div>
-          <div class="setting">
-            <span class="row-label">{{ t.middle }}</span>
-            <div class="segmented three" role="group" :aria-label="t.middle">
-              <button v-for="m in MIDDLES" :key="m" type="button" :class="{ on: middle === m }" :aria-pressed="middle === m"
-                @click="setBalance(lowLouder, m)">{{ m === 60 ? "C4" : m === "song" ? t.middleSong : t.middleMoment }}</button>
+          <template v-if="hasSung">
+            <div class="mode-hint">{{ t.advancedSungOnly }}</div>
+            <div class="others-row">
+              <span class="row-label">{{ t.lowLouder }}</span>
+              <input type="range" min="0" max="12" step="1" :value="lowLouder" :aria-label="t.lowLouder"
+                @input="setBalance(Number(($event.target as HTMLInputElement).value), middle)" />
+              <span class="others-value">{{ lowLouder }} {{ t.dbPerOctave }}</span>
             </div>
-          </div>
-          <div class="mode-hint">{{ middle === 60 ? t.middleCHint : middle === "song" ? t.middleSongHint : t.middleMomentHint }}</div>
-          <div v-for="(p, i) in song.parts" :key="p.name" class="others-row">
-            <span class="row-label">{{ labelOf(p.name) }}</span>
-            <input type="range" min="0" max="2" step="0.05" :value="volumes[i] ?? 1" :aria-label="`${labelOf(p.name)}: ${t.partVolume}`"
-              @input="setVolume(i, Number(($event.target as HTMLInputElement).value))" />
-            <span class="others-value">{{ Math.round((volumes[i] ?? 1) * 100) }} %</span>
-          </div>
+            <div class="setting">
+              <span class="row-label">{{ t.middle }}</span>
+              <div class="segmented three" role="group" :aria-label="t.middle">
+                <button v-for="m in MIDDLES" :key="m" type="button" :class="{ on: middle === m }" :aria-pressed="middle === m"
+                  @click="setBalance(lowLouder, m)">{{ m === 60 ? "C4" : m === "song" ? t.middleSong : t.middleMoment }}</button>
+              </div>
+            </div>
+            <div class="mode-hint">{{ middle === 60 ? t.middleCHint : middle === "song" ? t.middleSongHint : t.middleMomentHint }}</div>
+            <div v-for="(p, i) in song.parts" :key="p.name" class="others-row">
+              <span class="row-label">{{ labelOf(p.name) }}</span>
+              <input type="range" min="0" max="2" step="0.05" :value="volumes[i] ?? 1" :aria-label="`${labelOf(p.name)}: ${t.partVolume}`"
+                @input="setVolume(i, Number(($event.target as HTMLInputElement).value))" />
+              <span class="others-value">{{ Math.round((volumes[i] ?? 1) * 100) }} %</span>
+            </div>
+          </template>
         </details>
         <template v-if="canFlag">
           <div class="divider"></div>

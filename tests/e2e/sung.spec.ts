@@ -295,12 +295,41 @@ test("Säädöt's closed Lisäasetukset set the singing's balance by pitch and e
   await expect(page.getByRole("slider", { name: /Basso.*voimakkuus/ })).toHaveValue("1.5");
 });
 
-test("a song without singing has no Lisäasetukset", async ({ page }) => {
+test("a song without singing has Muut stemmat alone in Lisäasetukset, closed until tapped", async ({ page }) => {
   await page.goto("/c/public/esittely");
   await choosePartIfAsked(page, "Tenori");
   const selva = page.getByRole("button", { name: "Selvä" });
   if (await selva.count()) await selva.click();
   await page.getByRole("button", { name: "Säädöt" }).click();
-  await expect(page.getByRole("slider", { name: "Muiden stemmojen voimakkuus" })).toBeVisible();
-  await expect(page.locator("details.advanced")).toHaveCount(0);
+  const others = page.getByRole("slider", { name: "Muiden stemmojen voimakkuus" });
+  await expect(others).toBeHidden();
+  await page.locator("details.advanced summary").click();
+  await expect(others).toBeVisible();
+  await expect(page.getByRole("slider", { name: "Matalat kovempaa" })).toHaveCount(0);
+  await expect(page.getByText("Nämä koskevat vain laulua.")).toHaveCount(0);
+});
+
+test("on a short phone Säädöt with Lisäasetukset open scrolls within the screen, top to bottom", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 560 });
+  await page.goto("/c/public/laulettu");
+  await page.evaluate(SUNG);
+  await page.reload();
+  await choosePartIfAsked(page, "Tenori");
+  await expect(gains(page)).toHaveAttribute("data-player", "sung");
+  const selva = page.getByRole("button", { name: "Selvä" });
+  if (await selva.count()) await selva.click();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await page.locator("details.advanced summary").click();
+  const sheet = page.locator(".sheet");
+  const box = (await sheet.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(await sheet.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  // The last part's slider scrolls into view and works; the first row is there again at the top.
+  const last = page.getByRole("slider", { name: /Basso.*voimakkuus/ });
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  await last.fill("0.5");
+  await expect(page.locator("details.advanced .others-value").last()).toHaveText("50 %");
+  await sheet.evaluate((el) => { el.scrollTop = 0; });
+  await expect(page.locator(".segmented.modes")).toBeInViewport();
 });

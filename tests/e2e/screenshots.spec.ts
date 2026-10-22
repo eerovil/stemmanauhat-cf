@@ -428,4 +428,6 @@ test("Säädöt's Lisäasetukset open on a sung song (#117)", async ({ page }) =
   await page.getByRole("slider", { name: /Basso.*voimakkuus/ }).fill("1.3");
   await page.locator("details.advanced").scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${dir}/advanced-open-phone.png` });
+  await page.locator(".sheet").evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  await page.screenshot({ path: `${dir}/advanced-open-bottom-phone.png` });
 });
