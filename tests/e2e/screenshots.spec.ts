@@ -413,3 +413,21 @@ test("song list: the notice to install the site as an app, on Android and on an 
   await phone.screenshot({ path: `${dir}/song-list-install-iphone.png` });
   await iphone.close();
 });
+
+test("Säädöt's Lisäasetukset open on a sung song (#117)", async ({ page }) => {
+  await page.goto("/c/public/laulettu");
+  await page.evaluate(() => localStorage.setItem("stemmanauhat:settings", JSON.stringify({ sound: "sung" })));
+  await page.reload();
+  await choosePartIfAsked(page, "Tenori");
+  await expect(page.locator(".dock")).toHaveAttribute("data-player", "sung");
+  const selva = page.getByRole("button", { name: "Selvä" });
+  if (await selva.count()) await selva.click();
+  await page.getByRole("button", { name: "Säädöt" }).click();
+  await page.screenshot({ path: `${dir}/advanced-closed-phone.png` });
+  await page.locator("details.advanced summary").click();
+  await page.getByRole("slider", { name: /Basso.*voimakkuus/ }).fill("1.3");
+  await page.locator("details.advanced").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${dir}/advanced-open-phone.png` });
+  await page.locator(".sheet").evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  await page.screenshot({ path: `${dir}/advanced-open-bottom-phone.png` });
+});
