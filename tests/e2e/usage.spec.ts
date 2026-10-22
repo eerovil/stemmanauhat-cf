@@ -114,7 +114,7 @@ test("the song list puts the songs most people listened to lately first, by defa
   for (let i = 0; i < 5; i++) expect(await post(admin, listen("esittely", 600))).toBe(204);
   await adminContext.close();
 
-  // The list tells only the order: no counts, no names.
+  // The list tells only the order: no counts, no names. Pitkä laulu (#104 of eeron-omat-taskit) has no listens.
   const body = await page.evaluate(async () => (await fetch("/api/songs?choir=public")).json() as Promise<{ popular: string[][] }>);
   expect(body.popular.slice(0, 2)).toEqual([["vapaa-rytmi"], ["laulettu"]]);
   expect(body.popular.flat()).not.toContain("esittely");
@@ -123,11 +123,11 @@ test("the song list puts the songs most people listened to lately first, by defa
   const order = page.getByRole("group", { name: "Järjestys" });
   await expect(order.getByRole("button", { name: "Suositut" })).toHaveAttribute("aria-pressed", "true");
   const titles = page.locator(".songs .song-title");
-  await expect(titles).toHaveText(["Vapaa rytmi", "Laulettu laulu", "Esittelylaulu"]);
+  await expect(titles).toHaveText(["Vapaa rytmi", "Laulettu laulu", "Esittelylaulu", "Pitkä laulu"]);
   await order.getByRole("button", { name: "Nimi" }).click();
-  await expect(titles).toHaveText(["Esittelylaulu", "Laulettu laulu", "Vapaa rytmi"]);
+  await expect(titles).toHaveText(["Esittelylaulu", "Laulettu laulu", "Pitkä laulu", "Vapaa rytmi"]);
   await page.reload();
   await expect(order.getByRole("button", { name: "Nimi" })).toHaveAttribute("aria-pressed", "true");
   await order.getByRole("button", { name: "Suositut" }).click();
-  await expect(titles).toHaveText(["Vapaa rytmi", "Laulettu laulu", "Esittelylaulu"]);
+  await expect(titles).toHaveText(["Vapaa rytmi", "Laulettu laulu", "Esittelylaulu", "Pitkä laulu"]);
 });
