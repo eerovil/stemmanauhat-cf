@@ -177,7 +177,10 @@ describe("SungPlayer", () => {
     const note = (part: number, key: number, start: number) => ({ part, track: part, on: 0, off: 1, key, start, end: start + 1 });
     p.setUnisons({ parts: [[note(0, 60, 0)], [note(1, 48, 0), note(1, 60, 2)]], unisons: [] });
     const curves = () => (port.sent.filter((m) => m.type === "curves").at(-1) as { curves: number[][] }).curves;
-    // By default the moment's middle: C3 and C4 together meet at F#3, ±2.5 dB; C4 alone stays.
+    // Off by default: no curves at all.
+    expect(curves()).toEqual([]);
+    // At 5 dB with the moment's middle: C3 and C4 together meet at F#3, ±2.5 dB; C4 alone stays.
+    p.setBalance(5, "moment");
     expect(curves()[0]![1]).toBeCloseTo(10 ** (-2.5 / 20));
     expect(curves()[1]!.filter((_, i) => i % 2 === 0)).toEqual([0, 1950, 1962]);
     expect(curves()[1]![1]).toBeCloseTo(10 ** (2.5 / 20));

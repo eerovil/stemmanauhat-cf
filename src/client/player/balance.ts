@@ -9,9 +9,11 @@ import { dbToGain, type Notes } from "./unison";
  * and down as much above it, so the lowest part sounding is the loudest and a
  * part singing alone stays as recorded. Säädöt › Lisäasetukset can change the
  * amount and the middle (middle C, or the whole song's mean); the piano plays
- * as written.
+ * as written. Listening again with better headphones, Eero found the parts in
+ * balance as recorded (2026-10-22): the amount starts at 0, off, and the
+ * slider stays for whoever wants it.
  */
-export const OCTAVE_DB = 5;
+export const OCTAVE_DB = 0;
 
 /** Middle C, the MIDI key that plays as recorded with the fixed middle. */
 export const MIDDLE_C = 60;

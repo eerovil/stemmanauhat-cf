@@ -272,7 +272,7 @@ test("Säädöt's closed Lisäasetukset set the singing's balance by pitch and e
   await expect(page.getByRole("slider", { name: "Matalat kovempaa" })).toBeHidden();
   await advanced.locator("summary").click();
   const low = page.getByRole("slider", { name: "Matalat kovempaa" });
-  await expect(low).toHaveValue("5");
+  await expect(low).toHaveValue("0");
   const middle = page.getByRole("group", { name: "Keskikohta" });
   await expect(middle.getByRole("button", { name: "Hetken" })).toHaveAttribute("aria-pressed", "true");
   await low.fill("8");

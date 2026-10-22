@@ -220,7 +220,8 @@ export class SungPlayer {
   private sendCurves(): void {
     if (!this.notes) return;
     const rate = this.context.sampleRate;
-    const curves = pitchCurves(this.notes, this.balance.octaveDb, this.balance.pivot);
+    // At 0 dB every gain is 1: no curves, so the worklet mixes on its plain path.
+    const curves = this.balance.octaveDb ? pitchCurves(this.notes, this.balance.octaveDb, this.balance.pivot) : [];
     this.send({ type: "curves", curves: curves.map((c) => c.map((v, i) => (i % 2 ? v : Math.round(v * rate)))) });
   }
 
