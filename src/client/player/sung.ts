@@ -3,7 +3,7 @@ import { BasicMIDI } from "spessasynth_core";
 import { CEILING_DB, partChannels } from "./midi";
 import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import { allowSilentMode } from "./session";
-import { pitchCurves } from "./balance";
+import { DEFAULT_PIVOT, OCTAVE_DB, pitchCurves, type Pivot } from "./balance";
 import type { FromWorklet, ToWorklet } from "./sung-worklet";
 import { boosts, findNotes, gainSpans, silenced, type Notes } from "./unison";
 import workletUrl from "./sung-worklet?worker&url";
@@ -40,6 +40,9 @@ export class SungPlayer {
   private reportedAt = 0;
   private applied: number[] = [];
   private notes: Notes | null = null;
+  /** Säädöt › Lisäasetukset: the balance by pitch (balance.ts) and each part's own volume, 1 as it is. */
+  private balance: { octaveDb: number; pivot: Pivot } = { octaveDb: OCTAVE_DB, pivot: DEFAULT_PIVOT };
+  private volumes: number[] = [];
   private readonly count: number;
   private readonly meter: AnalyserNode;
   private readonly samples = new Float32Array(1024);
@@ -104,10 +107,18 @@ export class SungPlayer {
   /** The song's notes from its MIDI, to sing each unison once (unison.ts) and low notes louder (balance.ts). */
   setUnisons(notes: Notes): void {
     this.notes = notes;
-    const rate = this.context.sampleRate;
-    this.send({ type: "curves", curves: pitchCurves(notes).map((c) => c.map((v, i) => (i % 2 ? v : Math.round(v * rate)))) });
+    this.sendCurves();
     this.applyUnisons();
   }
+
+  /** How many dB an octave lower sings louder, and the key that stays as recorded. */
+  setBalance(octaveDb: number, pivot: Pivot): void {
+    this.balance = { octaveDb, pivot };
+    this.sendCurves();
+  }
+
+  /** Each part's own volume on top of the mix, 1 as it is (missing parts: 1). */
+  setVolumes(volumes: number[]): void { this.volumes = volumes; this.applyGains(); }
   get playing(): boolean { return this.wanted; }
   get running(): boolean { return this.wanted && this.context.state === "running"; }
 
@@ -206,11 +217,19 @@ export class SungPlayer {
     this.send({ type: "spans", spans: spans.map((list) => list.flatMap(([a, b, g]) => [Math.round(a * rate), Math.round(b * rate), g])) });
   }
 
+  private sendCurves(): void {
+    if (!this.notes) return;
+    const rate = this.context.sampleRate;
+    const curves = pitchCurves(this.notes, this.balance.octaveDb, this.balance.pivot);
+    this.send({ type: "curves", curves: curves.map((c) => c.map((v, i) => (i % 2 ? v : Math.round(v * rate)))) });
+  }
+
+  /** A part's own volume comes after the scaling, so turning one part up leaves the others as they were. */
   private applyGains(): void {
     const levels = this.levels();
     const power = levels.reduce((a, b) => a + b * b, 0);
     const scale = power > 1 ? 1 / Math.sqrt(power) : 1;
-    this.applied = levels.map((g) => g * scale);
+    this.applied = levels.map((g, i) => g * scale * (this.volumes[i] ?? 1));
     this.send({ type: "gains", gains: this.applied });
   }
 }
