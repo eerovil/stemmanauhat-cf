@@ -90,7 +90,7 @@ export function partFilesIn(dir, parts) {
  * the song on with the same files (sharingLists): they come from D1, so they need
  * not be in CHOIRS. A named list brings its ALSO_ON list along.
  */
-export function publishPlan(manifest, choirs, date, partFiles = [], shared = []) {
+export function publishPlan(manifest, choirs, date, partFiles = [], shared = [], extras = []) {
   const named = withAlsoOn(choirs);
   for (const choir of named) if (!CHOIRS.includes(choir)) throw new Error(`unknown choir: ${choir}`);
   const lists = [...named, ...shared];
@@ -107,7 +107,7 @@ export function publishPlan(manifest, choirs, date, partFiles = [], shared = [])
   const version = versionFor(date);
   const prefix = `songs/${choir}/${slug}/${version}/`;
   if (partFiles.length > 0 && partFiles.length !== parts.length) throw new Error(`bad part files for ${slug}`);
-  const files = [...FILES, ...partFiles];
+  const files = [...FILES, ...partFiles, ...extras];
   // The part names, and each part's sung MP3 only when the bundle has them
   // (partFilesIn), marked `sung` so the player offers them as "Laulu". A name in an
   // older manifest alone is not listed (#36): it points at nothing uploaded.
@@ -368,10 +368,13 @@ export async function publishAll(store, choirs, dirs, { log = console.log, now =
   for (const dir of dirs) {
     const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
     const sung = manifest.sung === true ? partFilesIn(dir, manifest.parts ?? []) : [];
+    // What each sung part sings, note by note: the player sings a note parts share
+    // once only where their syllables match (eeron-omat-taskit#110).
+    const extras = sung.length > 0 && existsSync(join(dir, "words.json")) ? ["words.json"] : [];
     publishPlan(manifest, named, now(), sung);
     const shared = await sharingLists(store, manifest.slug, named);
     if (shared.length > 0) log(`${manifest.title}: also on ${shared.join(", ")} (same files)`);
-    const plan = publishPlan(manifest, named, now(), sung, shared);
+    const plan = publishPlan(manifest, named, now(), sung, shared, extras);
     const missing = plan.files.filter((f) => f !== "manifest.json" && !existsSync(join(dir, f)));
     if (missing.length > 0) throw new Error(`${dir}: missing ${missing.join(", ")}`);
     songs.push({ dir, manifest, plan });

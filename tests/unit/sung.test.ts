@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SUNG_GAIN, SungPlayer } from "../../src/client/player/sung";
+import { SUNG_GAIN, SungPlayer, loadNotes } from "../../src/client/player/sung";
+import { smf } from "./smf";
 import type { FromWorklet, ToWorklet } from "../../src/client/player/sung-worklet";
 
 /** A stand-in for Web Audio: a clock the test moves, and a worklet node that records what it is told. */
@@ -237,5 +238,27 @@ describe("SungPlayer", () => {
     vi.stubGlobal("fetch", async () => ({ ok: false, status: 404 }));
     await expect(SungPlayer.create(["/x/parts/1-T.mp3"], () => {}, new FakeContext() as unknown as AudioContext))
       .rejects.toThrow("HTTP 404");
+  });
+});
+
+describe("loadNotes", () => {
+  // T and B start E3 together, T on "kis" and B on "dum".
+  const midi = smf([["T", [[0, 52, 0, 480]]], ["B", [[1, 52, 0, 480]]]]);
+  const serve = (words: unknown) => vi.stubGlobal("fetch", async (url: string) => (url.endsWith(".mid")
+    ? { ok: true, arrayBuffer: async () => midi }
+    : words === undefined ? { ok: false, status: 404 } : { ok: true, json: async () => words }));
+  const kis = { parts: [[[0, 52, "kis"]], [[0, 52, "dum"]]] };
+
+  it("keeps a shared note sung by both parts where words.json gives them different syllables (eeron-omat-taskit#110)", async () => {
+    serve(kis);
+    expect((await loadNotes("/x/score.mid", ["T", "B"], "/x/words.json"))!.unisons).toEqual([]);
+  });
+
+  it("merges it as before for a song with no words.json, or one that does not fit its parts", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const words of [undefined, { parts: kis.parts.slice(1) }, { parts: [[["kis"]], []] }]) {
+      serve(words);
+      expect((await loadNotes("/x/score.mid", ["T", "B"], "/x/words.json"))!.unisons).toHaveLength(1);
+    }
   });
 });

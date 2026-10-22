@@ -314,6 +314,24 @@ describe("publishAll", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+  it("uploads a sung bundle's words.json, for the player's unisons (eeron-omat-taskit#110), and no other bundle's", async () => {
+    const root = mkdtempSync(join(tmpdir(), "publish-"));
+    try {
+      const sung = bundle(root, "laulettu", true, true);
+      const piano = bundle(root, "piano");
+      mkdirSync(join(sung, "parts"));
+      for (const f of ["1-Tenori.mp3", "2-Basso.mp3"]) writeFileSync(join(sung, "parts", f), f);
+      for (const dir of [sung, piano]) writeFileSync(join(dir, "words.json"), '{"parts":[[],[]]}');
+      const puts: string[] = [];
+      const store = { query, put: async (key: string, _data: unknown, type: string) => { puts.push(`${key} ${type}`); },
+        sql: async () => {} };
+      expect(await publishAll(store, "public", [sung, piano], { log: () => {}, now: () => date })).toBe(0);
+      expect(puts).toContain("songs/public/laulettu/20261010T123456Z/words.json application/json");
+      expect(puts.filter((k) => k.includes("words.json"))).toHaveLength(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("uploads nothing when a bundle is missing a file", async () => {
     const root = mkdtempSync(join(tmpdir(), "publish-"));
     try {

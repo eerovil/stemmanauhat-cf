@@ -5,7 +5,7 @@ import { DEFAULT_OTHERS, mixLevels } from "./mix";
 import { allowSilentMode } from "./session";
 import { DEFAULT_PIVOT, OCTAVE_DB, pitchCurves, type Pivot } from "./balance";
 import type { FromWorklet, ToWorklet } from "./sung-worklet";
-import { boosts, findNotes, gainSpans, silenced, type Notes } from "./unison";
+import { boosts, findNotes, gainSpans, sameWords, silenced, type Notes, type Words } from "./unison";
 import workletUrl from "./sung-worklet?worker&url";
 
 /**
@@ -237,16 +237,35 @@ export class SungPlayer {
 
 /**
  * The song's notes from its MIDI file, for the sung player to sing each unison
- * once; null when they cannot be read (then the parts sing every note).
+ * once; null when they cannot be read (then the parts sing every note). With the
+ * song's words.json (`wordsUrl`), only the unisons sung on the same syllable
+ * (sameWords, #110); a song published before it has none and merges as before.
  */
-export async function loadNotes(midiUrl: string, partNames: string[]): Promise<Notes | null> {
+export async function loadNotes(midiUrl: string, partNames: string[], wordsUrl?: string): Promise<Notes | null> {
   try {
-    const r = await fetch(midiUrl);
+    const [r, words] = await Promise.all([fetch(midiUrl), wordsUrl ? loadWords(wordsUrl, partNames.length) : null]);
     if (!r.ok) throw new Error(`MIDI: HTTP ${r.status}`);
     const midi = BasicMIDI.fromArrayBuffer(await r.arrayBuffer());
-    return findNotes(midi, partChannels(midi, partNames));
+    const notes = findNotes(midi, partChannels(midi, partNames));
+    return words ? sameWords(notes, words) : notes;
   } catch (error) {
     console.warn(`unisons not found: ${String(error)}`);
+    return null;
+  }
+}
+
+/** The song's words.json, each of `count` parts' [seconds, key, syllable] list; null when it has none or it does not fit. */
+async function loadWords(url: string, count: number): Promise<Words | null> {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const parts: unknown = ((await r.json()) as { parts?: unknown }).parts;
+    const fits = Array.isArray(parts) && parts.length === count && parts.every((list) => Array.isArray(list)
+      && list.every((w) => Array.isArray(w) && typeof w[0] === "number" && typeof w[1] === "number" && typeof w[2] === "string"));
+    if (!fits) throw new Error("not one list of [seconds, key, syllable] per part");
+    return parts as Words;
+  } catch (error) {
+    console.warn(`words not read: ${String(error)}`);
     return null;
   }
 }
