@@ -28,11 +28,11 @@ D1 for the per-choir email allow-lists, Google sign-in). Read README.md first.
   songs, LYSE for the women's, named per song by the manifest's `"voice"`; a mixed choir's parts name
   their own, `{"name": "Tenori", "voice": "REMY"}` in `manifest.parts`, and the credit names every voice that sings) visible whenever the sung parts play (it is in
   the dock's info, under the bar and time).
-  Each sung note is turned up 5 dB for each octave below the middle of the moment (the mean pitch
-  of the notes sounding then) and down as much above it (`player/balance.ts`; Eero chose it by ear
-  on 2026-10-22, #117); the piano plays every note as written. Säädöt's closed "Lisäasetukset"
-  holds "Muut stemmat" on every song and, on a sung song, the amount and the middle (carried from
-  song to song) and each sung part's own volume (kept per song).
+  The sung parts can be balanced by pitch, louder below the middle of the moment and quieter above
+  it (`player/balance.ts`, #117), but it is off by default (0 dB per octave): with better headphones
+  Eero found the parts in balance as recorded (2026-10-22). Säädöt's closed "Lisäasetukset" holds
+  "Muut stemmat" on every song and, on a sung song, that amount and the middle (carried from song
+  to song) and each sung part's own volume (kept per song). The piano plays every note as written.
 
 - **Where a new part name goes in the voice tree** (#107) is the person publishing's call. When
   `scripts/publish-songs.sh` stops on part names not in the tree, ask Eero where each one goes

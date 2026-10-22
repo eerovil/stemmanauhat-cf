@@ -12,11 +12,12 @@ const notesOf = (tracks: [string, N[]][]) => {
 };
 
 describe("the sung parts' balance by pitch", () => {
-  it("turns a note up 5 dB an octave below the middle and down as much above it, by default the moment's middle", () => {
-    expect(OCTAVE_DB).toBe(5);
+  it("is off by default, and turns a note up the amount an octave below the middle and down as much above it", () => {
+    expect(OCTAVE_DB).toBe(0);
     expect(DEFAULT_PIVOT).toBe("moment");
-    expect(pitchDb(60)).toBe(0);
-    expect(pitchDb(48)).toBe(5);
+    expect(pitchDb(48)).toBe(0);
+    expect(pitchDb(60, 5)).toBe(0);
+    expect(pitchDb(48, 5)).toBe(5);
     expect(pitchDb(72, 3)).toBe(-3);
     expect(pitchDb(48, 3, 48)).toBe(0);
   });
