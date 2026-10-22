@@ -4,6 +4,7 @@ import { getJson, hasSungParts, listCredits, postForm, postJson, Refused, rememb
   songListKey, type SongSummary } from "../api";
 import Icon from "../components/Icon.vue";
 import LanguageSwitch from "../components/LanguageSwitch.vue";
+import SiteCredit from "../components/SiteCredit.vue";
 import { byTitle, day, t, words } from "../i18n";
 import { firstThisVisit, installed, installPrompt, ios, markDone, noticeAllowed, standalone } from "../install";
 import { track } from "../track";
@@ -476,5 +477,6 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(props.choir)}/${encod
       </form>
       <LanguageSwitch />
     </footer>
+    <SiteCredit />
   </main>
 </template>

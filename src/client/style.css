@@ -103,6 +103,8 @@ button.link { border: none; background: none; color: var(--accent); padding: 0.2
 .request-list .flag-tag { color: #a3470a; font-weight: 600; margin-right: 0.3rem; }
 .request-list .flag-what { display: block; color: var(--muted); font-size: 0.9rem; }
 footer { margin-top: 1.5rem; }
+.site-credit { color: var(--muted); font-size: 0.85rem; margin-top: 1rem; }
+.narrow .site-credit { text-align: center; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.4rem 1rem 1rem; margin: 1rem 0; }
 .card textarea, .card input[type="text"] { width: 100%; font: inherit; padding: 0.5rem; border: 1px solid var(--line);
   border-radius: 0.4rem; margin-bottom: 0.4rem; }

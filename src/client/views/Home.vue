@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Icon from "../components/Icon.vue";
 import LanguageSwitch from "../components/LanguageSwitch.vue";
+import SiteCredit from "../components/SiteCredit.vue";
 import { byTitle, t } from "../i18n";
 import { computed, onMounted, ref } from "vue";
 import { getJson, hasSungParts, listCredits, type Me, type SongSummary } from "../api";
@@ -50,5 +51,6 @@ const songUrl = (slug: string) => `/c/${encodeURIComponent(openChoir.value!.id)}
       </form>
     </template>
     <LanguageSwitch />
+    <SiteCredit />
   </main>
 </template>

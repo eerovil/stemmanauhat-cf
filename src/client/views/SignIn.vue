@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Icon from "../components/Icon.vue";
 import LanguageSwitch from "../components/LanguageSwitch.vue";
+import SiteCredit from "../components/SiteCredit.vue";
 import { t } from "../i18n";
 const params = new URLSearchParams(location.search);
 const next = params.get("next") ?? "/";
@@ -17,5 +18,6 @@ const failed = params.get("error") === "failed";
     <p class="hint">{{ t.signinOldLink }}</p>
     <p><a href="/c/public">{{ t.tryDemo }}</a></p>
     <LanguageSwitch />
+    <SiteCredit />
   </main>
 </template>

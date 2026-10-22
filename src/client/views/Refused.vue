@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import LanguageSwitch from "../components/LanguageSwitch.vue";
+import SiteCredit from "../components/SiteCredit.vue";
 import { t } from "../i18n";
 const props = defineProps<{ status: number; email?: string | null }>();
 const here = location.pathname;
@@ -22,5 +23,6 @@ const here = location.pathname;
       </div>
     </template>
     <LanguageSwitch />
+    <SiteCredit />
   </main>
 </template>

@@ -54,6 +54,8 @@ const fi = {
   signinFailed: "Kirjautuminen ei onnistunut. Yritä uudelleen.",
   signinOldLink: "Kuoron vanha linkki toimii edelleen ilman Google-tiliä.",
   tryDemo: "Kokeile esittelykappaleita",
+  madeBy: "Tekijä:",
+  sourceCode: "Lähdekoodi",
 
   notFound: "Tätä sivua ei löytynyt.",
   toHome: "Etusivulle",
@@ -276,6 +278,8 @@ const en: Messages = {
   signinFailed: "Signing in didn't work. Please try again.",
   signinOldLink: "Your choir's link still works without a Google account.",
   tryDemo: "Try the demo songs",
+  madeBy: "Made by",
+  sourceCode: "Source code",
 
   notFound: "This page wasn't found.",
   toHome: "Home page",
