@@ -8,6 +8,7 @@ import Icon from "../components/Icon.vue";
 import { lang, t, words } from "../i18n";
 import { FilePlayer, wantsFilePlayback } from "../player/file-player";
 import { MidiPlayer } from "../player/midi";
+import { DEFAULT_PIVOT, OCTAVE_DB, type Pivot } from "../player/balance";
 import type { SungPlayer } from "../player/sung";
 import { focusOf, keepChoirPart, partLabel, staffOf, startingPart, visibleStaves } from "../player/part";
 import { SlidingPieces } from "../player/slide";
@@ -90,6 +91,15 @@ const playerKind = ref<"midi" | "file" | "sung" | "">("");
 /** The singer's choice when the song has sung parts: piano (the default) or the sung parts. */
 const sound = ref<"piano" | "sung">("piano");
 /**
+ * Säädöt › Lisäasetukset (eerovil/stemmanauhat-cf#117), for the sung parts only: how many dB
+ * an octave lower sings louder and the middle that stays as recorded (carried from song to
+ * song), and each sung part's own volume (this song's).
+ */
+const lowLouder = ref(OCTAVE_DB);
+const middle = ref<Pivot>(DEFAULT_PIVOT);
+const volumes = ref<number[]>([]);
+const MIDDLES = ["moment", "song", 60] as const;
+/**
  * Whether every part has a sung MP3 (marked `sung`: rows from before #36 list piano
  * MP3s under the same names) and this browser can play them together.
  */
@@ -144,6 +154,12 @@ onMounted(async () => {
   else sungDotWanted.value = !localStorage.getItem(SUNG_TRIED_KEY);
   staffMode.value = carried.staves === "own" ? "own" : "all";
   sound.value = carried.sound === "sung" ? "sung" : "piano";
+  if (typeof carried.lowLouder === "number" && carried.lowLouder >= 0 && carried.lowLouder <= 12) lowLouder.value = carried.lowLouder;
+  if (MIDDLES.includes(carried.middle as never)) middle.value = carried.middle!;
+  volumes.value = s.parts.map((p) => {
+    const v = memory.volumes?.[p.name];
+    return typeof v === "number" && v >= 0 && v <= 2 ? v : 1;
+  });
 
   try {
     const [xml, timingJson] = await Promise.all([
@@ -230,6 +246,8 @@ async function loadSung() {
       SungPlayer.create(s.parts.map((p) => s.base + (p.file ?? ""))),
       loadNotes(s.base + "score.mid", s.parts.map((p) => p.name)),
     ]);
+    sung.setBalance(lowLouder.value, middle.value);
+    sung.setVolumes(volumes.value);
     if (notes) sung.setUnisons(notes);
     if (load !== sungLoad || sound.value !== "sung" || !mixer) { sung.destroy(); return; }
     const resume = mixer.playing;
@@ -555,6 +573,23 @@ function setRate(value: number, save = true) {
   mixer?.setRate(value);
 }
 
+function setBalance(db: number, mid: Pivot) {
+  lowLouder.value = db;
+  middle.value = mid;
+  carrySettings({ lowLouder: db, middle: mid as 60 | "song" | "moment" });
+  if (playerKind.value === "sung") (mixer as SungPlayer).setBalance(db, mid);
+}
+
+function setVolume(part: number, value: number) {
+  volumes.value = volumes.value.map((v, i) => (i === part ? value : v));
+  const s = song.value!;
+  rememberSong(props.choir, props.slug, { volumes: Object.fromEntries(s.parts.map((p, i) => [p.name, volumes.value[i]!])) });
+  if (playerKind.value === "sung") {
+    (mixer as SungPlayer).setVolumes(volumes.value);
+    levels.value = mixer!.effectiveLevels();
+  }
+}
+
 /** Swap the piano for the sung parts or back, keeping the place, the tempo and the mix. */
 async function setSound(next: "piano" | "sung") {
   if (!song.value || !mixer || next === sound.value && (switching.value || next === shownSound.value)) return;
@@ -842,6 +877,30 @@ function onPointerUp(event: PointerEvent) {
               @click="changeZoom(1)">+</button>
           </div>
         </div>
+        <details v-if="hasSung" class="advanced">
+          <summary>{{ t.advanced }}</summary>
+          <div class="mode-hint">{{ t.advancedSungOnly }}</div>
+          <div class="others-row">
+            <span class="row-label">{{ t.lowLouder }}</span>
+            <input type="range" min="0" max="12" step="1" :value="lowLouder" :aria-label="t.lowLouder"
+              @input="setBalance(Number(($event.target as HTMLInputElement).value), middle)" />
+            <span class="others-value">{{ lowLouder }} {{ t.dbPerOctave }}</span>
+          </div>
+          <div class="setting">
+            <span class="row-label">{{ t.middle }}</span>
+            <div class="segmented three" role="group" :aria-label="t.middle">
+              <button v-for="m in MIDDLES" :key="m" type="button" :class="{ on: middle === m }" :aria-pressed="middle === m"
+                @click="setBalance(lowLouder, m)">{{ m === 60 ? "C4" : m === "song" ? t.middleSong : t.middleMoment }}</button>
+            </div>
+          </div>
+          <div class="mode-hint">{{ middle === 60 ? t.middleCHint : middle === "song" ? t.middleSongHint : t.middleMomentHint }}</div>
+          <div v-for="(p, i) in song.parts" :key="p.name" class="others-row">
+            <span class="row-label">{{ labelOf(p.name) }}</span>
+            <input type="range" min="0" max="2" step="0.05" :value="volumes[i] ?? 1" :aria-label="`${labelOf(p.name)}: ${t.partVolume}`"
+              @input="setVolume(i, Number(($event.target as HTMLInputElement).value))" />
+            <span class="others-value">{{ Math.round((volumes[i] ?? 1) * 100) }} %</span>
+          </div>
+        </details>
         <template v-if="canFlag">
           <div class="divider"></div>
           <button type="button" class="flag-open" @click="startFlag">{{ t.reportProblem }}</button>

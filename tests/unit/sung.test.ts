@@ -172,14 +172,27 @@ describe("SungPlayer", () => {
     expect(power()).toBeLessThanOrEqual(1);
   });
 
-  it("sends each part's gain by pitch to the worklet in frames, with the song's notes", async () => {
+  it("sends each part's gain by pitch to the worklet in frames, with the song's notes, and again on a new balance", async () => {
     const { p, port } = await player();
     const note = (part: number, key: number, start: number) => ({ part, track: part, on: 0, off: 1, key, start, end: start + 1 });
     p.setUnisons({ parts: [[note(0, 60, 0)], [note(1, 48, 0), note(1, 60, 2)]], unisons: [] });
-    const curves = port.sent.find((m) => m.type === "curves") as { curves: number[][] };
-    expect(curves.curves[0]).toEqual([0, 1]);
-    expect(curves.curves[1]!.filter((_, i) => i % 2 === 0)).toEqual([0, 1950, 1962]);
-    expect(curves.curves[1]![1]).toBeCloseTo(10 ** (3 / 20));
+    const curves = () => (port.sent.filter((m) => m.type === "curves").at(-1) as { curves: number[][] }).curves;
+    // By default the moment's middle: C3 and C4 together meet at F#3, ±2.5 dB; C4 alone stays.
+    expect(curves()[0]![1]).toBeCloseTo(10 ** (-2.5 / 20));
+    expect(curves()[1]!.filter((_, i) => i % 2 === 0)).toEqual([0, 1950, 1962]);
+    expect(curves()[1]![1]).toBeCloseTo(10 ** (2.5 / 20));
+    p.setBalance(3, 60);
+    expect(curves()[0]).toEqual([0, 1]);
+    expect(curves()[1]![1]).toBeCloseTo(10 ** (3 / 20));
+  });
+
+  it("turns each part by its own volume after the mix, leaving the others as they were", async () => {
+    const { p, port } = await player();
+    const before = p.effectiveLevels();
+    p.setVolumes([1, 1.5]);
+    expect(p.effectiveLevels()[0]).toBeCloseTo(before[0]!);
+    expect(p.effectiveLevels()[1]).toBeCloseTo(before[1]! * 1.5);
+    expect((port.sent.filter((m) => m.type === "gains").at(-1) as { gains: number[] }).gains).toEqual(p.effectiveLevels());
   });
 
   it("lifts the mix by SUNG_GAIN into the limiter, which holds the peaks under the ceiling", async () => {

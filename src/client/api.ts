@@ -245,6 +245,8 @@ export interface SongMemory {
   part?: string;
   /** The tempo this song was left at before tempo carried between songs (eerovil/stemmanauhat-cf#24). */
   rate?: number;
+  /** Säädöt › Lisäasetukset: each sung part's own volume by part name, 1 as it is (eerovil/stemmanauhat-cf#117). */
+  volumes?: Record<string, number>;
 }
 
 export function songMemory(choir: string, slug: string): SongMemory {
@@ -270,6 +272,10 @@ export interface CarriedSettings {
   rate?: number;
   /** "sung": play a song's sung parts when it has them; the piano otherwise (the default). */
   sound?: "piano" | "sung";
+  /** Säädöt › Lisäasetukset (#117): dB the sung parts sing louder an octave lower, 0–12. */
+  lowLouder?: number;
+  /** The key that sings as recorded: middle C (60), the song's mean or the moment's. */
+  middle?: 60 | "song" | "moment";
 }
 
 /** A tempo the player accepts: 0.5–1.5 of the written one. */
