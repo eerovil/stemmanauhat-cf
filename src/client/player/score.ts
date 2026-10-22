@@ -57,6 +57,9 @@ interface Bar {
  * Outside this class a bar is the song's own (timing.json's); a long bar may be
  * drawn as several pieces (split.ts), which `pieces` translates to and from.
  */
+/** OSMD's page width in the one-line view: room for any song on one line. */
+const ONE_LINE_MAX_WIDTH = 10_000_000;
+
 export class Score {
   private readonly osmd: OpenSheetMusicDisplay;
   /** One per drawn piece. */
@@ -98,6 +101,10 @@ export class Score {
       // One graphical bar per bar in the file, so timing.json's indexes line up.
       autoGenerateMultipleRestMeasuresFromRestMeasures: false,
     });
+    // The one-line view is as wide as OSMD's page limit allows; at its default (32767) a long
+    // song (Katedralen, 351 bars: eeron-omat-taskit#104) wrapped into rows the player did not
+    // follow. An SVG has no such limit.
+    this.osmd.EngravingRules.SheetMaximumWidth = ONE_LINE_MAX_WIDTH;
   }
 
   async load(musicXml: string, visible?: boolean[]): Promise<void> {
