@@ -244,7 +244,7 @@ async function loadSung() {
     const { SungPlayer, loadNotes } = await import("../player/sung");
     const [sung, notes] = await Promise.all([
       SungPlayer.create(s.parts.map((p) => s.base + (p.file ?? ""))),
-      loadNotes(s.base + "score.mid", s.parts.map((p) => p.name)),
+      loadNotes(s.base + "score.mid", s.parts.map((p) => p.name), s.base + "words.json"),
     ]);
     sung.setBalance(lowLouder.value, middle.value);
     sung.setVolumes(volumes.value);

@@ -78,6 +78,47 @@ export function findNotes(midi: BasicMIDI, partChannels: number[][]): Notes {
   return { parts, unisons: [...byStart.values()].filter((u) => u.length > 1) };
 }
 
+/**
+ * What each sung part sings, from the song's words.json (written by sing-song,
+ * eerovil/eeron-omat-taskit#110), in the parts' order: for every note it sings,
+ * [seconds, MIDI key, syllable], the syllable as sung on that note (a held or
+ * repeated one too).
+ */
+export type Words = [number, number, string][][];
+
+/** Seconds a sung note's start may be off the MIDI's: sing-song stops a part that is off by more. */
+const WORD_EPS = 0.05;
+
+/** The syllable a part sings on `n`, from its nearest note in `words` on the same key; undefined when it has none. */
+function syllableOf(n: UnisonNote, words: Words): string | undefined {
+  let best: [number, number, string] | undefined;
+  for (const w of words[n.part] ?? []) {
+    const off = Math.abs(w[0] - n.start);
+    if (w[1] === n.key && off <= WORD_EPS && (!best || off < Math.abs(best[0] - n.start))) best = w;
+  }
+  return best?.[2];
+}
+
+/**
+ * Only the unisons the parts sing on the same syllable, for the sung parts: a
+ * note two parts share with different words is sung by each (Eero, #110: the
+ * tenor's "kis" fell on the bass's "dum", and only the "dum" was heard). A
+ * unison splits into its groups of one syllable; a part with no known syllable
+ * there sings its own.
+ */
+export function sameWords(notes: Notes, words: Words): Notes {
+  const unisons: Unison[] = [];
+  for (const u of notes.unisons) {
+    const groups = new Map<string, Unison>();
+    for (const n of u) {
+      const syllable = syllableOf(n, words);
+      if (syllable !== undefined) groups.set(syllable, [...(groups.get(syllable) ?? []), n]);
+    }
+    for (const group of groups.values()) if (group.length > 1) unisons.push(group);
+  }
+  return { parts: notes.parts, unisons };
+}
+
 /** dB a unison's note is raised for each part past two heard on it (Eero, #115). */
 export const STEP_DB = 2;
 

@@ -1,7 +1,7 @@
 import { BasicMIDI } from "spessasynth_core";
 import { describe, expect, it } from "vitest";
 import { partChannels } from "../../src/client/player/midi";
-import { boostDb, boosts, findNotes, gainSpans, silenced, unisonSteps, withoutNotes } from "../../src/client/player/unison";
+import { boostDb, boosts, findNotes, gainSpans, sameWords, silenced, unisonSteps, withoutNotes } from "../../src/client/player/unison";
 import { smf } from "./smf";
 
 // S1 and S1b start together on C4, part, and meet again on E4, which S1b holds longer.
@@ -169,5 +169,29 @@ describe("unisons of more than two parts", () => {
     ]));
     const n = findNotes(midi, partChannels(midi, ["T1", "T2", "B1"]));
     expect(gainSpans(n, silenced(n, 0, true), boosts(n, 0, true))[0]).toEqual([]);
+  });
+});
+
+describe("sung unisons", () => {
+  // T and B start E3 together twice: on "kis" against "dum", then both on "dum".
+  const midi = BasicMIDI.fromArrayBuffer(smf([
+    ["T", [[0, 52, 0, 480], [0, 52, 480, 960]]],
+    ["B", [[1, 52, 0, 480], [1, 52, 480, 960]]],
+    ["A", [[2, 52, 0, 480]]],
+  ]));
+  const notes = findNotes(midi, partChannels(midi, ["T", "B", "A"]));
+  const at = (ns: { unisons: { part: number; start: number }[][] }) => ns.unisons.map((u) => u.map((n) => [n.part, n.start]));
+
+  it("are only the notes sung on the same syllable (eeron-omat-taskit#110)", () => {
+    // A sings "kis" with T on the first: they still sing it once; B's "dum" is heard too.
+    const words = sameWords(notes, [[[0, 52, "kis"], [0.5, 52, "dum"]], [[0.01, 52, "dum"], [0.5, 52, "dum"]], [[0, 52, "kis"]]]);
+    expect(at(words)).toEqual([[[0, 0], [2, 0]], [[0, 0.5], [1, 0.5]]]);
+    expect([...silenced(words, 1, true).keys()].map((n) => [n.part, n.start])).toEqual([[2, 0], [0, 0.5]]);
+  });
+
+  it("leave a part with no syllable known on the note singing its own", () => {
+    // B has no word at 0 s, and T's at 0.5 s is on another key or too far off.
+    const words = sameWords(notes, [[[0, 52, "dum"], [0.5, 53, "dum"]], [[0.5, 52, "dum"]], [[0.2, 52, "dum"]]]);
+    expect(at(words)).toEqual([]);
   });
 });
