@@ -60,6 +60,7 @@ test("the score is laid out alike on a phone without Times New Roman (#86)", asy
 
 test("long syllables on short notes do not spread their bar out (#127)", async ({ page }) => {
   await page.goto("/c/public/pitkat-tavut");
+  // The song's four staves are named in its score; its row, like every seeded song's, lists Tenori and Basso.
   await choosePartIfAsked(page, "Tenori");
   const score = page.getByTestId("score");
   await expect(score).toHaveAttribute("data-widths", /\d/);

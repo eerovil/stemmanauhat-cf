@@ -61,7 +61,7 @@ const songs = [
   // A song wider on one line than OSMD's default page limit (eeron-omat-taskit#104).
   ["public", "pitka", "Pitkä laulu", "tests/fixtures/long-song", 600.0, [null, null, null]],
   // Long syllables on short notes, which OSMD drew far apart (#127).
-  ["public", "pitkat-tavut", "Pitkät tavut", "tests/fixtures/long-syllables", 10.0, [null, null, null]],
+  ["public", "pitkat-tavut", "Pitkät tavut", "tests/fixtures/long-syllables", 13.0, [null, null, null]],
   // The two-part song sung: the fixture MP3s are synthetic tones, one per part.
   ["public", "laulettu", "Laulettu laulu", "tests/fixtures/two-part", 8.0, ["Esimerkki Säveltäjä", "Esimerkki Sanoittaja", null]],
   // The two-part song with both parts on one staff (musescore-choir-plugins#420).
