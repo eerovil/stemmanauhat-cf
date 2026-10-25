@@ -105,6 +105,11 @@ export class Score {
     // song (Katedralen, 351 bars: eeron-omat-taskit#104) wrapped into rows the player did not
     // follow. An SVG has no such limit.
     this.osmd.EngravingRules.SheetMaximumWidth = ONE_LINE_MAX_WIDTH;
+    // OSMD leaves room after a short note with a long syllable, as wide as the syllable. In a
+    // bar where several parts sing such notes at different beats the room adds up: bar 54 of a
+    // real song came out 224 px per beat against about 100 (#127). Half the room drew it at 120
+    // with no syllables overlapping. Less is no better: OSMD then stretches the whole bar instead.
+    this.osmd.EngravingRules.LyricsXPaddingFactorForLongLyrics = 0.5;
   }
 
   async load(musicXml: string, visible?: boolean[]): Promise<void> {
