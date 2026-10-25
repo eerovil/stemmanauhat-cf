@@ -1,6 +1,6 @@
 // Fresh local D1 and R2 for the browser tests: the migrations, made-up
 // members, a passphrase link for jm, the synthetic two-part song uploaded for jm
-// (with made-up composer, lyricist and arranger), once with both parts on one staff for naiskuoro, and for the public demo (a composer only, and once more for jm as Iltalaulu), a synthetic song with one crowded bar for jm, a public one that opens with a very long bar, and a stand-in for the piano (spessasynth's own tiny
+// (with made-up composer, lyricist and arranger), once with both parts on one staff for naiskuoro, and for the public demo (a composer only, and once more for jm as Iltalaulu), a synthetic song with one crowded bar for jm, a public one that opens with a very long bar, a public one with long syllables on short notes (#127), and a stand-in for the piano (spessasynth's own tiny
 // saw-wave sound bank; the real piano is MuseScore's and lives only in R2).
 // Run from the repo root.
 import { execFileSync } from "node:child_process";
@@ -60,6 +60,8 @@ const songs = [
   ["public", "vapaa-rytmi", "Vapaa rytmi", "tests/fixtures/long-bar", 20.0, [null, null, null]],
   // A song wider on one line than OSMD's default page limit (eeron-omat-taskit#104).
   ["public", "pitka", "Pitkä laulu", "tests/fixtures/long-song", 600.0, [null, null, null]],
+  // Long syllables on short notes, which OSMD drew far apart (#127).
+  ["public", "pitkat-tavut", "Pitkät tavut", "tests/fixtures/long-syllables", 13.0, [null, null, null]],
   // The two-part song sung: the fixture MP3s are synthetic tones, one per part.
   ["public", "laulettu", "Laulettu laulu", "tests/fixtures/two-part", 8.0, ["Esimerkki Säveltäjä", "Esimerkki Sanoittaja", null]],
   // The two-part song with both parts on one staff (musescore-choir-plugins#420).
