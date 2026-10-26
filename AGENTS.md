@@ -38,6 +38,11 @@ D1 for the per-choir email allow-lists, Google sign-in). Read README.md first.
   `scripts/publish-songs.sh` stops on part names not in the tree, ask Eero where each one goes
   and publish again with his `--place` answers; never guess a place.
 
+- **Work in your own worktree, never in the main checkout** (`~/stemmanauhat-cf`): never switch
+  its branch, since other agents and errands run its scripts. Before a follow-up `git` command in a Work's
+  worktree, check the directory still exists; a merged Work's worktree is deleted, and the
+  command then lands in the main checkout.
+
 - **Usage events** (eerovil/eeron-omat-taskit#72) are the `events` table: who listened to what,
   for how long and with which settings (README, "Usage events"). It holds members' emails, so
   never commit rows from it. Read it with `./scripts/run.sh --cloudflare corepack pnpm exec
@@ -53,8 +58,9 @@ Every change runs the test suite (`pnpm test`), which must include at least one 
 test: sign-in stubbed, a song's score renders, audio plays, the cursor moves. A build or a linter
 alone is not a test. Use the AgentDeck job queue for test runs as the poller brief says.
 
-- Run the whole unit and end-to-end suite before the first push, and grep the tests for every
-  string your change alters.
+- Run the whole unit and end-to-end suite before the first push, and grep `tests/` for every
+  string your change alters: a changed UI label, or a public song added to
+  `tests/support/seed.mjs`, breaks tests that pin labels, song lists and counts.
 - Copy screenshots out of `test-results/` before the next Playwright run, because the run wipes it
   (`test-results/shots` included). Check that each file is non-empty before uploading.
 - Set a free `PLAYWRIGHT_PORT` (default 8787) when another checkout holds the default port, and
