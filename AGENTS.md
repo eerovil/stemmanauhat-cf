@@ -115,6 +115,11 @@ Before a bulk publish to the live database, test the upsert against a song that 
 in another list. A publish never deletes or overwrites another list's copy, and `published_at`
 is set on the first publish only (`ON CONFLICT (choir, slug)` keeps it, `src/worker/index.ts`).
 
+Build and upload song bundles with the scripts in this repo (`scripts/song-app-bundle.py`,
+`scripts/publish-songs.sh`); a step that is missing goes into a script here, not into a one-off
+command writing to `/tmp`. After a restart or a cut-off run, check what actually landed on the
+live site for each song before assuming the upload finished.
+
 ## Where things are decided
 
 The product decisions (D1–D7) are in the first issue of this repository, moved from
