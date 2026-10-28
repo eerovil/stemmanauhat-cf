@@ -149,6 +149,8 @@ account and a Google account. The choir app (song-app, in
 [eerovil/musescore-choir-plugins](https://github.com/eerovil/musescore-choir-plugins)) publishes
 the songs into your copy once step 9 is done.
 
+The code is under the [MIT licence](LICENSE): you may copy, change and run it freely.
+
 1. **Fork** this repository on GitHub and clone your fork. In the fork's Actions tab, turn
    workflows on. Run `corepack pnpm install`.
 2. **A Cloudflare API token.** In the Cloudflare dashboard, My Profile → API Tokens → Create
