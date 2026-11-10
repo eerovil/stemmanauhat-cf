@@ -149,6 +149,10 @@ export interface Song extends SongSummary {
   flags: SongFlag[];
   /** The voice tree (#107), for carrying a singer's part between differently named parts. */
   voices?: Voice[];
+  /** The published version, the last folder of `base`. */
+  version?: string;
+  /** Saved bar widths for the one-line view, by which parts are drawn ("1101"): #137. */
+  layouts?: Record<string, number[]>;
 }
 
 /** A refusal the page should show rather than an error: 401, 403 or 404. */

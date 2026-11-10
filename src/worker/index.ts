@@ -4,6 +4,7 @@ import type { Env } from "./env";
 import { EVENT_MAX_BYTES, parseEvent, POPULAR_DAYS, POPULAR_MIN_SECONDS, SETTING_DEFAULTS, SETTING_NAMES } from "./events";
 import { serveObject, safeSongPath } from "./files";
 import { AUTHORIZE_URL, TOKEN_URL, authorizeUrl, exchangeCode, normalizeEmail, readEmail } from "./google";
+import { layoutMap, parseLayout } from "./layouts";
 import { joinUrl, linkKey } from "./links";
 import { publicOrigin } from "./origin";
 import { isPdf, parseFlag, parseRequest, PDF_MAX_BYTES, pdfTitle, requestPdfKey } from "./requests";
@@ -69,6 +70,9 @@ async function route(ctx: Ctx): Promise<Response> {
   }
   if ((m = /^\/api\/songs\/([^/]+)\/([^/]+)\/flags$/.exec(path)) && method === "POST") {
     return sendFlag(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!));
+  }
+  if ((m = /^\/api\/songs\/([^/]+)\/([^/]+)\/layout$/.exec(path)) && method === "PUT") {
+    return saveLayout(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!));
   }
   if ((m = /^\/files\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/.exec(path)) && method === "GET") {
     return file(ctx, decodeURIComponent(m[1]!), decodeURIComponent(m[2]!), decodeURIComponent(m[3]!),
@@ -375,11 +379,49 @@ async function song(ctx: Ctx, choir: string, slug: string): Promise<Response> {
   // The voice tree (#107): which part names mean the same voice. A song still loads without it.
   const voices = await ctx.env.DB.prepare("SELECT id, parent, name_fi, name_en, names FROM voices")
     .all<VoiceRow>().then((r) => parseVoices(r.results), () => []);
+  // Saved bar widths for the one-line view (#137). A song still loads without them.
+  const layouts = await ctx.env.DB.prepare("SELECT visible, factors FROM song_layouts WHERE prefix = ?").bind(prefix)
+    .all<{ visible: string; factors: string }>().then((r) => layoutMap(r.results), () => ({}));
   return json({
     ...song, parts: JSON.parse(row.parts), choir, base,
     flags: flags.results.map((f) => ({ ...f, problems: problemList(f.problems) })),
     voices,
+    version: versionOf(prefix),
+    layouts,
   });
+}
+
+/**
+ * The player saves how wide it drew each bar in the one-line view, so the next
+ * opening, on any device, lays the score out once (#137). Only for the version
+ * now published. The open list takes no writes from strangers.
+ */
+async function saveLayout(ctx: Ctx, choir: string, slug: string): Promise<Response> {
+  if (!(ctx.request.headers.get("Content-Type") ?? "").startsWith("application/json")) {
+    return json({ error: "send JSON" }, 415);
+  }
+  const access = await accessTo(ctx, choir);
+  if (access !== "ok") return json({ error: access }, statusOf(access));
+  const choirRow = await ctx.env.DB.prepare("SELECT public FROM choirs WHERE id = ?").bind(choir)
+    .first<{ public: number }>();
+  if (!choirRow || choirRow.public === 1) return json({ error: "refused" }, 403);
+  let body: unknown;
+  try {
+    body = await ctx.request.json();
+  } catch {
+    return json({ error: "bad JSON" }, 400);
+  }
+  const layout = parseLayout(body);
+  if ("error" in layout) return json(layout, 400);
+  const row = await ctx.env.DB.prepare("SELECT prefix FROM songs WHERE choir = ? AND slug = ?")
+    .bind(choir, slug).first<{ prefix: string }>();
+  if (row === null) return json({ error: "unknown" }, 404);
+  if (versionOf(row.prefix) !== layout.version) return json({ error: "old version" }, 409);
+  await ctx.env.DB.prepare(
+    `INSERT INTO song_layouts (prefix, visible, factors, saved_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT (prefix, visible) DO UPDATE SET factors = excluded.factors, saved_at = excluded.saved_at`,
+  ).bind(row.prefix, layout.visible, JSON.stringify(layout.factors), new Date(ctx.now * 1000).toISOString()).run();
+  return json({ ok: true });
 }
 
 interface VoiceRow {

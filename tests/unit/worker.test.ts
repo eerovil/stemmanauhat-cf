@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { decideAccess, type AccessFacts } from "../../src/worker/access";
-import { parseRange, safeSongPath } from "../../src/worker/files";
+import { parseRange, safeSongPath, serveObject } from "../../src/worker/files";
 import { readEmail } from "../../src/worker/google";
 import { parseEmails, parseSetlist, parseVoices, popularGroups, safeNext, versionOf } from "../../src/worker/index";
+import { layoutMap, MAX_BARS, MAX_FACTOR, parseLayout } from "../../src/worker/layouts";
 import { joinUrl, linkKey } from "../../src/worker/links";
 import { publicOrigin } from "../../src/worker/origin";
 import { newPassphraseRecord, passphraseMatches } from "../../src/worker/passphrase";
@@ -108,6 +109,23 @@ describe("files", () => {
     expect(safeSongPath("/etc/passwd")).toBe(false);
     expect(safeSongPath("parts//x")).toBe(false);
   });
+  it("sends the score and JSON compressed when whole, other files and ranges as they are (#137)", async () => {
+    const bucket = {
+      get: async (key: string) => ({
+        size: 4, httpEtag: '"e"', writeHttpMetadata: () => {},
+        body: new Blob([key]).stream(),
+      }),
+    } as unknown as R2Bucket;
+    const get = (key: string, headers: Record<string, string>) =>
+      serveObject(bucket, key, new Request("https://x.example/", { headers })).then((r) => r.headers);
+    const gzip = { "Accept-Encoding": "gzip, deflate, br" };
+    expect((await get("v/score.musicxml", gzip)).get("Content-Encoding")).toBe("gzip");
+    expect((await get("v/score.musicxml", gzip)).get("Content-Length")).toBeNull();
+    expect((await get("v/timing.json", gzip)).get("Content-Encoding")).toBe("gzip");
+    expect((await get("v/score.mid", gzip)).get("Content-Encoding")).toBeNull();
+    expect((await get("v/score.musicxml", {})).get("Content-Encoding")).toBeNull();
+    expect((await get("v/score.musicxml", { ...gzip, Range: "bytes=0-1" })).get("Content-Encoding")).toBeNull();
+  });
 });
 
 describe("parseEmails", () => {
@@ -212,5 +230,29 @@ describe("parseVoices", () => {
       { id: "Bar", parent: "men", name_fi: "Baritoni", name_en: "Baritone", names: '{"name": "Bar"}' },
     ])).toEqual([{ id: "men", parent: null, fi: "Miehet", en: "Men", names: ["Miehet", "Men"] }]);
     expect(parseVoices([])).toEqual([]);
+  });
+});
+
+describe("saved bar widths (#137)", () => {
+  it("takes one width factor per bar for a set of drawn parts", () => {
+    expect(parseLayout({ version: "v1", visible: "1101", factors: [1, 1.25, 3] }))
+      .toEqual({ version: "v1", visible: "1101", factors: [1, 1.25, 3] });
+  });
+  it("refuses anything else", () => {
+    const good = { version: "v1", visible: "11", factors: [1] };
+    expect(parseLayout(null)).toHaveProperty("error");
+    expect(parseLayout({ ...good, version: "" })).toHaveProperty("error");
+    expect(parseLayout({ ...good, visible: "12" })).toHaveProperty("error");
+    expect(parseLayout({ ...good, visible: "" })).toHaveProperty("error");
+    expect(parseLayout({ ...good, factors: [] })).toHaveProperty("error");
+    expect(parseLayout({ ...good, factors: [0.9] })).toHaveProperty("error");
+    expect(parseLayout({ ...good, factors: [MAX_FACTOR + 1] })).toHaveProperty("error");
+    expect(parseLayout({ ...good, factors: [Number.NaN] })).toHaveProperty("error");
+    expect(parseLayout({ ...good, factors: ["2"] })).toHaveProperty("error");
+    expect(parseLayout({ ...good, factors: Array.from({ length: MAX_BARS + 1 }, () => 1) })).toHaveProperty("error");
+  });
+  it("reads saved rows by drawn parts, leaving out a broken one", () => {
+    expect(layoutMap([{ visible: "11", factors: "[1,2]" }, { visible: "10", factors: "{" }, { visible: "01", factors: "[\"a\"]" }]))
+      .toEqual({ "11": [1, 2] });
   });
 });

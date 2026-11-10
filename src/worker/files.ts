@@ -33,6 +33,9 @@ const TYPES: Record<string, string> = {
   xml: "application/xml",
 };
 
+/** Song files sent compressed when sent whole: text, unlike MIDI, MP3, PDF and the piano. */
+const COMPRESSED = new Set(["musicxml", "xml", "json"]);
+
 export async function serveObject(bucket: R2Bucket, key: string, request: Request,
   cacheControl = "private, max-age=31536000, immutable"): Promise<Response> {
   const range = parseRange(request.headers.get("Range"));
@@ -52,6 +55,13 @@ export async function serveObject(bucket: R2Bucket, key: string, request: Reques
   headers.set("Cache-Control", cacheControl);
 
   if (!range || !("body" in object)) {
+    // The score is text and large (8 MB for a long song, under 0.3 MB gzipped: #137).
+    // With this header the Workers runtime compresses the body on the way out.
+    if (COMPRESSED.has(extension) && "body" in object
+      && /\bgzip\b/.test(request.headers.get("Accept-Encoding") ?? "")) {
+      headers.set("Content-Encoding", "gzip");
+      return new Response(object.body, { status: 200, headers });
+    }
     headers.set("Content-Length", String(object.size));
     return new Response("body" in object ? object.body : null, { status: 200, headers });
   }

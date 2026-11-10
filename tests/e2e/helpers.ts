@@ -81,3 +81,12 @@ export async function mixedVoices(route: Route) {
   song.parts = song.parts.map((p: object, i: number) => ({ ...p, voice: i === 0 ? "LYSE" : "REMY" }));
   await route.fulfill({ response, json: song });
 }
+
+/** Serves a song's info without its saved bar widths (#137), so the page widens its bars from scratch. */
+export async function withoutSavedWidths(page: Page, songApi: string) {
+  await page.route(`**${songApi}`, async (route) => {
+    const response = await route.fetch();
+    const song = await response.json();
+    await route.fulfill({ response, json: { ...song, layouts: {} } });
+  });
+}

@@ -5,7 +5,7 @@ import "@fontsource/tinos/700-italic.css";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import type { Focus } from "./part";
 import { barAnchors, joinBars, xOnAnchors, type Anchor } from "./bar";
-import { biggestStep, cappedTargets, needsWidening, nextFactors } from "./spacing";
+import { biggestStep, cappedTargets, MAX_RATIO, needsWidening, nextFactors } from "./spacing";
 import { BarMap, splitLongBars } from "./split";
 
 /** OSMD lays out in units of 10 px at zoom 1. */
@@ -195,6 +195,18 @@ export class Score {
 
   /** Extra layouts the bar widening took last time (0: the score was even already). */
   widenings = 0;
+  /** Layouts the last drawing took in all: 1 when saved bar widths were right (#137). */
+  layouts = 0;
+
+  /** Saved bar widths for the one-line view, by which parts are drawn ("1101"), if any. */
+  savedFactors?: (visible: string) => number[] | undefined;
+  /** Called with the bar widths whenever the one-line view had to work them out. */
+  onFactors?: (visible: string, factors: number[]) => void;
+
+  /** Which parts are drawn, one digit per part: the key saved bar widths are kept under. */
+  private visibleKey(): string {
+    return this.osmd.Sheet.Instruments.map((i) => (i.Visible ? "1" : "0")).join("");
+  }
 
   /**
    * Lays the score out, and in the one-line view widens the bars that would
@@ -205,14 +217,25 @@ export class Score {
    */
   private evenOut(): void {
     const measures = this.osmd.Sheet.SourceMeasures;
-    for (const m of measures) m.WidthFactor = 1;
+    // Laying out a long song takes seconds on a phone, and widening took up to three
+    // layouts. Bar widths saved by an earlier opening make it one (#137); they are
+    // checked like a fresh layout, so a wrong or stale set only costs the old way.
+    const key = this.visibleKey();
+    const saved = this.singleLine ? this.savedFactors?.(key) : undefined;
+    let factors = saved?.length === measures.length ? saved : measures.map(() => 1);
+    measures.forEach((m, i) => { m.WidthFactor = factors[i]!; });
     this.layout();
+    this.layouts = 1;
     this.widenings = 0;
     if (this.singleLine) {
+      // The targets come from this layout. With a right saved set the bars are already
+      // within the cap, so nothing more is widened; a bar left too fast is widened as before.
       const want = cappedTargets(this.travels(), this.lengths());
-      let factors = measures.map(() => 1);
+      // The widening stops a few percent short of the cap; a saved set that ended so is kept,
+      // not corrected again on every opening.
+      const keep = factors === saved && biggestStep(this.travels(), this.lengths()) <= MAX_RATIO * 1.05;
       let before: { factors: number[]; have: number[] } | undefined;
-      while (this.widenings < 2 && needsWidening(this.travels(), want)) {
+      while (!keep && this.widenings < 2 && needsWidening(this.travels(), want)) {
         const have = this.travels();
         const next = nextFactors(factors, have, want, before);
         before = { factors, have };
@@ -220,8 +243,11 @@ export class Score {
         measures.forEach((m, i) => { m.WidthFactor = factors[i] ?? 1; });
         this.layout();
         this.widenings++;
+        this.layouts++;
       }
+      if (this.widenings > 0) this.onFactors?.(key, factors);
     }
+    this.container.dataset.layouts = String(this.layouts);
     this.container.dataset.widenings = String(this.widenings);
     this.container.dataset.step = biggestStep(this.travels(), this.lengths()).toFixed(3);
     // Each bar's drawn width per beat, for the tests: the step above is measured
