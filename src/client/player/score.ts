@@ -219,7 +219,7 @@ export class Score {
     const measures = this.osmd.Sheet.SourceMeasures;
     // Laying out a long song takes seconds on a phone, and widening took up to three
     // layouts. Bar widths saved by an earlier opening make it one (#137); they are
-    // checked like a fresh layout, so a wrong or stale set only costs the old way.
+    // checked after laying out, and a wrong or stale set is dropped for the old way.
     const key = this.visibleKey();
     const saved = this.singleLine ? this.savedFactors?.(key) : undefined;
     let factors = saved?.length === measures.length ? saved : measures.map(() => 1);
@@ -228,12 +228,20 @@ export class Score {
     this.layouts = 1;
     this.widenings = 0;
     if (this.singleLine) {
-      // The targets come from this layout. With a right saved set the bars are already
-      // within the cap, so nothing more is widened; a bar left too fast is widened as before.
-      const want = cappedTargets(this.travels(), this.lengths());
       // The widening stops a few percent short of the cap; a saved set that ended so is kept,
       // not corrected again on every opening.
       const keep = factors === saved && biggestStep(this.travels(), this.lengths()) <= MAX_RATIO * 1.05;
+      if (factors === saved && !keep) {
+        // A wrong set is dropped, not corrected: widening from its widths would carry an
+        // over-wide bar into its neighbours. Start again from the song's own layout.
+        factors = measures.map(() => 1);
+        measures.forEach((m) => { m.WidthFactor = 1; });
+        this.layout();
+        this.layouts++;
+      }
+      // The targets come from the song's own layout, or from a right saved set, where the
+      // bars are already within the cap and nothing more is widened.
+      const want = cappedTargets(this.travels(), this.lengths());
       let before: { factors: number[]; have: number[] } | undefined;
       while (!keep && this.widenings < 2 && needsWidening(this.travels(), want)) {
         const have = this.travels();

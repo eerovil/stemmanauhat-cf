@@ -42,8 +42,20 @@ test("a wrong saved set is corrected: the bars still come out even", async ({ pa
   await choosePartIfAsked(page, "Tenori");
   const score = page.getByTestId("score");
   await expect(score).toHaveAttribute("data-layouts", /\d/);
+  const widths = await score.getAttribute("data-widths");
   const song = (await call(page, "/api/songs/jm/epatasainen")).json;
   const [visible, factors] = Object.entries(song.layouts as Record<string, number[]>)[0]!;
+
+  // One bar saved far too wide: it is dropped, not carried into its neighbours by widening
+  // from it, so the bars come out just as from the song's own layout.
+  const middle = Math.floor(factors.length / 2);
+  expect((await call(page, "/api/songs/jm/epatasainen/layout", "PUT",
+    { version: song.version, visible, factors: factors.map((f, i) => (i === middle ? 10 : f)) })).status).toBe(200);
+  await page.reload();
+  await choosePartIfAsked(page, "Tenori");
+  await expect(score).toHaveAttribute("data-widenings", /^[12]$/);
+  expect(await score.getAttribute("data-widths")).toBe(widths);
+
   // Every bar at its natural width: the crowded bar's neighbours are too narrow again.
   const put = await call(page, "/api/songs/jm/epatasainen/layout", "PUT",
     { version: song.version, visible, factors: factors.map(() => 1) });

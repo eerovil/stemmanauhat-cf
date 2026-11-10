@@ -6,8 +6,10 @@
 
 /** The most bars a saved set may have; Katedralen, the longest song, has 351. */
 export const MAX_BARS = 5000;
-/** The widest factor accepted; a bar is never widened anywhere near this much. */
-export const MAX_FACTOR = 50;
+/** The widest factor accepted (spec D3); a bar is never widened anywhere near this much. */
+export const MAX_FACTOR = 10;
+/** The most parts a saved set may be for. */
+export const MAX_PARTS = 32;
 
 export interface Layout {
   version: string;
@@ -20,7 +22,7 @@ export function parseLayout(body: unknown): Layout | { error: string } {
   if (typeof body !== "object" || body === null) return { error: "bad JSON" };
   const { version, visible, factors } = body as Record<string, unknown>;
   if (typeof version !== "string" || version === "") return { error: "version" };
-  if (typeof visible !== "string" || !/^[01]{1,64}$/.test(visible)) return { error: "visible" };
+  if (typeof visible !== "string" || !new RegExp(`^[01]{1,${MAX_PARTS}}$`).test(visible)) return { error: "visible" };
   if (!Array.isArray(factors) || factors.length === 0 || factors.length > MAX_BARS
     || !factors.every((f) => typeof f === "number" && Number.isFinite(f) && f >= 1 && f <= MAX_FACTOR)) {
     return { error: "factors" };

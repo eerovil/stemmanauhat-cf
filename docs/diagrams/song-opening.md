@@ -20,13 +20,14 @@ flowchart TD
   L -- No --> N[Lay out, then widen bars<br/>up to 2 more layouts]
   M --> O{Bars even<br/>within 5 %?}
   O -- Yes --> P[Score shown]
-  O -- No --> N
+  O -- No --> S[Drop the saved widths]
+  S --> N
   N --> R{Was anything widened?}
   R -- Yes --> Q[Save the widths to the server]
   R -- No --> P
   Q --> P
   K --> P
-  class C,D,G,M,O,Q,L,R teal
+  class C,D,G,M,O,Q,L,R,S teal
   class H,P green
   class N amber
 ```
@@ -38,9 +39,10 @@ flowchart TD
 
 ## Boxes
 - **Song info from /api/songs<br/>incl. saved bar widths**: `song()` in `src/worker/index.ts` adds the row from the new `song_layouts` table for this song's version.
-- **Start every download at once**: `onMounted` in `src/client/views/Player.vue`; today the piano starts only after the score file has arrived.
+- **Start every download at once**: `onMounted` in `src/client/views/Player.vue`: the score file, the timing file and the piano start together in one `Promise.all`, so the piano no longer waits for the score.
 - **score.musicxml<br/>gzip-compressed**: `serveObject` in `src/worker/files.ts` marks whole MusicXML and JSON responses `Content-Encoding: gzip` and Cloudflare compresses them (8.2 MB → about 0.27 MB for Katedralen).
 - **Lay out once with saved widths**: `Score.evenOut` in `src/client/player/score.ts` applies the saved `WidthFactor` per bar before the first layout.
-- **Bars even<br/>within 5 %?**: `evenOut` in `src/client/player/score.ts` keeps a saved set whose biggest step between bars (`biggestStep`, `spacing.ts`) is at most 5 % over the cap; otherwise it widens as before, so a wrong or stale set only costs the old slow path.
+- **Bars even<br/>within 5 %?**: `evenOut` in `src/client/player/score.ts` keeps a saved set whose biggest step between bars (`biggestStep`, `spacing.ts`) is at most 5 % over the cap; otherwise it drops them.
+- **Drop the saved widths**: `evenOut` resets every bar to factor 1 and lays the score out again, so widening starts from the song's own widths and a wrong set's over-wide bar does not spread to its neighbours.
 - **Was anything widened?**: only a layout that had to widen calls `Score.onFactors`, so an even song saves nothing.
-- **Save the widths to the server**: a new `PUT /api/songs/<choir>/<slug>/layout` in `src/worker/index.ts`, open to anyone who may open the song except on the open list (`public`); `parseLayout` in `src/worker/layouts.ts` checks the numbers. Stored in D1 `song_layouts` (`migrations/0010_song_layouts.sql`).
+- **Save the widths to the server**: a new `PUT /api/songs/<choir>/<slug>/layout` in `src/worker/index.ts`, open to anyone who may open the song except on the open list (`public`); `parseLayout` in `src/worker/layouts.ts` checks the numbers (each factor 1–10, at most 32 parts). Stored in D1 `song_layouts` (`migrations/0010_song_layouts.sql`).

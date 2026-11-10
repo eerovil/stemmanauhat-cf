@@ -3,7 +3,7 @@ import { decideAccess, type AccessFacts } from "../../src/worker/access";
 import { parseRange, safeSongPath, serveObject } from "../../src/worker/files";
 import { readEmail } from "../../src/worker/google";
 import { parseEmails, parseSetlist, parseVoices, popularGroups, safeNext, versionOf } from "../../src/worker/index";
-import { layoutMap, MAX_BARS, MAX_FACTOR, parseLayout } from "../../src/worker/layouts";
+import { layoutMap, MAX_BARS, MAX_FACTOR, MAX_PARTS, parseLayout } from "../../src/worker/layouts";
 import { joinUrl, linkKey } from "../../src/worker/links";
 import { publicOrigin } from "../../src/worker/origin";
 import { newPassphraseRecord, passphraseMatches } from "../../src/worker/passphrase";
@@ -246,6 +246,9 @@ describe("saved bar widths (#137)", () => {
     expect(parseLayout({ ...good, visible: "" })).toHaveProperty("error");
     expect(parseLayout({ ...good, factors: [] })).toHaveProperty("error");
     expect(parseLayout({ ...good, factors: [0.9] })).toHaveProperty("error");
+    expect(parseLayout({ ...good, visible: "1".repeat(MAX_PARTS) })).not.toHaveProperty("error");
+    expect(parseLayout({ ...good, visible: "1".repeat(MAX_PARTS + 1) })).toHaveProperty("error");
+    expect(parseLayout({ ...good, factors: [MAX_FACTOR] })).not.toHaveProperty("error");
     expect(parseLayout({ ...good, factors: [MAX_FACTOR + 1] })).toHaveProperty("error");
     expect(parseLayout({ ...good, factors: [Number.NaN] })).toHaveProperty("error");
     expect(parseLayout({ ...good, factors: ["2"] })).toHaveProperty("error");
