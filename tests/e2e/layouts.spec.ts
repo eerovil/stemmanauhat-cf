@@ -52,6 +52,14 @@ test("a wrong saved set is corrected: the bars still come out even", async ({ pa
   await choosePartIfAsked(page, "Tenori");
   await expect(score).toHaveAttribute("data-widenings", /^[12]$/);
   expect(Number(await score.getAttribute("data-step"))).toBeLessThanOrEqual(1.3 * 1.05);
+
+  // A set with a bar too many (say, saved before bars were cut differently) is not used at all.
+  expect((await call(page, "/api/songs/jm/epatasainen/layout", "PUT",
+    { version: song.version, visible, factors: [...factors, 1] })).status).toBe(200);
+  await page.reload();
+  await choosePartIfAsked(page, "Tenori");
+  await expect(score).toHaveAttribute("data-widenings", /^[12]$/);
+  expect(Number(await score.getAttribute("data-step"))).toBeLessThanOrEqual(1.3 * 1.05);
 });
 
 test("the layout route takes only sane widths for the version now published", async ({ page }) => {
