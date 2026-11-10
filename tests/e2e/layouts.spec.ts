@@ -55,6 +55,13 @@ test("a wrong saved set is corrected: the bars still come out even", async ({ pa
   await choosePartIfAsked(page, "Tenori");
   await expect(score).toHaveAttribute("data-widenings", /^[12]$/);
   expect(await score.getAttribute("data-widths")).toBe(widths);
+  // At most one extra layout for the dropped set, and it is replaced: the next opening is one layout.
+  expect(Number(await score.getAttribute("data-layouts"))).toBeLessThanOrEqual(4);
+  await expect.poll(async () => (await call(page, "/api/songs/jm/epatasainen")).json.layouts[visible][middle]).toBe(factors[middle]);
+  await page.reload();
+  await choosePartIfAsked(page, "Tenori");
+  await expect(score).toHaveAttribute("data-layouts", "1");
+  expect(await score.getAttribute("data-widths")).toBe(widths);
 
   // Every bar at its natural width: the crowded bar's neighbours are too narrow again.
   const put = await call(page, "/api/songs/jm/epatasainen/layout", "PUT",
@@ -72,6 +79,34 @@ test("a wrong saved set is corrected: the bars still come out even", async ({ pa
   await choosePartIfAsked(page, "Tenori");
   await expect(score).toHaveAttribute("data-widenings", /^[12]$/);
   expect(Number(await score.getAttribute("data-step"))).toBeLessThanOrEqual(1.3 * 1.05);
+});
+
+test("a wrong saved set on an even song is replaced, so the next opening is one layout", async ({ page }) => {
+  await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
+  await page.goto("/c/jm/kokeilu");
+  await choosePartIfAsked(page, "Tenori");
+  const score = page.getByTestId("score");
+  await expect(score).toHaveAttribute("data-layouts", /\d/);
+  const widths = await score.getAttribute("data-widths");
+  const bars = Number(await score.getAttribute("data-measures"));
+  const visible = (await score.getAttribute("data-visible"))!;
+  const song = (await call(page, "/api/songs/jm/kokeilu")).json;
+  const ones = Array.from({ length: bars }, () => 1);
+  expect((await call(page, "/api/songs/jm/kokeilu/layout", "PUT",
+    { version: song.version, visible, factors: ones.map((f, i) => (i === 1 ? 10 : f)) })).status).toBe(200);
+
+  await page.reload();
+  await choosePartIfAsked(page, "Tenori");
+  // The wrong set and then the song's own layout, which needs no widening.
+  await expect(score).toHaveAttribute("data-layouts", "2");
+  await expect(score).toHaveAttribute("data-widenings", "0");
+  expect(await score.getAttribute("data-widths")).toBe(widths);
+  await expect.poll(async () => (await call(page, "/api/songs/jm/kokeilu")).json.layouts[visible]).toEqual(ones);
+
+  await page.reload();
+  await choosePartIfAsked(page, "Tenori");
+  await expect(score).toHaveAttribute("data-layouts", "1");
+  expect(await score.getAttribute("data-widths")).toBe(widths);
 });
 
 test("the layout route takes only sane widths for the version now published", async ({ page }) => {

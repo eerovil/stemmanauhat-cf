@@ -218,46 +218,62 @@ export class Score {
   private evenOut(): void {
     const measures = this.osmd.Sheet.SourceMeasures;
     // Laying out a long song takes seconds on a phone, and widening took up to three
-    // layouts. Bar widths saved by an earlier opening make it one (#137); they are
-    // checked after laying out, and a wrong or stale set is dropped for the old way.
+    // layouts. Bar widths saved by an earlier opening make it one (#137). The one rule
+    // for a saved set: it is used only if it lays out even, and after every opening the
+    // server holds what the next opening will keep, or no widening at all. So a wrong set
+    // costs one extra layout once, on the opening that replaces it.
     const key = this.visibleKey();
+    const ones = measures.map(() => 1);
     const saved = this.singleLine ? this.savedFactors?.(key) : undefined;
-    let factors = saved?.length === measures.length ? saved : measures.map(() => 1);
-    measures.forEach((m, i) => { m.WidthFactor = factors[i]!; });
+    // A set of all ones is the song's own layout, the same as no set.
+    const usable = saved?.length === measures.length && saved.some((f) => f !== 1) ? saved : undefined;
+    let factors = usable ?? ones;
+    const apply = () => measures.forEach((m, i) => { m.WidthFactor = factors[i] ?? 1; });
+    apply();
     this.layout();
     this.layouts = 1;
     this.widenings = 0;
     if (this.singleLine) {
-      // The widening stops a few percent short of the cap; a saved set that ended so is kept,
-      // not corrected again on every opening.
-      const keep = factors === saved && biggestStep(this.travels(), this.lengths()) <= MAX_RATIO * 1.05;
-      if (factors === saved && !keep) {
-        // A wrong set is dropped, not corrected: widening from its widths would carry an
-        // over-wide bar into its neighbours. Start again from the song's own layout.
-        factors = measures.map(() => 1);
-        measures.forEach((m) => { m.WidthFactor = 1; });
+      if (usable) {
+        if (keepable(factors, this.step())) return this.done();
+        // Widening from a wrong set's widths would carry an over-wide bar into its
+        // neighbours: start again from the song's own layout.
+        factors = ones;
+        apply();
         this.layout();
         this.layouts++;
       }
-      // The targets come from the song's own layout, or from a right saved set, where the
-      // bars are already within the cap and nothing more is widened.
       const want = cappedTargets(this.travels(), this.lengths());
       let before: { factors: number[]; have: number[] } | undefined;
-      while (!keep && this.widenings < 2 && needsWidening(this.travels(), want)) {
+      while (this.widenings < 2 && needsWidening(this.travels(), want)) {
         const have = this.travels();
         const next = nextFactors(factors, have, want, before);
         before = { factors, have };
         factors = next;
-        measures.forEach((m, i) => { m.WidthFactor = factors[i] ?? 1; });
+        apply();
         this.layout();
         this.widenings++;
         this.layouts++;
       }
-      if (this.widenings > 0) this.onFactors?.(key, factors);
+      // A result the next opening would drop is not saved: the song's own layout is, so
+      // that opening widens once more as before, rather than also laying out a dropped set.
+      const store = keepable(factors, this.step()) ? factors : ones;
+      if (!sameFactors(saved, store) && !(saved === undefined && store === ones)) this.onFactors?.(key, store);
     }
+    this.done();
+  }
+
+  private step(): number {
+    return biggestStep(this.travels(), this.lengths());
+  }
+
+  private done(): void {
     this.container.dataset.layouts = String(this.layouts);
+    // Which parts are drawn and how many bars, as the saved widths are keyed and counted.
+    this.container.dataset.visible = this.visibleKey();
+    this.container.dataset.measures = String(this.osmd.Sheet.SourceMeasures.length);
     this.container.dataset.widenings = String(this.widenings);
-    this.container.dataset.step = biggestStep(this.travels(), this.lengths()).toFixed(3);
+    this.container.dataset.step = this.step().toFixed(3);
     // Each bar's drawn width per beat, for the tests: the step above is measured
     // the way the widening measures, so it cannot catch a mistake in that (#75).
     this.container.dataset.widths = this.bars
@@ -503,4 +519,20 @@ export class Score {
     });
     joinBars(this.bars);
   }
+}
+
+/** The widest bar factor the server keeps (src/worker/layouts.ts). */
+const MAX_SAVED_FACTOR = 10;
+
+/**
+ * Whether bar widths that laid out with this biggest step are kept when saved. The
+ * widening stops a few percent short of the cap, so a set that ended so is kept, not
+ * corrected again on every opening.
+ */
+function keepable(factors: number[], step: number): boolean {
+  return step <= MAX_RATIO * 1.05 && factors.every((f) => f <= MAX_SAVED_FACTOR);
+}
+
+function sameFactors(a: number[] | undefined, b: number[]): boolean {
+  return a !== undefined && a.length === b.length && a.every((f, i) => f === b[i]);
 }

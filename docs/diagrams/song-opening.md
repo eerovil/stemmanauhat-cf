@@ -22,9 +22,9 @@ flowchart TD
   O -- Yes --> P[Score shown]
   O -- No --> S[Drop the saved widths]
   S --> N
-  N --> R{Was anything widened?}
-  R -- Yes --> Q[Save the widths to the server]
-  R -- No --> P
+  N --> R{Does the server already hold<br/>what the next opening keeps?}
+  R -- No --> Q[Save the widths to the server<br/>or all ones if they would not be kept]
+  R -- Yes --> P
   Q --> P
   K --> P
   class C,D,G,M,O,Q,L,R,S teal
@@ -44,5 +44,5 @@ flowchart TD
 - **Lay out once with saved widths**: `Score.evenOut` in `src/client/player/score.ts` applies the saved `WidthFactor` per bar before the first layout.
 - **Bars even<br/>within 5 %?**: `evenOut` in `src/client/player/score.ts` keeps a saved set whose biggest step between bars (`biggestStep`, `spacing.ts`) is at most 5 % over the cap; otherwise it drops them.
 - **Drop the saved widths**: `evenOut` resets every bar to factor 1 and lays the score out again, so widening starts from the song's own widths and a wrong set's over-wide bar does not spread to its neighbours.
-- **Was anything widened?**: only a layout that had to widen calls `Score.onFactors`, so an even song saves nothing.
-- **Save the widths to the server**: a new `PUT /api/songs/<choir>/<slug>/layout` in `src/worker/index.ts`, open to anyone who may open the song except on the open list (`public`); `parseLayout` in `src/worker/layouts.ts` checks the numbers (each factor 1–10, at most 32 parts). Stored in D1 `song_layouts` (`migrations/0010_song_layouts.sql`).
+- **Does the server already hold<br/>what the next opening keeps?**: `evenOut` compares the saved set with what it would store (`sameFactors`): the widths if `keepable` would keep them next time, otherwise all ones (the song's own layout, treated as no set). A song that was even with no saved set saves nothing. So a wrong set costs one extra layout once (at most 4 in all), and is then replaced.
+- **Save the widths to the server<br/>or all ones if they would not be kept**: `Score.onFactors`, then a new `PUT /api/songs/<choir>/<slug>/layout` in `src/worker/index.ts`, open to anyone who may open the song except on the open list (`public`); `parseLayout` in `src/worker/layouts.ts` checks the numbers (each factor 1–10, at most 32 parts). Stored in D1 `song_layouts` (`migrations/0010_song_layouts.sql`).

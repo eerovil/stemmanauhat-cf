@@ -59,7 +59,8 @@ a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
   "Kaikki" evens out the bars, as the videos do, by laying the score out up to three times. A long
   song took half a minute to open on a phone that way (#137), so the first browser to do it saves
   the bar widths in D1 `song_layouts` (per song version and set of drawn staves), and every later
-  opening lays the score out once with them. The open list (`public`) saves none. The score file and
+  opening lays the score out once with them. A saved set that does not lay out even is dropped and
+  replaced on that opening. The open list (`public`) saves none. The score file and
   `timing.json` are sent gzip-compressed.
   A very long bar (a free-rhythm verse written as one bar) is drawn cut into pieces of about a
   4/4 bar with invisible bar lines, so it wraps over lines (`player/split.ts`).
