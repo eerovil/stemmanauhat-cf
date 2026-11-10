@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { choosePartIfAsked, PASSPHRASE, playAndSeeCursorMove } from "./helpers";
+import { choosePartIfAsked, PASSPHRASE, playAndSeeCursorMove, withoutSavedWidths } from "./helpers";
 
 test("the one-line view widens the bars around a crowded one, as the videos do", async ({ page }) => {
+  // Another test may have saved this song's bar widths (#137): widen from scratch here.
+  await withoutSavedWidths(page, "/api/songs/jm/epatasainen");
   await page.goto(`/?user=jm&passphrase=${PASSPHRASE}`);
   await page.getByRole("link", { name: "Epätasainen" }).click();
   await choosePartIfAsked(page, "Tenori");
@@ -24,8 +26,11 @@ test("the one-line view widens the bars around a crowded one, as the videos do",
   await page.getByRole("button", { name: "Säädöt" }).click();
   await page.getByRole("group", { name: "Viivastot" }).getByRole("button", { name: "Oma" }).click();
   await expect(score).toHaveAttribute("data-widenings", "0");
+  // Back in "Kaikki", the widths worked out above are used: one layout, nothing to widen (#137).
   await page.getByRole("group", { name: "Viivastot" }).getByRole("button", { name: "Kaikki" }).click();
-  await expect(score).toHaveAttribute("data-widenings", /^[12]$/);
+  await expect(score).toHaveAttribute("data-layouts", "1");
+  await expect(score).toHaveAttribute("data-widenings", "0");
+  expect(Number(await score.getAttribute("data-step"))).toBeLessThanOrEqual(1.3 * 1.05);
   await page.locator(".backdrop").click({ position: { x: 100, y: 100 } });
 
   await playAndSeeCursorMove(page);

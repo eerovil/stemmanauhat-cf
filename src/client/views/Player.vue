@@ -162,14 +162,20 @@ onMounted(async () => {
   });
 
   try {
-    const [xml, timingJson] = await Promise.all([
+    // Everything the page needs starts downloading at once (#137): the piano used to
+    // wait for the score file, 8 MB for a long song.
+    // OpenSheetMusicDisplay is most of the app's size: load it only on a song page.
+    const scoreCode = import("../player/score");
+    scoreCode.catch(() => {});
+    // The page always opens on the piano; chosen singing loads behind it (loadSung).
+    const [xml, timingJson, piano] = await Promise.all([
       fetch(s.base + "score.musicxml").then((r) => r.text()),
       fetch(s.base + "timing.json").then((r) => r.json()),
+      createPiano(s),
     ]);
     timing = parseTiming(timingJson);
     barCount.value = timing.measures;
-    // The page always opens on the piano; chosen singing loads behind it (loadSung).
-    mixer = await createPiano(s);
+    mixer = piano;
     mixer.setMaster(myPart.value);
     mixer.onEnded = () => { playing.value = false; };
     setMode(carried.mode ?? "focus", false);
@@ -186,10 +192,11 @@ onMounted(async () => {
     if (sound.value === "sung" && hasSung.value) void loadSung();
     // The score box exists only once loading is false.
     await new Promise(requestAnimationFrame);
-    // OpenSheetMusicDisplay is most of the app's size: load it only on a song page.
-    const { Score } = await import("../player/score");
+    const { Score } = await scoreCode;
     score = new Score(scoreBox.value!);
     score.barLengths = barLengths(timing);
+    score.savedFactors = savedFactors;
+    score.onFactors = saveFactors;
     if (dock.value) dockObserver.observe(dock.value);
     score.singleLine = singleLine.value;
     score.zoom = zoom.value;
@@ -490,6 +497,25 @@ function changeZoom(step: number) {
   noteSetting("zoom", () => settingValue(zoom.value), true);
   score?.setZoom(next);
   lastTop = -1;
+}
+
+/** Saved bar widths for the one-line view (#137), by which parts are drawn. */
+const savedFactors = (visible: string) => song.value?.layouts?.[visible];
+
+/**
+ * Shares the bar widths this browser worked out, so the next opening anywhere lays the
+ * score out once. Nothing waits for it, and a refusal (the open list, an agent) is fine.
+ */
+function saveFactors(visible: string, factors: number[]) {
+  const s = song.value;
+  if (!s?.version) return;
+  (s.layouts ??= {})[visible] = factors;
+  void fetch(`/api/songs/${encodeURIComponent(props.choir)}/${encodeURIComponent(props.slug)}/layout`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: s.version, visible, factors }),
+  }).catch(() => {});
 }
 
 /** Which staves to draw: all, or only yours (shared with another part when the page prints it so). */
