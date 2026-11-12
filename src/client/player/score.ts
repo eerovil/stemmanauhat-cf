@@ -6,6 +6,7 @@ import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import type { Focus } from "./part";
 import { barAnchors, joinBars, xOnAnchors, type Anchor } from "./bar";
 import { biggestStep, cappedTargets, MAX_RATIO, needsWidening, nextFactors } from "./spacing";
+import { PinnedSignature } from "./pinned";
 import { BarMap, splitLongBars } from "./split";
 
 /** OSMD lays out in units of 10 px at zoom 1. */
@@ -84,6 +85,13 @@ export class Score {
   /** Each part's staff, top to bottom with room for notes above and lyrics below. */
   private spans = new Map<number, { top: number; bottom: number }>();
   private noteWidth = 0;
+  /** The clef, key and time signature pinned at the one-line view's left edge (signature.ts). */
+  private pinned: PinnedSignature | null = null;
+
+  /** Where the pinned signature is drawn: an element over the sliding line, set by the player. */
+  set signatureHost(host: HTMLElement | null) {
+    this.pinned = host ? new PinnedSignature(host) : null;
+  }
 
   constructor(private readonly container: HTMLElement) {
     this.highlights.classList.add("highlights");
@@ -268,6 +276,7 @@ export class Score {
   }
 
   private done(): void {
+    this.buildPinned();
     this.container.dataset.layouts = String(this.layouts);
     // Which parts are drawn and how many bars, as the saved widths are keyed and counted.
     this.container.dataset.visible = this.visibleKey();
@@ -278,6 +287,22 @@ export class Score {
     // the way the widening measures, so it cannot catch a mistake in that (#75).
     this.container.dataset.widths = this.bars
       .map((bar) => (bar ? ((bar.x1 - bar.x0) / Math.max(bar.length, 1)).toFixed(1) : "")).join(" ");
+  }
+
+  /** Copies the signs the one-line view pins; the page view draws them on every line already. */
+  private buildPinned(): void {
+    if (!this.pinned) return;
+    if (!this.singleLine) { this.pinned.clear(); return; }
+    this.pinned.build(this.drawing(), this.bars.length);
+    this.pinned.fit(this.units.k, this.size.height);
+  }
+
+  /**
+   * Shows the signs in force at the left edge of the one-line view, which is scrolled by
+   * `offset` pixels and moved down by `vertical`; `playhead` is where the note being sung is.
+   */
+  pin(offset: number, vertical: number, playhead: number): void {
+    this.pinned?.show(offset, vertical, playhead, this.noteWidth + 4);
   }
 
   private layout(): void {
@@ -460,6 +485,7 @@ export class Score {
     layer.style.transform = `translate(${dx}px, ${dy}px)`;
     const [vbX = 0, vbY = 0, vbW = svgBox.width || 1] = (layer.getAttribute("viewBox") ?? "").split(/\s+/).map(Number);
     this.units = { vbX, vbY, k: svgBox.width / (vbW || 1), dx, dy };
+    this.pinned?.fit(this.units.k, svgBox.height);
     this.spans = new Map();
     const instruments = this.osmd.Sheet.Instruments;
 
