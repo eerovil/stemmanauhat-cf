@@ -69,6 +69,8 @@ const firstAsk = ref(false);
 const showHint = ref(false);
 
 const scrollBox = ref<HTMLElement | null>(null);
+/** The one-line view's pinned clef, key and time signature is drawn in here (player/pinned.ts). */
+const signatureBox = ref<HTMLElement | null>(null);
 /** As tall as the window with the phone's address bar shown (`100svh`). */
 const smallViewport = ref<HTMLElement | null>(null);
 const scoreBox = ref<HTMLElement | null>(null);
@@ -197,6 +199,7 @@ onMounted(async () => {
     score.barLengths = barLengths(timing);
     score.savedFactors = savedFactors;
     score.onFactors = saveFactors;
+    score.signatureHost = signatureBox.value;
     if (dock.value) dockObserver.observe(dock.value);
     score.singleLine = singleLine.value;
     score.zoom = zoom.value;
@@ -443,6 +446,8 @@ function scrollTo(t: number) {
   }
   const shift = box.clientWidth * PLAYHEAD;
   const vertical = verticalOffset(box.clientHeight);
+  const offset = Math.max(0, curveAt(curve, t) - shift);
+  score.pin(offset, vertical, shift);
   if (wantsFilePlayback() && mixer) {
     pieces ??= new SlidingPieces(box);
     pieces.build(score.version, scoreBox.value?.querySelector("svg:not(.highlights)") ?? null, wrap);
@@ -457,7 +462,6 @@ function scrollTo(t: number) {
       return;
     }
   }
-  const offset = Math.max(0, curveAt(curve, t) - shift);
   wrap.style.transform = `translate3d(${-offset}px, ${-vertical}px, 0)`;
 }
 
@@ -828,6 +832,7 @@ function onPointerUp(event: PointerEvent) {
           <div ref="scoreBox" class="score" data-testid="score" @click="onScoreClick"></div>
           <div ref="cursor" class="cursor" data-testid="cursor" aria-hidden="true"></div>
         </div>
+        <div ref="signatureBox" class="signature" data-testid="signature" aria-hidden="true" hidden></div>
       </div>
 
       <!-- A one-time hint: a small card above the dock, like the other sheets. -->
