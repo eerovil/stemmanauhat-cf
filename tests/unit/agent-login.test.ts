@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -27,6 +27,13 @@ function mint(...args: string[]): string {
     { env: { ...process.env, STEMMANAUHAT_AGENT_KEY: join(dir, "key") } }).toString().trim();
 }
 
+/** The live site's host as wrangler.jsonc names it: PUBLIC_HOST, else WORKER_HOST, as the script reads it. */
+function liveHost(): string | undefined {
+  const config = readFileSync("wrangler.jsonc", "utf8");
+  return config.match(/^\s*"PUBLIC_HOST"\s*:\s*"([^"]*)"/m)?.[1]
+    || config.match(/^\s*"WORKER_HOST"\s*:\s*"([^"]*)"/m)?.[1];
+}
+
 describe("readAgentLink", () => {
   it("reads a current link and refuses an old, far-off, foreign or broken one", async () => {
     const t = now();
@@ -44,7 +51,9 @@ describe("readAgentLink", () => {
 describe("scripts/agent-login.sh", () => {
   it("makes a link the Worker reads, for the live site by default", async () => {
     const link = new URL(mint("jm", "naiskuoro"));
-    expect(link.origin).toBe("https://stemmanauhat.vilpponen.fi");
+    const host = liveHost();
+    expect(host).toBeTruthy();
+    expect(link.origin).toBe(`https://${host}`);
     expect(link.pathname).toBe("/auth/agent");
     expect(await readAgentLink(KEY, link.searchParams.get("t"), now())).toEqual(["jm", "naiskuoro"]);
   });
