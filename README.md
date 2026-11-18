@@ -56,6 +56,13 @@ a copy of your own for your choirs, see [Run your own copy](#run-your-own-copy).
   parts' level, tempo, score size and staves. Tapping the score plays or pauses. Your part is
   remembered per song; how you listen, the tempo, the staves and the size carry from song to song.
   The size is a fixed staff height on the device, whatever the song or the view.
+  In "Kaikki" the clef, key and time signature in force stay pinned at the left edge as the line
+  slides, as at the start of every printed line (`player/pinned.ts`, `player/signature.ts`). They are
+  copies of the signs OSMD drew at the bars that start or change them, so the first bar looks the
+  same pinned and not; when a bar changes one, its own drawing slides under the pinned signs and
+  they swap. They are left off where they would cover the note being sung (a narrow screen, a big
+  size, a key of many accidentals). `tests/fixtures/signatures` (made by
+  `make-signatures.py`) changes the key, the time and a clef along the way for the tests.
   "Kaikki" evens out the bars, as the videos do, by laying the score out up to three times. A long
   song took half a minute to open on a phone that way (#137), so the first browser to do it saves
   the bar widths in D1 `song_layouts` (per song version and set of drawn staves), and every later

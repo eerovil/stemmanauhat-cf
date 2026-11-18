@@ -62,6 +62,8 @@ const songs = [
   ["public", "pitka", "Pitkä laulu", "tests/fixtures/long-song", 600.0, [null, null, null]],
   // Long syllables on short notes, which OSMD drew far apart (#127).
   ["public", "pitkat-tavut", "Pitkät tavut", "tests/fixtures/long-syllables", 13.0, [null, null, null]],
+  // A clef, key and time signature that change along the way: the one-line view pins them.
+  ["public", "merkinnat", "Merkinnät", "tests/fixtures/signatures", 48.0, [null, null, null]],
   // The two-part song sung: the fixture MP3s are synthetic tones, one per part.
   ["public", "laulettu", "Laulettu laulu", "tests/fixtures/two-part", 8.0, ["Esimerkki Säveltäjä", "Esimerkki Sanoittaja", null]],
   // The two-part song with both parts on one staff (musescore-choir-plugins#420).

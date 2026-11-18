@@ -139,8 +139,14 @@ footer { margin-top: 1.5rem; }
 .player.one-line .score-scroll { flex: 1; min-height: 0; }
 /* Measures the window with the address bar shown, so the line stays put as it hides (#93). */
 .small-viewport { position: fixed; top: 0; left: 0; width: 0; height: 100svh; visibility: hidden; pointer-events: none; }
-.score-scroll.single-line { overflow: hidden; background: #fff; touch-action: none; user-select: none; cursor: grab; }
+.score-scroll.single-line { position: relative; overflow: hidden; background: #fff; touch-action: none; user-select: none; cursor: grab; }
 .score-scroll.single-line .score-wrap { max-width: none; width: max-content; margin: 0; will-change: transform; }
+/* The clef, key and time signature in force, pinned at the left edge over the sliding line
+   (player/pinned.ts): moved only to follow the line's vertical position. */
+.signature { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; }
+.signature[hidden] { display: none; }
+.signature-set { display: block; }
+.signature-set[hidden] { display: none; }
 /* While a zoom waits to re-wrap the lines the drawing is just stretched, wider
    than the screen: clip it, or a phone widens the whole page and the sheets with it. */
 /* White room under the last line, so its stems and lyrics never sit on the sheet's edge. */
